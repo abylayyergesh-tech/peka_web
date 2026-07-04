@@ -3,6 +3,7 @@ import {
   BankOutlined,
   DashboardOutlined,
   FileTextOutlined,
+  LockOutlined,
   LogoutOutlined,
   PieChartOutlined,
   PlusOutlined,
@@ -13,11 +14,11 @@ import {
   WalletOutlined,
 } from "@ant-design/icons";
 import type { MenuProps } from "antd";
-import { App, Dropdown, Layout, Menu, Modal, Select, Input } from "antd";
+import { App, Dropdown, Form, Layout, Menu, Modal, Select, Input } from "antd";
 import { useMemo, useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 
-import { createOrganization } from "@/api/auth";
+import { changePassword, createOrganization, logoutApi } from "@/api/auth";
 import { errorMessage } from "@/api/client";
 import { useAuthStore } from "@/auth/store";
 import { visibleSections } from "@/layout/menu";
@@ -41,11 +42,15 @@ export default function AppLayout() {
   const location = useLocation();
   const { message } = App.useApp();
   const queryClient = useQueryClient();
-  const { me, activeOrgId, caps, setActiveOrg, logout } = useAuthStore();
+  const { me, activeOrgId, caps, refreshToken, setActiveOrg, setTokens, logout } =
+    useAuthStore();
   const [collapsed, setCollapsed] = useState(false);
   const [orgModalOpen, setOrgModalOpen] = useState(false);
   const [newOrgName, setNewOrgName] = useState("");
   const [creatingOrg, setCreatingOrg] = useState(false);
+  const [pwdModalOpen, setPwdModalOpen] = useState(false);
+  const [pwdSaving, setPwdSaving] = useState(false);
+  const [pwdForm] = Form.useForm();
 
   const menuItems: MenuProps["items"] = useMemo(() => {
     const sections = visibleSections(caps);
@@ -97,8 +102,36 @@ export default function AppLayout() {
   const userMenu: MenuProps["items"] = [
     { key: "email", label: me?.email, disabled: true },
     { type: "divider" },
+    { key: "change-password", icon: <LockOutlined />, label: "Сменить пароль" },
     { key: "logout", icon: <LogoutOutlined />, label: "Выйти", danger: true },
   ];
+
+  function handleLogout() {
+    // Отзываем refresh-токен на сервере; локальную сессию чистим в любом случае.
+    if (refreshToken) logoutApi(refreshToken).catch(() => undefined);
+    logout();
+    queryClient.clear();
+    navigate("/login");
+  }
+
+  async function handleChangePassword(values: {
+    current_password: string;
+    new_password: string;
+  }) {
+    setPwdSaving(true);
+    try {
+      const out = await changePassword(values.current_password, values.new_password);
+      // остальные сессии отозваны сервером; текущая живёт на новой паре
+      setTokens(out.access_token, out.refresh_token);
+      message.success("Пароль изменён; остальные сессии завершены");
+      setPwdModalOpen(false);
+      pwdForm.resetFields();
+    } catch (e) {
+      message.error(errorMessage(e));
+    } finally {
+      setPwdSaving(false);
+    }
+  }
 
   return (
     <Layout style={{ minHeight: "100vh" }}>
@@ -163,11 +196,8 @@ export default function AppLayout() {
             menu={{
               items: userMenu,
               onClick: ({ key }) => {
-                if (key === "logout") {
-                  logout();
-                  queryClient.clear();
-                  navigate("/login");
-                }
+                if (key === "logout") handleLogout();
+                if (key === "change-password") setPwdModalOpen(true);
               },
             }}
           >
@@ -196,6 +226,53 @@ export default function AppLayout() {
           onChange={(e) => setNewOrgName(e.target.value)}
           onPressEnter={handleCreateOrg}
         />
+      </Modal>
+      <Modal
+        title="Сменить пароль"
+        open={pwdModalOpen}
+        onOk={() => pwdForm.submit()}
+        onCancel={() => setPwdModalOpen(false)}
+        okText="Сохранить"
+        cancelText="Отмена"
+        confirmLoading={pwdSaving}
+        destroyOnClose
+      >
+        <Form form={pwdForm} layout="vertical" onFinish={handleChangePassword}>
+          <Form.Item
+            name="current_password"
+            label="Текущий пароль"
+            rules={[{ required: true, message: "Введите текущий пароль" }]}
+          >
+            <Input.Password autoComplete="current-password" />
+          </Form.Item>
+          <Form.Item
+            name="new_password"
+            label="Новый пароль"
+            rules={[
+              { required: true, message: "Введите новый пароль" },
+              { min: 8, message: "Минимум 8 символов" },
+            ]}
+          >
+            <Input.Password autoComplete="new-password" />
+          </Form.Item>
+          <Form.Item
+            name="confirm"
+            label="Повторите новый пароль"
+            dependencies={["new_password"]}
+            rules={[
+              { required: true, message: "Повторите пароль" },
+              ({ getFieldValue }) => ({
+                validator: async (_, value) => {
+                  if (value && value !== getFieldValue("new_password")) {
+                    throw new Error("Пароли не совпадают");
+                  }
+                },
+              }),
+            ]}
+          >
+            <Input.Password autoComplete="new-password" />
+          </Form.Item>
+        </Form>
       </Modal>
     </Layout>
   );

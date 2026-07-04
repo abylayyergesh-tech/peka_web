@@ -1,7 +1,19 @@
-/** Участники организации: список, добавление, смена роли, удаление,
- * drawer индивидуальных прав (при наличии role.manage). */
-import { PlusOutlined } from "@ant-design/icons";
-import { App, Button, Form, Input, Modal, Popconfirm, Select, Space, Table, Tag } from "antd";
+/** Участники организации: список, приглашения по email, добавление, смена роли,
+ * удаление, drawer индивидуальных прав (при наличии role.manage). */
+import { MailOutlined, PlusOutlined } from "@ant-design/icons";
+import {
+  App,
+  Button,
+  Form,
+  Input,
+  Modal,
+  Popconfirm,
+  Select,
+  Space,
+  Table,
+  Tag,
+  Typography,
+} from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -18,12 +30,25 @@ import {
   type MemberOut,
 } from "@/api/admin";
 import { errorMessage } from "@/api/client";
+import {
+  createInvite,
+  listInvites,
+  revokeInvite,
+  type InviteOut,
+} from "@/api/invites";
 import { useAuthStore, useCan } from "@/auth/store";
+import { fmtDateTime } from "@/components/format";
 import MemberCapabilitiesDrawer from "@/pages/admin/MemberCapabilitiesDrawer";
 import { roleLabel } from "@/pages/admin/labels";
 
+const INVITE_STATUS: Record<string, { color: string; label: string }> = {
+  pending: { color: "processing", label: "Ожидает" },
+  accepted: { color: "success", label: "Принято" },
+  revoked: { color: "default", label: "Отозвано" },
+};
+
 export default function MembersPage() {
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
   const queryClient = useQueryClient();
   const canMember = useCan("member.manage");
   const canRole = useCan("role.manage");
@@ -31,16 +56,24 @@ export default function MembersPage() {
   const orgId = activeOrgId ?? 0;
 
   const [addOpen, setAddOpen] = useState(false);
+  const [inviteOpen, setInviteOpen] = useState(false);
   const [roleTarget, setRoleTarget] = useState<MemberOut | null>(null);
   const [drawerMember, setDrawerMember] = useState<MemberOut | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [addForm] = Form.useForm();
+  const [inviteForm] = Form.useForm();
   const [roleForm] = Form.useForm();
 
   const membersQuery = useQuery({
     queryKey: ["members", orgId],
     queryFn: () => listMembers(orgId),
     enabled: activeOrgId != null,
+  });
+
+  const invitesQuery = useQuery({
+    queryKey: ["invites", orgId],
+    queryFn: () => listInvites(orgId),
+    enabled: activeOrgId != null && canMember,
   });
 
   // GET /roles требует role.manage (иначе 403) — без него не запрашиваем
@@ -105,6 +138,43 @@ export default function MembersPage() {
     onError: (e) => message.error(errorMessage(e)),
   });
 
+  const invite = useMutation({
+    mutationFn: (v: { email: string; role: string }) => createInvite(orgId, v),
+    onSuccess: (out) => {
+      setInviteOpen(false);
+      queryClient.invalidateQueries({ queryKey: ["invites"] });
+      modal.success({
+        title: out.email_sent
+          ? "Приглашение отправлено"
+          : "Приглашение создано (письмо не отправлено)",
+        content: (
+          <>
+            <p>
+              {out.email_sent
+                ? `Письмо со ссылкой ушло на ${out.email}. На всякий случай ссылку можно скопировать и передать вручную:`
+                : `Не удалось отправить письмо на ${out.email} — передайте ссылку вручную:`}
+            </p>
+            <Typography.Paragraph copyable={{ text: out.invite_link }} style={{ wordBreak: "break-all" }}>
+              {out.invite_link}
+            </Typography.Paragraph>
+          </>
+        ),
+        okText: "Готово",
+        width: 520,
+      });
+    },
+    onError: (e) => message.error(errorMessage(e)),
+  });
+
+  const revoke = useMutation({
+    mutationFn: (inviteId: number) => revokeInvite(orgId, inviteId),
+    onSuccess: () => {
+      message.success("Приглашение отозвано");
+      queryClient.invalidateQueries({ queryKey: ["invites"] });
+    },
+    onError: (e) => message.error(errorMessage(e)),
+  });
+
   function openAdd() {
     addForm.resetFields();
     setAddOpen(true);
@@ -163,14 +233,66 @@ export default function MembersPage() {
     },
   ];
 
+  const inviteColumns: ColumnsType<InviteOut> = [
+    { title: "Email", dataIndex: "email" },
+    {
+      title: "Роль",
+      dataIndex: "role",
+      width: 160,
+      render: (v: string) => <Tag>{roleLabel(v)}</Tag>,
+    },
+    {
+      title: "Статус",
+      dataIndex: "status",
+      width: 130,
+      render: (v: string) => {
+        const s = INVITE_STATUS[v] ?? { color: "default", label: v };
+        return <Tag color={s.color}>{s.label}</Tag>;
+      },
+    },
+    {
+      title: "Действует до",
+      dataIndex: "expires_at",
+      width: 170,
+      render: (v: string) => fmtDateTime(v),
+    },
+    {
+      title: "",
+      width: 100,
+      render: (_, row) =>
+        row.status === "pending" && (
+          <Popconfirm
+            title="Отозвать приглашение?"
+            okText="Отозвать"
+            cancelText="Отмена"
+            onConfirm={() => revoke.mutate(row.id)}
+          >
+            <a>Отозвать</a>
+          </Popconfirm>
+        ),
+    },
+  ];
+
   return (
     <div>
       <Space style={{ marginBottom: 16, justifyContent: "space-between", width: "100%" }}>
         <h2 style={{ margin: 0 }}>Участники</h2>
         {canMember && (
-          <Button type="primary" icon={<PlusOutlined />} onClick={openAdd}>
-            Добавить участника
-          </Button>
+          <Space>
+            <Button
+              type="primary"
+              icon={<MailOutlined />}
+              onClick={() => {
+                inviteForm.resetFields();
+                setInviteOpen(true);
+              }}
+            >
+              Пригласить по email
+            </Button>
+            <Button icon={<PlusOutlined />} onClick={openAdd}>
+              Добавить участника
+            </Button>
+          </Space>
         )}
       </Space>
       <Table
@@ -181,6 +303,21 @@ export default function MembersPage() {
         pagination={{ pageSize: 20, hideOnSinglePage: true }}
         columns={columns}
       />
+
+      {canMember && (
+        <>
+          <h3 style={{ margin: "24px 0 12px" }}>Приглашения</h3>
+          <Table
+            rowKey="id"
+            size="small"
+            loading={invitesQuery.isPending}
+            dataSource={invitesQuery.data}
+            pagination={{ pageSize: 10, hideOnSinglePage: true }}
+            columns={inviteColumns}
+            locale={{ emptyText: "Приглашений пока нет" }}
+          />
+        </>
+      )}
 
       <Modal
         title="Добавить участника"
@@ -212,6 +349,45 @@ export default function MembersPage() {
               options={roleNameOptions}
               showSearch
               optionFilterProp="label"
+              placeholder="Выберите роль"
+            />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal
+        title="Пригласить по email"
+        open={inviteOpen}
+        onCancel={() => setInviteOpen(false)}
+        onOk={() => inviteForm.submit()}
+        okText="Отправить приглашение"
+        cancelText="Отмена"
+        confirmLoading={invite.isPending}
+        destroyOnClose
+      >
+        <Form form={inviteForm} layout="vertical" onFinish={(v) => invite.mutate(v)}>
+          <Form.Item
+            name="email"
+            label="Email приглашаемого"
+            extra="Регистрация не требуется: человек создаст аккаунт по ссылке из письма и сразу попадёт в организацию."
+            rules={[
+              { required: true, message: "Обязательное поле" },
+              { type: "email", message: "Некорректный email" },
+            ]}
+          >
+            <Input placeholder="user@example.com" />
+          </Form.Item>
+          <Form.Item
+            name="role"
+            label="Роль"
+            initialValue="employee"
+            rules={[{ required: true, message: "Обязательное поле" }]}
+          >
+            <Select
+              options={TENANCY_ROLE_NAMES.map((name) => ({
+                value: name,
+                label: roleLabel(name),
+              }))}
               placeholder="Выберите роль"
             />
           </Form.Item>

@@ -8,7 +8,7 @@ import { useAuthStore } from "@/auth/store";
 
 export default function RegisterPage() {
   const navigate = useNavigate();
-  const { setToken, setActiveOrg } = useAuthStore();
+  const { setTokens, setActiveOrg } = useAuthStore();
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -22,7 +22,7 @@ export default function RegisterPage() {
     setError(null);
     try {
       const out = await register(values);
-      setToken(out.access_token);
+      setTokens(out.access_token, out.refresh_token);
       setActiveOrg(out.organization.id);
       navigate("/", { replace: true });
     } catch (e) {

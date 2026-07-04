@@ -30,6 +30,7 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [
       { path: "/warehouses", label: "Склады" },
       { path: "/documents", label: "Документы" },
+      { path: "/documents/digitize", label: "Оцифровка накладной" },
     ],
   },
   {
@@ -105,6 +106,7 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [
       { path: "/members", label: "Участники", cap: "member.manage" },
       { path: "/roles", label: "Роли", cap: "role.manage" },
+      { path: "/audit", label: "Журнал действий", cap: "member.manage" },
     ],
   },
 ];

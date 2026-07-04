@@ -1,4 +1,4 @@
-/** Session state: token + active org persisted; profile/caps fetched per load. */
+/** Session state: token pair + active org persisted; profile/caps fetched per load. */
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
@@ -16,13 +16,14 @@ export interface Me {
 
 interface AuthState {
   token: string | null;
+  refreshToken: string | null;
   activeOrgId: number | null;
   /** Profile — null until /auth/me resolves after login/reload. */
   me: Me | null;
   /** Effective capabilities in the active org — [] until /me/capabilities resolves. */
   caps: string[];
   capsLoaded: boolean;
-  setToken: (token: string) => void;
+  setTokens: (access: string, refresh: string | null) => void;
   setActiveOrg: (orgId: number) => void;
   setMe: (me: Me) => void;
   setCaps: (caps: string[]) => void;
@@ -33,20 +34,32 @@ export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
       token: null,
+      refreshToken: null,
       activeOrgId: null,
       me: null,
       caps: [],
       capsLoaded: false,
-      setToken: (token) => set({ token }),
+      setTokens: (access, refresh) => set({ token: access, refreshToken: refresh }),
       setActiveOrg: (orgId) => set({ activeOrgId: orgId, caps: [], capsLoaded: false }),
       setMe: (me) => set({ me }),
       setCaps: (caps) => set({ caps, capsLoaded: true }),
       logout: () =>
-        set({ token: null, activeOrgId: null, me: null, caps: [], capsLoaded: false }),
+        set({
+          token: null,
+          refreshToken: null,
+          activeOrgId: null,
+          me: null,
+          caps: [],
+          capsLoaded: false,
+        }),
     }),
     {
       name: "peka-rsm-auth",
-      partialize: (s) => ({ token: s.token, activeOrgId: s.activeOrgId }),
+      partialize: (s) => ({
+        token: s.token,
+        refreshToken: s.refreshToken,
+        activeOrgId: s.activeOrgId,
+      }),
     },
   ),
 );

@@ -9,7 +9,7 @@ import { useAuthStore } from "@/auth/store";
 
 export default function LoginPage() {
   const navigate = useNavigate();
-  const setToken = useAuthStore((s) => s.setToken);
+  const setTokens = useAuthStore((s) => s.setTokens);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -17,8 +17,8 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
     try {
-      const { access_token } = await login(values.email, values.password);
-      setToken(access_token);
+      const out = await login(values.email, values.password);
+      setTokens(out.access_token, out.refresh_token);
       navigate("/", { replace: true });
     } catch (e) {
       setError(errorMessage(e));
@@ -55,6 +55,9 @@ export default function LoginPage() {
         </Form>
         <div style={{ marginTop: 16, textAlign: "center" }}>
           Нет аккаунта? <Link to="/register">Зарегистрироваться</Link>
+        </div>
+        <div style={{ marginTop: 8, textAlign: "center" }}>
+          <Link to="/forgot-password">Забыли пароль?</Link>
         </div>
       </Card>
     </div>

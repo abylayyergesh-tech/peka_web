@@ -3,6 +3,7 @@ import type { Me, OrganizationOut } from "@/auth/store";
 
 export interface TokenOut {
   access_token: string;
+  refresh_token: string | null;
   token_type: string;
 }
 
@@ -12,6 +13,31 @@ export interface RegisterOut extends TokenOut {
 
 export async function login(email: string, password: string): Promise<TokenOut> {
   const { data } = await api.post<TokenOut>("/auth/login", { email, password });
+  return data;
+}
+
+/** Revoke the refresh token server-side (fire-and-forget on logout). */
+export async function logoutApi(refresh_token: string): Promise<void> {
+  await api.post("/auth/logout", { refresh_token });
+}
+
+export async function forgotPassword(email: string): Promise<void> {
+  await api.post("/auth/forgot-password", { email });
+}
+
+export async function resetPassword(token: string, new_password: string): Promise<void> {
+  await api.post("/auth/reset-password", { token, new_password });
+}
+
+/** Меняет пароль; все прочие refresh-токены отзываются, возвращается новая пара. */
+export async function changePassword(
+  current_password: string,
+  new_password: string,
+): Promise<TokenOut> {
+  const { data } = await api.post<TokenOut>("/auth/change-password", {
+    current_password,
+    new_password,
+  });
   return data;
 }
 
