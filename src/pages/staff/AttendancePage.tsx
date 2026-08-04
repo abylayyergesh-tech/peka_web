@@ -73,7 +73,7 @@ export default function AttendancePage() {
     staleTime: 60_000,
   });
   const empOptions =
-    empQuery.data?.items.map((e) => ({ value: e.id, label: e.full_name })) ?? [];
+    empQuery.data?.items.map((e) => ({ value: e.employee_id, label: e.full_name })) ?? [];
 
   const locQuery = useQuery({
     queryKey: ["work-locations", "options"],
@@ -81,11 +81,11 @@ export default function AttendancePage() {
     staleTime: 60_000,
   });
   const locOptions =
-    locQuery.data?.items.map((l) => ({ value: l.id, label: l.name })) ?? [];
+    locQuery.data?.items.map((l) => ({ value: l.work_location_id, label: l.name })) ?? [];
 
   const saveEdit = useMutation({
     mutationFn: (values: EditFormValues) =>
-      updateShift(editing!.id, {
+      updateShift(editing!.attendance_shift_id, {
         work_location_id: values.work_location_id,
         clock_in_at: values.clock_in_at.toISOString(),
         clock_out_at: values.clock_out_at ? values.clock_out_at.toISOString() : null,
@@ -100,7 +100,7 @@ export default function AttendancePage() {
 
   const doClose = useMutation({
     mutationFn: (values: CloseFormValues) =>
-      closeShift(closing!.id, { clock_out_at: values.clock_out_at.toISOString() }),
+      closeShift(closing!.attendance_shift_id, { clock_out_at: values.clock_out_at.toISOString() }),
     onSuccess: () => {
       message.success("Смена закрыта");
       setClosing(null);
@@ -217,7 +217,7 @@ export default function AttendancePage() {
       </Space>
 
       <Table
-        rowKey="id"
+        rowKey="attendance_shift_id"
         size="small"
         loading={query.isPending}
         dataSource={query.data?.items}

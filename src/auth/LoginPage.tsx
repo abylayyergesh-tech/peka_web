@@ -6,6 +6,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { login } from "@/api/auth";
 import { errorMessage } from "@/api/client";
 import { useAuthStore } from "@/auth/store";
+import { BRAND } from "@/theme";
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -28,11 +29,15 @@ export default function LoginPage() {
   }
 
   return (
-    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#f5f5f5" }}>
+    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: BRAND.cream }}>
       <Card style={{ width: 380 }}>
-        <Typography.Title level={3} style={{ textAlign: "center" }}>
-          Peka RSM
-        </Typography.Title>
+        {/* Вход — витрина: знак бренда крупно, «RSM» подписью. */}
+        <div style={{ textAlign: "center", marginBottom: 20 }}>
+          <img src="/logo.png" alt="Pekarelli" style={{ height: 26, width: "auto" }} />
+          <Typography.Text type="secondary" style={{ display: "block", marginTop: 6 }}>
+            Система управления
+          </Typography.Text>
+        </div>
         {error && <Alert type="error" message={error} style={{ marginBottom: 16 }} />}
         <Form layout="vertical" onFinish={onFinish} requiredMark={false}>
           <Form.Item

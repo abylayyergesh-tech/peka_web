@@ -112,7 +112,7 @@ export default function SupplierPricesTab({ supplierId }: { supplierId: number }
             title="Удалить цену?"
             okText="Да"
             cancelText="Отмена"
-            onConfirm={() => remove.mutate(row.id)}
+            onConfirm={() => remove.mutate(row.supplier_price_id)}
           >
             <a style={{ color: "#cf1322" }}>Удалить</a>
           </Popconfirm>
@@ -136,7 +136,7 @@ export default function SupplierPricesTab({ supplierId }: { supplierId: number }
         </Button>
       )}
       <Table
-        rowKey="id"
+        rowKey="supplier_price_id"
         size="small"
         loading={query.isPending}
         dataSource={query.data}

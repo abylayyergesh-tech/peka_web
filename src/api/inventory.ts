@@ -5,7 +5,7 @@ import type { Page, PageParams } from "@/api/client";
 
 // --------------------------- warehouses ---------------------------
 export interface WarehouseOut {
-  id: number;
+  warehouse_id: number;
   organization_id: number;
   name: string;
   is_active: boolean;
@@ -118,7 +118,7 @@ export type DocumentCreate =
   | InventoryCountDocumentCreate;
 
 export interface DocumentLineOut {
-  id: number;
+  document_line_id: number;
   product_id: number;
   quantity: string;
   unit_id: number;
@@ -127,7 +127,7 @@ export interface DocumentLineOut {
 }
 
 export interface DocumentOut {
-  id: number;
+  document_id: number;
   organization_id: number;
   type: DocumentType;
   number: number | null;
@@ -139,7 +139,12 @@ export interface DocumentOut {
   recipe_id: number | null;
   posted_at: string | null;
   created_at: string;
+  /** Строки приезжают ТОЛЬКО в ответе на запрос одного документа: в списке они
+   *  пустые. Для списка есть `lines_count` и `total_amount`. */
   lines: DocumentLineOut[];
+  lines_count: number;
+  /** Сумма по строкам с ценой; null — цен нет (расходные документы). */
+  total_amount: string | null;
 }
 
 export interface DocumentListParams extends PageParams {
@@ -189,7 +194,7 @@ export async function postDocument(id: number): Promise<DocumentOut> {
 export type ProductKind = "ingredient" | "semi_finished" | "dish";
 
 export interface ProductOut {
-  id: number;
+  product_id: number;
   organization_id: number;
   name: string;
   sku: string | null;
@@ -207,7 +212,7 @@ export async function listProducts(
 }
 
 export interface SupplierOut {
-  id: number;
+  supplier_id: number;
   organization_id: number;
   name: string;
   is_active: boolean;

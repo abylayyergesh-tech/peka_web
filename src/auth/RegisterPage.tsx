@@ -23,7 +23,7 @@ export default function RegisterPage() {
     try {
       const out = await register(values);
       setTokens(out.access_token, out.refresh_token);
-      setActiveOrg(out.organization.id);
+      setActiveOrg(out.organization.organization_id);
       navigate("/", { replace: true });
     } catch (e) {
       setError(errorMessage(e));

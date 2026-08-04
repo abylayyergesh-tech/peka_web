@@ -113,7 +113,7 @@ export default function UnitsPage() {
       </Space>
 
       <Table<UnitOut>
-        rowKey="id"
+        rowKey="unit_id"
         size="small"
         loading={query.isPending}
         dataSource={query.data?.items}

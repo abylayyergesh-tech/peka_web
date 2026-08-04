@@ -10,7 +10,7 @@ export interface RecipeItemIn {
 }
 
 export interface RecipeItemOut {
-  id: number;
+  recipe_item_id: number;
   component_product_id: number;
   quantity: string;
   unit_id: number;
@@ -33,7 +33,7 @@ export interface RecipeUpdate {
 }
 
 export interface RecipeOut {
-  id: number;
+  recipe_id: number;
   organization_id: number;
   product_id: number;
   output_quantity: string;
@@ -44,7 +44,14 @@ export interface RecipeOut {
   updated_at: string | null;
 }
 
-export async function listRecipes(params: PageParams): Promise<Page<RecipeOut>> {
+export interface RecipeListParams extends PageParams {
+  /** Подстрока в названии ИЗДЕЛИЯ: у тех-карты своего имени нет. */
+  search?: string;
+  /** `product|output_quantity|created_at`, с «-» — по убыванию. */
+  sort?: string;
+}
+
+export async function listRecipes(params: RecipeListParams): Promise<Page<RecipeOut>> {
   const { data } = await api.get<Page<RecipeOut>>("/recipes", { params });
   return data;
 }

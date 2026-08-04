@@ -7,7 +7,7 @@ export type EmployeeStatus = "active" | "terminated";
 
 // ---- departments ----
 export interface DepartmentOut {
-  id: number;
+  department_id: number;
   organization_id: number;
   name: string;
   head_employee_id: number | null;
@@ -29,7 +29,7 @@ export interface DepartmentUpdate {
 
 // ---- employees ----
 export interface EmployeeOut {
-  id: number;
+  employee_id: number;
   organization_id: number;
   user_id: number;
   user_email: string | null;

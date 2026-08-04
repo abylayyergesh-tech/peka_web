@@ -4,12 +4,18 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 
 import { errorMessage } from "@/api/client";
-import { getSupplier } from "@/api/procurement";
+import { getSupplier, reportPayables } from "@/api/procurement";
 import { useCan } from "@/auth/store";
-import { fmtDateTime } from "@/components/format";
+import { Money, fmtDateTime } from "@/components/format";
 import SupplierLedgerTab from "@/pages/procurement/SupplierLedgerTab";
 import SupplierPaymentsTab from "@/pages/procurement/SupplierPaymentsTab";
 import SupplierPricesTab from "@/pages/procurement/SupplierPricesTab";
+
+/** Долг — красным, переплата — зелёным. */
+function balanceColor(value: string | undefined): string | undefined {
+  const n = Number(value ?? 0);
+  return n > 0 ? "#cf1322" : n < 0 ? "#389e0d" : undefined;
+}
 
 export default function SupplierDetailPage() {
   const params = useParams();
@@ -21,6 +27,15 @@ export default function SupplierDetailPage() {
     queryFn: () => getSupplier(supplierId),
     enabled: Number.isFinite(supplierId),
   });
+
+  // Счёт поставщика: получено / оплачено / разница. Тот же источник, что и отчёт
+  // «Кредиторка», просто с фильтром по одному поставщику.
+  const account = useQuery({
+    queryKey: ["payables", { supplier: supplierId }],
+    queryFn: () => reportPayables({ supplier: supplierId }),
+    enabled: Number.isFinite(supplierId) && canReport,
+  });
+  const row = account.data?.[0];
 
   if (query.isPending) return <Spin style={{ display: "block", margin: "48px auto" }} />;
   if (query.isError) {
@@ -46,6 +61,21 @@ export default function SupplierDetailPage() {
         <Descriptions.Item label="Телефон">{supplier.phone ?? "—"}</Descriptions.Item>
         <Descriptions.Item label="Email">{supplier.email ?? "—"}</Descriptions.Item>
         <Descriptions.Item label="Создан">{fmtDateTime(supplier.created_at)}</Descriptions.Item>
+        <Descriptions.Item label="Получено (дебет)">
+          {canReport ? <Money value={row?.total_received} /> : "—"}
+        </Descriptions.Item>
+        <Descriptions.Item label="Оплачено (кредит)">
+          {canReport ? <Money value={row?.total_paid} /> : "—"}
+        </Descriptions.Item>
+        <Descriptions.Item label="Разница (долг)" span={2}>
+          {canReport ? (
+            <b style={{ color: balanceColor(row?.balance) }}>
+              <Money value={row?.balance} />
+            </b>
+          ) : (
+            "—"
+          )}
+        </Descriptions.Item>
         <Descriptions.Item label="Примечание" span={2}>
           {supplier.note ?? "—"}
         </Descriptions.Item>

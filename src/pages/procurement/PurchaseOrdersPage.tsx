@@ -65,7 +65,7 @@ export default function PurchaseOrdersPage() {
       message.success("Заказ создан");
       setModalOpen(false);
       queryClient.invalidateQueries({ queryKey: ["purchase-orders"] });
-      navigate(`/purchase-orders/${po.id}`);
+      navigate(`/purchase-orders/${po.purchase_order_id}`);
     },
     onError: (e) => message.error(errorMessage(e)),
   });
@@ -76,8 +76,8 @@ export default function PurchaseOrdersPage() {
       dataIndex: "number",
       width: 110,
       render: (_, row) => (
-        <Link to={`/purchase-orders/${row.id}`}>
-          {row.number != null ? `№ ${row.number}` : `#${row.id}`}
+        <Link to={`/purchase-orders/${row.purchase_order_id}`}>
+          {row.number != null ? `№ ${row.number}` : `#${row.purchase_order_id}`}
         </Link>
       ),
     },
@@ -156,7 +156,7 @@ export default function PurchaseOrdersPage() {
         )}
       </Space>
       <Table
-        rowKey="id"
+        rowKey="purchase_order_id"
         size="small"
         loading={query.isPending}
         dataSource={query.data?.items}

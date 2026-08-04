@@ -37,10 +37,10 @@ export default function DocumentEditModal({ open, doc, onClose, onSaved }: Props
 
   const update = useMutation({
     mutationFn: (values: DocumentFormValues) =>
-      updateDocument(doc.id, buildDocumentPayload(values, products.byId)),
+      updateDocument(doc.document_id, buildDocumentPayload(values, products.byId)),
     onSuccess: () => {
       message.success("Сохранено");
-      queryClient.invalidateQueries({ queryKey: ["document", doc.id] });
+      queryClient.invalidateQueries({ queryKey: ["document", doc.document_id] });
       queryClient.invalidateQueries({ queryKey: ["documents"] });
       onSaved();
     },
@@ -64,7 +64,7 @@ export default function DocumentEditModal({ open, doc, onClose, onSaved }: Props
 
   return (
     <Modal
-      title={`Редактирование черновика №${doc.number ?? doc.id}`}
+      title={`Редактирование черновика №${doc.number ?? doc.document_id}`}
       open={open}
       onCancel={onClose}
       onOk={() => form.submit()}

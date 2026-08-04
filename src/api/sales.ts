@@ -1,15 +1,135 @@
 /** Sales/POS API: menu, shifts, checks, receipts, customers, receivables.
  * DTOs mirror app/sales/schemas.py 1:1 (backend Decimal -> string). */
-import { api } from "@/api/client";
+import { api, fetchAllPages } from "@/api/client";
 import type { Page, PageParams } from "@/api/client";
+import type { NutrientsOut } from "@/api/catalog";
 
 export type DiscountType = "percent" | "amount";
 export type PaymentMethod = "cash" | "card" | "credit";
 
+// ---- menus (прайс-листы) ----
+// Базовая цена позиции живёт в menu_items.sale_price — это «Основное меню»
+// (is_default). Остальные меню задают только отклонения: см. MenuPriceOut.
+
+export interface MenuOut {
+  menu_id: number;
+  organization_id: number;
+  name: string;
+  /** Код ценовой категории iiko, если меню пришло из выгрузки. */
+  code: string | null;
+  is_default: boolean;
+  is_active: boolean;
+}
+
+export interface MenuCreate {
+  name: string;
+  code?: string | null;
+  is_default?: boolean;
+}
+
+export interface MenuUpdate {
+  name?: string;
+  code?: string | null;
+  is_default?: boolean;
+  is_active?: boolean;
+}
+
+export interface MenuPriceOut {
+  menu_price_id: number;
+  menu_id: number;
+  menu_item_id: number;
+  /** null вместе с is_included=false — позиция исключена из меню. */
+  price: string | null;
+  is_included: boolean;
+}
+
+export interface MenuPriceIn {
+  menu_item_id: number;
+  /** null при is_included=true — «нет отклонения», строка будет удалена. */
+  price?: number | string | null;
+  is_included?: boolean;
+}
+
+export interface MenuPricesIn {
+  prices: MenuPriceIn[];
+  /** true — заменить прайс меню целиком (неперечисленные отклонения удаляются). */
+  replace?: boolean;
+}
+
+/** Позиция с ценой, действующей для конкретного меню или клиента. */
+export interface MenuItemPricedOut {
+  menu_item_id: number;
+  name: string;
+  category: string | null;
+  unit_id: number;
+  portion_qty: string;
+  base_price: string;
+  price: string;
+  /** true — цена из menu_prices, а не базовая. */
+  is_overridden: boolean;
+}
+
+export interface MenuItemPricedParams extends PageParams {
+  menu_id?: number;
+  /** Приоритетнее menu_id: цены меню этого клиента. */
+  customer_id?: number;
+  active?: boolean;
+  category?: string;
+  search?: string;
+  sort?: string;
+}
+
+export async function listMenus(params?: { active?: boolean }): Promise<MenuOut[]> {
+  const { data } = await api.get<MenuOut[]>("/menus", { params });
+  return data;
+}
+
+export async function getMenu(id: number): Promise<MenuOut> {
+  const { data } = await api.get<MenuOut>(`/menus/${id}`);
+  return data;
+}
+
+export async function createMenu(body: MenuCreate): Promise<MenuOut> {
+  const { data } = await api.post<MenuOut>("/menus", body);
+  return data;
+}
+
+export async function updateMenu(id: number, body: MenuUpdate): Promise<MenuOut> {
+  const { data } = await api.patch<MenuOut>(`/menus/${id}`, body);
+  return data;
+}
+
+/** Backend DELETE deactivates (is_active=false); 409 если меню уже используется. */
+export async function deleteMenu(id: number): Promise<MenuOut> {
+  const { data } = await api.delete<MenuOut>(`/menus/${id}`);
+  return data;
+}
+
+export async function listMenuPrices(menuId: number): Promise<MenuPriceOut[]> {
+  const { data } = await api.get<MenuPriceOut[]>(`/menus/${menuId}/prices`);
+  return data;
+}
+
+/** Пачка отклонений одним запросом — по одной позиции прайс не заводят. */
+export async function setMenuPrices(
+  menuId: number,
+  body: MenuPricesIn,
+): Promise<MenuPriceOut[]> {
+  const { data } = await api.put<MenuPriceOut[]>(`/menus/${menuId}/prices`, body);
+  return data;
+}
+
+export async function listMenuItemsPriced(
+  params: MenuItemPricedParams,
+): Promise<Page<MenuItemPricedOut>> {
+  const { data } = await api.get<Page<MenuItemPricedOut>>("/menu-items/priced", { params });
+  return data;
+}
+
 // ---- menu ----
 
 export interface MenuItemOut {
-  id: number;
+  menu_item_id: number;
   organization_id: number;
   name: string;
   product_id: number;
@@ -42,11 +162,27 @@ export interface MenuItemUpdate {
 export interface MenuItemListParams extends PageParams {
   active?: boolean;
   category?: string;
+  /** Подстрока в названии (регистр не важен). */
+  search?: string;
+  /** `name|sale_price|category|created_at`, с «-» — по убыванию. */
+  sort?: string;
 }
 
 export async function listMenuItems(params: MenuItemListParams): Promise<Page<MenuItemOut>> {
   const { data } = await api.get<Page<MenuItemOut>>("/menu-items", { params });
   return data;
+}
+
+/** ВСЕ позиции меню, постранично. Экранам, которым нужен полный список (прайс
+ *  меню, выпадающие списки), нельзя просто попросить `limit: 500`: бэкенд
+ *  ограничивает страницу двумя сотнями (`le=200`) и на большем значении отвечает
+ *  422, а не усечённым списком — экран получал пустоту вместо данных. */
+export async function listAllMenuItems(
+  params: Omit<MenuItemListParams, "limit" | "offset"> = {},
+): Promise<MenuItemOut[]> {
+  return fetchAllPages<MenuItemOut>((p) =>
+    api.get<Page<MenuItemOut>>("/menu-items", { params: { ...params, ...p } })
+      .then((r) => r.data));
 }
 
 export async function createMenuItem(body: MenuItemCreate): Promise<MenuItemOut> {
@@ -67,8 +203,13 @@ export async function deleteMenuItem(id: number): Promise<MenuItemOut> {
 
 // ---- customers ----
 
+/** Порядок расчётов клиента:
+ *  weekly    — сводный счёт раз в неделю, оплата переводом (договорные кофейни);
+ *  per_order — счёт на каждый заказ в клиентском портале. */
+export type BillingMode = "weekly" | "per_order";
+
 export interface CustomerOut {
-  id: number;
+  customer_id: number;
   organization_id: number;
   name: string;
   tax_id: string | null;
@@ -76,6 +217,9 @@ export interface CustomerOut {
   email: string | null;
   note: string | null;
   credit_limit: string | null;
+  /** Прайс-лист клиента; null — платит по базовым ценам («Основное меню»). */
+  menu_id: number | null;
+  billing_mode: BillingMode;
   is_active: boolean;
   created_at: string;
   updated_at: string | null;
@@ -88,17 +232,31 @@ export interface CustomerCreate {
   email?: string | null;
   note?: string | null;
   credit_limit?: number | string | null;
+  menu_id?: number | null;
+  /** Не задан — бэкенд заводит клиента на оплату по каждому заказу. */
+  billing_mode?: BillingMode;
 }
 
 export type CustomerUpdate = Partial<CustomerCreate>;
 
 export interface CustomerListParams extends PageParams {
   active?: boolean;
+  billing_mode?: BillingMode;
 }
 
 export async function listCustomers(params: CustomerListParams): Promise<Page<CustomerOut>> {
   const { data } = await api.get<Page<CustomerOut>>("/customers", { params });
   return data;
+}
+
+/** ВСЕ клиенты, постранично — для выпадающих списков и отчётов. См. коммент к
+ *  `listAllMenuItems`: `/customers` тоже ограничен `le=200`. */
+export async function listAllCustomers(
+  params: Omit<CustomerListParams, "limit" | "offset"> = {},
+): Promise<CustomerOut[]> {
+  return fetchAllPages<CustomerOut>((p) =>
+    api.get<Page<CustomerOut>>("/customers", { params: { ...params, ...p } })
+      .then((r) => r.data));
 }
 
 export async function getCustomer(id: number): Promise<CustomerOut> {
@@ -132,7 +290,7 @@ export interface CustomerPaymentCreate {
 }
 
 export interface CustomerPaymentOut {
-  id: number;
+  customer_payment_id: number;
   customer_id: number;
   payment_date: string;
   amount: string;
@@ -166,7 +324,7 @@ export async function voidCustomerPayment(
 }
 
 export interface ReceivableEntryOut {
-  id: number;
+  receivable_entry_id: number;
   customer_id: number;
   amount_delta: string;
   balance_after: string;
@@ -209,8 +367,14 @@ export interface SalesReport {
   check_count: number;
   gross: string;
   discount_total: string;
+  /** Доставка как услуга: входит в revenue, но не в gross. */
+  delivery_total: string;
   revenue: string;
   by_method: Record<string, string>;
+  /** Выручка по прайс-листам — по снимку меню в строках чека, поэтому
+   * переназначение меню клиенту не меняет прошлые периоды. Суммируется до
+   * gross (без доставки и скидки уровня чека), не до revenue. */
+  by_menu: Record<string, string>;
 }
 
 export async function reportSales(params: {
@@ -230,7 +394,7 @@ export interface ShiftOpen {
 }
 
 export interface ShiftOut {
-  id: number;
+  shift_id: number;
   organization_id: number;
   warehouse_id: number;
   status: string; // open | closed
@@ -244,6 +408,8 @@ export interface ShiftTotals {
   check_count: number;
   gross: string;
   discount_total: string;
+  /** Доставка как услуга: входит в revenue, но не в gross. */
+  delivery_total: string;
   revenue: string;
   by_method: Record<string, string>;
   expected_cash: string;
@@ -281,6 +447,46 @@ export async function closeShift(id: number): Promise<ShiftReport> {
   return data;
 }
 
+export interface MenuItemNutritionOut {
+  menu_item_id: number;
+  product_id: number;
+  /** На порцию — то есть на выход позиции меню. */
+  per_portion: NutrientsOut;
+  per_100g: NutrientsOut | null;
+  portion_weight_kg: string | null;
+  source: "own" | "recipe";
+  complete: boolean;
+  missing_products: number[];
+  missing_product_names: string[];
+}
+
+/** КБЖУ порции: расчёт по тех-карте продукта × выход позиции. */
+export async function getMenuItemNutrition(
+  id: number,
+): Promise<MenuItemNutritionOut> {
+  const { data } = await api.get<MenuItemNutritionOut>(`/menu-items/${id}/nutrition`);
+  return data;
+}
+
+export interface ShiftReceiptOut {
+  shift_id: number;
+  /** Готовый моноширинный текст — то же, что уйдёт на печать. */
+  content: string;
+  payload: Record<string, unknown>;
+}
+
+/** Чек за смену. `items` добавляет все проданные позиции, свёрнутые по
+ *  наименованию (полный чек), иначе это Z-отчёт с одними итогами. */
+export async function getShiftReceipt(
+  id: number,
+  opts?: { items?: boolean },
+): Promise<ShiftReceiptOut> {
+  const { data } = await api.get<ShiftReceiptOut>(`/shifts/${id}/receipt`, {
+    params: opts?.items ? { items: true } : undefined,
+  });
+  return data;
+}
+
 // ---- checks ----
 
 export interface CheckCreate {
@@ -293,6 +499,9 @@ export interface CheckLineIn {
   quantity: number | string;
   discount_type?: DiscountType | null;
   discount_value?: number | string | null;
+  /** Замена по просьбе клиента: цена 0, но со склада списывается как продажа.
+   * Требует контрагента в чеке; скидку к замене бэкенд не примет. */
+  is_replacement?: boolean;
 }
 
 export interface CheckDiscountIn {
@@ -307,17 +516,133 @@ export interface CheckCloseIn {
 }
 
 export interface CheckLineOut {
-  id: number;
+  check_line_id: number;
   menu_item_id: number;
   quantity: string;
   unit_price: string;
+  /** true — позиция отдана как замена: 0 ₸ выручки, но списана со склада. */
+  is_replacement: boolean;
   discount_type: string | null;
   discount_value: string | null;
   line_total: string;
 }
 
+// ---- точки клиента (адреса) ----
+// Клиент — это юрлицо: у сети кофеен один БИН и один клиент, а адресов много.
+// Если БИН не указан, точка самостоятельна. Ручки живут в модуле portal
+// (`customer_addresses` — та же таблица, что и адреса доставки клиентского сайта).
+
+export interface CustomerAddressOut {
+  customer_address_id: number;
+  customer_id: number;
+  /** Название точки; из iiko приезжало как «кофейня, адрес». */
+  label: string | null;
+  address_line: string;
+  contact_name: string | null;
+  contact_phone: string | null;
+  comment: string | null;
+  is_default: boolean;
+  is_active: boolean;
+}
+
+export interface CustomerAddressCreate {
+  address_line: string;
+  label?: string | null;
+  contact_name?: string | null;
+  contact_phone?: string | null;
+  comment?: string | null;
+  is_default?: boolean;
+}
+
+export type CustomerAddressUpdate = Partial<CustomerAddressCreate> & {
+  is_active?: boolean;
+};
+
+/** Все точки клиента, включая деактивированные (их держат прошлые заказы). */
+export async function listCustomerAddresses(
+  customerId: number,
+): Promise<CustomerAddressOut[]> {
+  const { data } = await api.get<CustomerAddressOut[]>(
+    `/customers/${customerId}/portal-addresses`,
+  );
+  return data;
+}
+
+export async function createCustomerAddress(
+  customerId: number,
+  body: CustomerAddressCreate,
+): Promise<CustomerAddressOut> {
+  const { data } = await api.post<CustomerAddressOut>(
+    `/customers/${customerId}/portal-addresses`, body);
+  return data;
+}
+
+export async function updateCustomerAddress(
+  addressId: number,
+  body: CustomerAddressUpdate,
+): Promise<CustomerAddressOut> {
+  const { data } = await api.patch<CustomerAddressOut>(
+    `/portal-addresses/${addressId}`, body);
+  return data;
+}
+
+/** Backend DELETE deactivates: на точку ссылаются прошлые заказы и чеки. */
+export async function deleteCustomerAddress(
+  addressId: number,
+): Promise<CustomerAddressOut> {
+  const { data } = await api.delete<CustomerAddressOut>(
+    `/portal-addresses/${addressId}`);
+  return data;
+}
+
+// ---- замены ----
+// Клиент звонит и просит замену; в следующем заказе оператор ставит галочку на
+// нужных позициях — они уходят бесплатно, но списываются со склада.
+
+export interface ReplacementRow {
+  replacement_id: number;
+  customer_id: number;
+  customer_name: string;
+  menu_item_id: number;
+  menu_item_name: string;
+  quantity: string;
+  /** Недополученная выручка: цена прайс-листа клиента × количество. */
+  waived_amount: string;
+  replacement_date: string;
+  order_id: number | null;
+  check_id: number | null;
+  note: string | null;
+  created_at: string;
+}
+
+export interface ReplacementsSummary {
+  count: number;
+  total_quantity: string;
+  total_waived: string;
+}
+
+export interface ReplacementListParams extends PageParams {
+  customer?: number;
+  date_from?: string;
+  date_to?: string;
+}
+
+export async function listReplacements(
+  params: ReplacementListParams,
+): Promise<Page<ReplacementRow>> {
+  const { data } = await api.get<Page<ReplacementRow>>("/replacements", { params });
+  return data;
+}
+
+export async function replacementsSummary(
+  params: Omit<ReplacementListParams, "limit" | "offset">,
+): Promise<ReplacementsSummary> {
+  const { data } = await api.get<ReplacementsSummary>("/replacements/summary", { params });
+  return data;
+}
+
 export interface CheckOut {
-  id: number;
+  check_id: number;
   organization_id: number;
   shift_id: number;
   warehouse_id: number;
@@ -328,6 +653,8 @@ export interface CheckOut {
   discount_value: string | null;
   subtotal: string;
   discount_total: string;
+  /** Доставка-услуга: прибавляется к итогу после скидки и сама не скидывается. */
+  delivery_fee: string;
   total: string;
   payment_method: string | null;
   inventory_document_id: number | null;
@@ -407,7 +734,7 @@ export async function closeCheck(id: number, body: CheckCloseIn): Promise<CheckC
 // ---- receipts ----
 
 export interface ReceiptOut {
-  id: number;
+  receipt_id: number;
   check_id: number;
   content: string;
   payload: Record<string, unknown>;
@@ -429,23 +756,28 @@ export async function printReceipt(checkId: number): Promise<ReceiptOut> {
 // Minimal projections of catalog/inventory DTOs; endpoints are member-readable.
 
 export interface ProductLookup {
-  id: number;
+  product_id: number;
   name: string;
 }
 
 export interface UnitLookup {
-  id: number;
+  unit_id: number;
   name: string;
 }
 
 export interface WarehouseLookup {
-  id: number;
+  warehouse_id: number;
   name: string;
 }
 
+/** Подбор продукта для позиции меню — только ЕДА: продавать упаковку, швабру
+ *  или статью «Аренда» нельзя, а в общем списке они тонут среди продуктов. */
 export async function listProductsLookup(): Promise<Page<ProductLookup>> {
-  const { data } = await api.get<Page<ProductLookup>>("/products", { params: { limit: 200 } });
-  return data;
+  const items = await fetchAllPages<ProductLookup>((p) =>
+    api
+      .get<Page<ProductLookup>>("/products", { params: { ...p, item_type: "food" } })
+      .then((r) => r.data));
+  return { items, total: items.length, limit: items.length, offset: 0 };
 }
 
 export async function listUnitsLookup(): Promise<Page<UnitLookup>> {

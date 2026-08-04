@@ -48,7 +48,7 @@ import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { errorMessage } from "@/api/client";
-import { createProduct, listUnits, type ProductKind } from "@/api/catalog";
+import { createProduct, listUnits, type ProductKind, type UnitOut } from "@/api/catalog";
 import {
   digitizeInvoice,
   saveDigitizeAliases,
@@ -58,16 +58,25 @@ import {
 } from "@/api/digitize";
 import {
   createDocument,
-  listProducts,
-  listSuppliers,
-  listWarehouses,
   type ReceiptDocumentCreate,
   type ReceiptLineIn,
 } from "@/api/inventory";
 import { createSupplier } from "@/api/procurement";
 import { fmtMoney } from "@/components/format";
+import {
+  useProductsLookup,
+  useSuppliersLookup,
+  useWarehousesLookup,
+} from "@/pages/inventory/shared";
 
 const ACCEPT = "image/jpeg,image/png,image/webp,application/pdf";
+
+/** Названия полей шапки для сообщения «не заполнено …». */
+const HEADER_FIELD_LABELS: Record<string, string> = {
+  doc_date: "дата документа",
+  warehouse_id: "склад прихода",
+  supplier_id: "поставщик",
+};
 
 /** Насколько уверенно строка привязана к каталогу — цвет зоны и карточки.
  *  "ai" — семантический выбор Gemini: id валиден, но человеку стоит взглянуть. */
@@ -88,6 +97,14 @@ interface LineMeta {
   source: MatchSource | null;
   discount_percent: string | null;
   discount_amount: string | null;
+  /** Единица и числа, КАК НАПЕЧАТАНЫ в накладной: от них считается пересчёт
+   *  через фасовку, поэтому они должны остаться неизменными. */
+  unit_raw: string | null;
+  unit_printed_id: number | null;
+  quantity_printed: string | null;
+  price_printed: string | null;
+  pack_raw: string | null;
+  pack_source: "alias" | "name" | null;
 }
 
 const EMPTY_META: LineMeta = {
@@ -97,7 +114,44 @@ const EMPTY_META: LineMeta = {
   source: null,
   discount_percent: null,
   discount_amount: null,
+  unit_raw: null,
+  unit_printed_id: null,
+  quantity_printed: null,
+  price_printed: null,
+  pack_raw: null,
+  pack_source: null,
 };
+
+/** Число для поля ввода: без хвостовых нулей масштаба («60.000000» → «60»). */
+function trimNum(value: number, dp: number): string {
+  const s = value.toFixed(dp);
+  return s.includes(".") ? s.replace(/0+$/, "").replace(/\.$/, "") : s;
+}
+
+/** То же для значения, пришедшего с бэкенда в масштабе БД (null — поле пустое). */
+function clean(value: string | null, dp: number): string | undefined {
+  if (value == null || value === "") return undefined;
+  const n = Number(value);
+  return Number.isFinite(n) ? trimNum(n, dp) : value;
+}
+
+/** Нужна ли строке фасовка: единица в накладной не сводится с базовой единицей
+ *  выбранного товара («шт» против «кг»), либо такой единицы у нас вовсе нет
+ *  («уп»). Считается по ТЕКУЩЕМУ выбору товара — товар в строке меняют вручную,
+ *  и вместе с ним меняется целевая единица. */
+function packNeed(
+  meta: LineMeta | undefined,
+  product: { base_unit_id: number } | undefined,
+  unitById: Map<number, UnitOut>,
+): { printed: string; base: UnitOut } | null {
+  if (!meta?.unit_raw || !product) return null;
+  const base = unitById.get(product.base_unit_id);
+  if (!base) return null;
+  const printed =
+    meta.unit_printed_id != null ? unitById.get(meta.unit_printed_id) : undefined;
+  if (printed && printed.dimension === base.dimension) return null;
+  return { printed: meta.unit_raw, base };
+}
 
 /** Разложение суммы строки на «с НДС / без НДС / НДС» при ставке rate (%).
  *  included=true — цены в накладной уже включают НДС (обычная практика РК). */
@@ -135,6 +189,9 @@ interface LineFormValue {
   price?: string;
   /** Ставка НДС для отображения сумм (в БД V1 не сохраняется). */
   vat_rate?: string;
+  /** Фасовка: сколько базовых единиц товара в одной единице накладной.
+   *  В приход не уезжает — из неё считаются quantity и price. */
+  pack_qty?: string;
 }
 
 interface DigitizeFormValues {
@@ -249,6 +306,14 @@ export default function InvoiceDigitizePage() {
   /** Индекс строки, для которой создаётся новый товар (null — модалка закрыта). */
   const [productModalLine, setProductModalLine] = useState<number | null>(null);
   const [zoomOpen, setZoomOpen] = useState(false);
+  /** Созданные прямо из этой формы товар/поставщик: до перезагрузки справочника
+   *  их подписи взять неоткуда, а поле уже хранит их id. */
+  const [justCreatedProducts, setJustCreatedProducts] = useState<
+    { value: number; label: string }[]
+  >([]);
+  const [justCreatedSuppliers, setJustCreatedSuppliers] = useState<
+    { value: number; label: string }[]
+  >([]);
   /** Цены в накладной включают НДС («в том числе») — обычная практика РК. */
   const [vatIncluded, setVatIncluded] = useState(true);
   const lineRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -266,43 +331,58 @@ export default function InvoiceDigitizePage() {
     };
   }, [previewUrl]);
 
-  const products = useQuery({
-    queryKey: ["products", { limit: 200 }],
-    queryFn: () => listProducts({ limit: 200 }),
-    staleTime: 60_000,
-  });
+  // Справочники берём общими хуками модуля: они обходят ВСЕ страницы API.
+  // Одной страницы (максимум 200 строк) для товаров не хватает — их ~1000, и на
+  // обрезке сопоставленный товар не находил своей подписи (в поле оставался
+  // числовой id вместо названия), а поиск по названию искал только внутри этого
+  // обрезка, из-за чего выглядел неработающим.
+  const products = useProductsLookup();
+  const warehouses = useWarehousesLookup();
+  const suppliers = useSuppliersLookup();
   const units = useQuery({
     queryKey: ["units", { limit: 200 }],
     queryFn: () => listUnits({ limit: 200 }),
     staleTime: 60_000,
   });
-  const warehouses = useQuery({
-    queryKey: ["warehouses", { limit: 200 }],
-    queryFn: () => listWarehouses({ limit: 200 }),
-    staleTime: 60_000,
-  });
-  const suppliers = useQuery({
-    queryKey: ["suppliers", { limit: 200 }],
-    queryFn: () => listSuppliers({ limit: 200 }),
-    staleTime: 60_000,
-  });
 
-  const productOptions = useMemo(
-    () => (products.data?.items ?? []).map((p) => ({ value: p.id, label: p.name })),
-    [products.data],
-  );
+  // К опциям каталога добавляем: (1) товары, которые распознавание сопоставило, но
+  // которых в активном каталоге нет (например, деактивированные) — их имя приходит
+  // в самой строке (`product_name`); (2) товары, только что созданные из этой формы.
+  // Без подписи antd показывает в поле голый id, и это читается как «подставился
+  // артикул вместо названия». Ждать перезагрузки каталога нельзя: в нём ~1000
+  // позиций, и до её конца поле выглядит сломанным.
+  const productOptions = useMemo(() => {
+    const base = products.options;
+    const known = new Set(base.map((o) => o.value));
+    const extra: { value: number; label: string }[] = [];
+    for (const created of justCreatedProducts) {
+      if (known.has(created.value)) continue;
+      known.add(created.value);
+      extra.push(created);
+    }
+    for (const line of result?.lines ?? []) {
+      if (line.product_id == null || !line.product_name) continue;
+      if (known.has(line.product_id)) continue;
+      known.add(line.product_id);
+      extra.push({ value: line.product_id, label: line.product_name });
+    }
+    return extra.length ? [...extra, ...base] : base;
+  }, [products.options, result, justCreatedProducts]);
   const unitOptions = useMemo(
-    () => (units.data?.items ?? []).map((u) => ({ value: u.id, label: u.name })),
+    () => (units.data?.items ?? []).map((u) => ({ value: u.unit_id, label: u.name })),
     [units.data],
   );
-  const warehouseOptions = useMemo(
-    () => (warehouses.data?.items ?? []).map((w) => ({ value: w.id, label: w.name })),
-    [warehouses.data],
+  const unitById = useMemo(
+    () => new Map((units.data?.items ?? []).map((u) => [u.unit_id, u])),
+    [units.data],
   );
-  const supplierOptions = useMemo(
-    () => (suppliers.data?.items ?? []).map((s) => ({ value: s.id, label: s.name })),
-    [suppliers.data],
-  );
+  const warehouseOptions = warehouses.options;
+  const supplierOptions = useMemo(() => {
+    const base = suppliers.options;
+    const known = new Set(base.map((o) => o.value));
+    const extra = justCreatedSuppliers.filter((s) => !known.has(s.value));
+    return extra.length ? [...extra, ...base] : base;
+  }, [suppliers.options, justCreatedSuppliers]);
 
   const digitize = useMutation({
     mutationFn: digitizeInvoice,
@@ -316,6 +396,12 @@ export default function InvoiceDigitizePage() {
           source: l.match_source,
           discount_percent: l.discount_percent,
           discount_amount: l.discount_amount,
+          unit_raw: l.unit_raw,
+          unit_printed_id: l.unit_printed_id,
+          quantity_printed: l.quantity_printed,
+          price_printed: l.price_printed,
+          pack_raw: l.pack_raw,
+          pack_source: l.pack_source,
         })),
       );
       form.setFieldsValue({
@@ -326,13 +412,16 @@ export default function InvoiceDigitizePage() {
           data.invoice_number != null
             ? `Накладная № ${data.invoice_number}`
             : data.supplier_name_raw ?? undefined,
+        // Числа приходят в масштабе БД («60.000000»); в поле показываем их
+        // по-человечески, значение от этого не меняется.
         lines: data.lines.map((l) => ({
           product_id: l.product_id ?? undefined,
-          quantity: l.quantity ?? undefined,
+          quantity: clean(l.quantity, 6),
           unit_id: l.unit_id ?? undefined,
-          price: l.price ?? undefined,
+          price: clean(l.price, 4),
           // распознанная ставка, иначе текущая базовая ставка НДС РК (16%)
           vat_rate: l.vat_rate ?? "16",
+          pack_qty: clean(l.pack_qty, 6),
         })),
       });
     },
@@ -350,8 +439,8 @@ export default function InvoiceDigitizePage() {
       if (args.aliasPairs.length > 0) {
         saveDigitizeAliases(args.aliasPairs).catch(() => undefined);
       }
-      message.success(`Черновик прихода №${doc.id} создан`);
-      navigate(`/documents/${doc.id}`);
+      message.success(`Черновик прихода №${doc.document_id} создан`);
+      navigate(`/documents/${doc.document_id}`);
     },
     onError: (e) => message.error(errorMessage(e)),
   });
@@ -362,8 +451,16 @@ export default function InvoiceDigitizePage() {
     onSuccess: (created) => {
       message.success(`Поставщик «${created.name}» создан`);
       setSupplierModalOpen(false);
+      // Список берётся хуком useSuppliersLookup с ключом ["lookup","suppliers",…]:
+      // инвалидация по ["suppliers"] в него НЕ попадала, поэтому подпись нового
+      // поставщика не появлялась и в поле оставался его id.
+      queryClient.invalidateQueries({ queryKey: ["lookup", "suppliers"] });
       queryClient.invalidateQueries({ queryKey: ["suppliers"] });
-      form.setFieldValue("supplier_id", created.id);
+      setJustCreatedSuppliers((prev) => [
+        ...prev,
+        { value: created.supplier_id, label: created.name },
+      ]);
+      form.setFieldValue("supplier_id", created.supplier_id);
     },
     onError: (e) => message.error(errorMessage(e)),
   });
@@ -385,9 +482,17 @@ export default function InvoiceDigitizePage() {
       }),
     onSuccess: (created) => {
       message.success(`Товар «${created.name}» создан`);
+      // Каталог для поля берётся useProductsLookup с ключом ["lookup","products",…]:
+      // инвалидация по ["products"] мимо, и подпись нового товара не подтягивалась —
+      // в поле оставался числовой id, который читается как артикул.
+      queryClient.invalidateQueries({ queryKey: ["lookup", "products"] });
       queryClient.invalidateQueries({ queryKey: ["products"] });
+      setJustCreatedProducts((prev) => [
+        ...prev,
+        { value: created.product_id, label: created.name },
+      ]);
       if (productModalLine != null) {
-        form.setFieldValue(["lines", productModalLine, "product_id"], created.id);
+        form.setFieldValue(["lines", productModalLine, "product_id"], created.product_id);
         const unitSet = form.getFieldValue(["lines", productModalLine, "unit_id"]);
         if (unitSet == null) {
           form.setFieldValue(["lines", productModalLine, "unit_id"], created.base_unit_id);
@@ -418,6 +523,28 @@ export default function InvoiceDigitizePage() {
     setProductModalLine(lineIdx);
   }
 
+  /** Пересчёт строки через фасовку: количество и цена — из НАПЕЧАТАННЫХ значений.
+   *  Цену обязательно делим: оставить цену за место значит завысить приход ровно
+   *  во столько раз, сколько единиц в месте. */
+  function applyPack(idx: number, factor: string | null | undefined, baseUnitId: number) {
+    const meta = lineMeta[idx];
+    const f = Number(factor);
+    if (!meta || !Number.isFinite(f) || f <= 0) return;
+    form.setFieldValue(["lines", idx, "unit_id"], baseUnitId);
+    if (meta.quantity_printed != null) {
+      form.setFieldValue(
+        ["lines", idx, "quantity"],
+        trimNum(Number(meta.quantity_printed) * f, 6),
+      );
+    }
+    if (meta.price_printed != null) {
+      form.setFieldValue(
+        ["lines", idx, "price"],
+        trimNum(Number(meta.price_printed) / f, 4),
+      );
+    }
+  }
+
   /** Суммы строк формы: всего / без НДС / НДС (для сверки и шапки секции). */
   const linesTotals = useMemo(() => {
     let sum = 0;
@@ -438,14 +565,49 @@ export default function InvoiceDigitizePage() {
   const totalsMatch =
     result?.total_amount != null && Math.abs(linesSum - Number(result.total_amount)) < 0.01;
 
+  /** Что именно осталось незаполненным — говорим строками, а не молчим. */
+  function onSubmitFailed(info: { errorFields: { name: (string | number)[] }[] }) {
+    const lineNumbers = new Set<number>();
+    const headerFields = new Set<string>();
+    for (const f of info.errorFields) {
+      if (f.name[0] === "lines" && typeof f.name[1] === "number") {
+        lineNumbers.add(f.name[1] + 1);
+      } else if (typeof f.name[0] === "string") {
+        headerFields.add(HEADER_FIELD_LABELS[f.name[0]] ?? f.name[0]);
+      }
+    }
+    const parts: string[] = [];
+    if (headerFields.size) parts.push(`реквизиты: ${[...headerFields].join(", ")}`);
+    if (lineNumbers.size) {
+      parts.push(`строки: ${[...lineNumbers].sort((a, b) => a - b).join(", ")}`);
+    }
+    message.error(
+      parts.length
+        ? `Не заполнено — ${parts.join("; ")}. Поле подсвечено красным.`
+        : "Проверьте заполнение формы",
+    );
+  }
+
   function submit(values: DigitizeFormValues) {
+    // Числа собираем через num(): раньше было String(l.price), и у нераспознанной
+    // строки на бэкенд уезжал литерал "undefined" — тот отвечал 422 с
+    // «Input should be a valid decimal», а на экране это выглядело как молчание.
+    const num = (v: unknown): string | undefined =>
+      v == null || v === "" ? undefined : String(v);
     const lines: ReceiptLineIn[] = values.lines.map((l) => ({
       product_id: l.product_id as number,
-      quantity: String(l.quantity),
+      quantity: num(l.quantity) as string,
       unit_id: l.unit_id as number,
-      price: String(l.price),
+      price: num(l.price) as string,
       free_goods: false,
     }));
+    const bad = lines
+      .map((l, i) => (l.quantity == null || l.price == null ? i + 1 : 0))
+      .filter(Boolean);
+    if (bad.length) {
+      message.error(`Заполните количество и цену в строках: ${bad.join(", ")}`);
+      return;
+    }
     const body: ReceiptDocumentCreate = {
       type: "receipt",
       doc_date: values.doc_date.format("YYYY-MM-DD"),
@@ -455,11 +617,23 @@ export default function InvoiceDigitizePage() {
       supplier_id: values.internal ? undefined : values.supplier_id,
       lines,
     };
+    // Вместе с товаром запоминаем и фасовку: та же строка того же поставщика
+    // приедет в тех же вёдрах, и в следующий раз пересчёт пройдёт сам.
     const aliasPairs = values.lines.flatMap((l, i) => {
       const raw = lineMeta[i]?.raw_name;
-      return raw && l.product_id != null
-        ? [{ raw_text: raw, product_id: l.product_id }]
-        : [];
+      if (!raw || l.product_id == null) return [];
+      const product = products.byId.get(l.product_id);
+      const need = packNeed(lineMeta[i], product, unitById);
+      const pack = need && l.pack_qty != null && Number(l.pack_qty) > 0;
+      return [
+        {
+          raw_text: raw,
+          product_id: l.product_id,
+          ...(pack
+            ? { pack_qty: String(l.pack_qty), pack_unit_id: need!.base.unit_id }
+            : {}),
+        },
+      ];
     });
     save.mutate({ body, aliasPairs });
   }
@@ -873,7 +1047,17 @@ export default function InvoiceDigitizePage() {
               </Descriptions>
             </Card>
 
-            <Form form={form} layout="vertical" onFinish={submit}>
+            {/* scrollToFirstError + onFinishFailed: без них клик по «Создать
+                черновик прихода» при незаполненной строке просто ничего не делал —
+                antd подсвечивал поле где-то далеко вне экрана и молчал, и кнопка
+                выглядела нерабочей. */}
+            <Form
+              form={form}
+              layout="vertical"
+              onFinish={submit}
+              scrollToFirstError={{ behavior: "smooth", block: "center" }}
+              onFinishFailed={onSubmitFailed}
+            >
               <Card
                 size="small"
                 title="Реквизиты прихода"
@@ -999,6 +1183,13 @@ export default function InvoiceDigitizePage() {
                     {fields.map(({ key, name, ...restField }, position) => {
                       const meta = lineMeta[name] as LineMeta | undefined;
                       const current = watchedLines?.[name];
+                      const product =
+                        current?.product_id != null
+                          ? products.byId.get(current.product_id)
+                          : undefined;
+                      // Единица накладной не сходится с единицей учёта товара —
+                      // строку нельзя принять, пока не известна фасовка.
+                      const need = packNeed(meta, product, unitById);
                       const grade = gradeOf(current?.product_id, meta);
                       const color = GRADE_COLOR[grade];
                       const active = activeIdx === name;
@@ -1107,7 +1298,29 @@ export default function InvoiceDigitizePage() {
                               showSearch
                               optionFilterProp="label"
                               options={productOptions}
+                              // Пока каталог грузится, поиск ищет по неполному
+                              // списку — показываем это, а не пустой результат.
+                              loading={products.isPending}
+                              notFoundContent={
+                                products.isPending
+                                  ? "Загружаем каталог…"
+                                  : "Ничего не найдено — создайте продукт кнопкой ниже"
+                              }
                               placeholder="Продукт из каталога"
+                              // Сменили товар — целевая единица другая, значит
+                              // пересчёт по прежней фасовке надо повторить.
+                              onChange={(productId: number) => {
+                                const picked = products.byId.get(productId);
+                                const nextNeed = packNeed(meta, picked, unitById);
+                                const pack = form.getFieldValue([
+                                  "lines",
+                                  name,
+                                  "pack_qty",
+                                ]);
+                                if (nextNeed && pack) {
+                                  applyPack(name, pack, nextNeed.base.unit_id);
+                                }
+                              }}
                               dropdownRender={(menu) => (
                                 <>
                                   {menu}
@@ -1182,6 +1395,92 @@ export default function InvoiceDigitizePage() {
                               </Form.Item>
                             </Col>
                           </Row>
+                          {need && (
+                            <div
+                              style={{
+                                display: "flex",
+                                flexWrap: "wrap",
+                                alignItems: "baseline",
+                                gap: 8,
+                                background: current?.pack_qty ? "#f6ffed" : "#fff2f0",
+                                border: `1px solid ${
+                                  current?.pack_qty ? "#b7eb8f" : "#ffccc7"
+                                }`,
+                                borderRadius: 6,
+                                padding: "6px 10px",
+                                marginBottom: 12,
+                              }}
+                            >
+                              <Typography.Text style={{ fontSize: 12 }}>
+                                В накладной «{need.printed}», товар ведётся в «
+                                {need.base.name}». В 1 {need.printed} =
+                              </Typography.Text>
+                              <Form.Item
+                                {...restField}
+                                name={[name, "pack_qty"]}
+                                style={{ margin: 0 }}
+                                rules={[
+                                  {
+                                    required: true,
+                                    message: `Сколько ${need.base.name} в одной «${need.printed}»?`,
+                                  },
+                                  {
+                                    validator: async (_: unknown, val: string) => {
+                                      if (val == null || val === "") return;
+                                      if (!(Number(val) > 0)) {
+                                        throw new Error("Фасовка > 0");
+                                      }
+                                    },
+                                  },
+                                ]}
+                              >
+                                <InputNumber
+                                  size="small"
+                                  stringMode
+                                  min="0"
+                                  style={{ width: 130 }}
+                                  addonAfter={need.base.name}
+                                  placeholder="фасовка"
+                                  onChange={(v) =>
+                                    applyPack(
+                                      name,
+                                      v as string | null,
+                                      need.base.unit_id,
+                                    )
+                                  }
+                                />
+                              </Form.Item>
+                              {current?.pack_qty && meta?.quantity_printed != null ? (
+                                <Typography.Text style={{ fontSize: 12 }}>
+                                  → {meta.quantity_printed} × {current.pack_qty} =
+                                  <b>
+                                    {" "}
+                                    {current.quantity} {need.base.name}
+                                  </b>
+                                  {current.price != null &&
+                                    ` · ${fmtMoney(current.price)} за ${need.base.name}`}
+                                </Typography.Text>
+                              ) : (
+                                <Typography.Text type="danger" style={{ fontSize: 12 }}>
+                                  без фасовки количество встанет на склад неверным
+                                </Typography.Text>
+                              )}
+                              {meta?.pack_source === "name" && meta.pack_raw && (
+                                <Tooltip title="Прочитано из наименования строки — сверьте с бумагой">
+                                  <Tag style={{ marginInlineEnd: 0 }}>
+                                    из наименования «{meta.pack_raw}»
+                                  </Tag>
+                                </Tooltip>
+                              )}
+                              {meta?.pack_source === "alias" && (
+                                <Tooltip title="Эту фасовку вы подтвердили на прошлых накладных">
+                                  <Tag color="green" style={{ marginInlineEnd: 0 }}>
+                                    по прошлым накладным
+                                  </Tag>
+                                </Tooltip>
+                              )}
+                            </div>
+                          )}
                           {(() => {
                             const b = vatBreakdown(
                               current?.quantity,

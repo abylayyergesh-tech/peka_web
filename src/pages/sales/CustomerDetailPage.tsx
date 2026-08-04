@@ -13,13 +13,16 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tansta
 
 import { errorMessage } from "@/api/client";
 import {
-  customerLedger, getCustomer, listCustomerPayments, recordCustomerPayment,
-  voidCustomerPayment,
-  type CustomerPaymentOut, type ReceivableEntryOut,
+  customerLedger, getCustomer, listCustomerPayments, listMenus, recordCustomerPayment,
+  updateCustomer, voidCustomerPayment,
+  type BillingMode, type CustomerPaymentOut, type ReceivableEntryOut,
 } from "@/api/sales";
 import { useCan } from "@/auth/store";
 import { Money, fmtDate } from "@/components/format";
-import { PaymentStatusTag } from "@/pages/sales/statusTags";
+import CustomerOutletsTab from "@/pages/sales/CustomerOutletsTab";
+import {
+  BILLING_MODE, BILLING_MODE_OPTIONS, BillingModeTag, PaymentStatusTag,
+} from "@/pages/sales/statusTags";
 
 const LEDGER_SOURCE_LABELS: Record<string, string> = {
   check: "Чек",
@@ -48,6 +51,7 @@ export default function CustomerDetailPage() {
   const navigate = useNavigate();
   const canPay = useCan("customer_payment.manage");
   const canReport = useCan("report.read");
+  const canManageCustomer = useCan("customer.manage");
   const [payModalOpen, setPayModalOpen] = useState(false);
   const [payForm] = Form.useForm();
 
@@ -61,6 +65,35 @@ export default function CustomerDetailPage() {
     queryKey: ["customer-payments", customerId],
     queryFn: () => listCustomerPayments(customerId),
     enabled: Number.isFinite(customerId),
+  });
+
+  const menus = useQuery({
+    queryKey: ["menus", "active"],
+    queryFn: () => listMenus({ active: true }),
+    staleTime: 60_000,
+  });
+  const defaultMenuName = menus.data?.find((m) => m.is_default)?.name ?? "Основное меню";
+
+  /** Прайс-лист меняется прямо из карточки — это самая частая правка клиента. */
+  const setMenu = useMutation({
+    mutationFn: (menuId: number | null) => updateCustomer(customerId, { menu_id: menuId }),
+    onSuccess: () => {
+      message.success("Прайс-лист клиента обновлён");
+      queryClient.invalidateQueries({ queryKey: ["customer", customerId] });
+      queryClient.invalidateQueries({ queryKey: ["customers"] });
+    },
+    onError: (e) => message.error(errorMessage(e)),
+  });
+
+  /** Категория расчётов — отдельная мутация: прайс-лист при переводе не трогаем. */
+  const setBillingMode = useMutation({
+    mutationFn: (mode: BillingMode) => updateCustomer(customerId, { billing_mode: mode }),
+    onSuccess: (updated) => {
+      message.success(`Расчёты: ${BILLING_MODE[updated.billing_mode].label.toLowerCase()}`);
+      queryClient.invalidateQueries({ queryKey: ["customer", customerId] });
+      queryClient.invalidateQueries({ queryKey: ["customers"] });
+    },
+    onError: (e) => message.error(errorMessage(e)),
   });
 
   const ledger = useInfiniteQuery({
@@ -138,7 +171,7 @@ export default function CustomerDetailPage() {
             title="Аннулировать платёж?"
             okText="Аннулировать"
             cancelText="Отмена"
-            onConfirm={() => voidPayment.mutate(row.id)}
+            onConfirm={() => voidPayment.mutate(row.customer_payment_id)}
           >
             <a>Аннулировать</a>
           </Popconfirm>
@@ -174,6 +207,13 @@ export default function CustomerDetailPage() {
 
   const tabItems = [
     {
+      // Первой: у сети кофеен один клиент и много адресов — это главное, что о
+      // клиенте нужно знать, чтобы принять заказ.
+      key: "outlets",
+      label: "Точки (адреса)",
+      children: <CustomerOutletsTab customerId={customerId} />,
+    },
+    {
       key: "payments",
       label: "Платежи",
       children: (
@@ -192,7 +232,7 @@ export default function CustomerDetailPage() {
             </Button>
           )}
           <Table
-            rowKey="id"
+            rowKey="customer_payment_id"
             size="small"
             loading={payments.isPending}
             dataSource={payments.data}
@@ -210,7 +250,7 @@ export default function CustomerDetailPage() {
             children: (
               <div>
                 <Table
-                  rowKey="id"
+                  rowKey="receivable_entry_id"
                   size="small"
                   loading={ledger.isPending}
                   dataSource={ledgerEntries}
@@ -249,9 +289,64 @@ export default function CustomerDetailPage() {
         <Descriptions size="small" column={3}>
           <Descriptions.Item label="Телефон">{c.phone ?? "—"}</Descriptions.Item>
           <Descriptions.Item label="Email">{c.email ?? "—"}</Descriptions.Item>
-          <Descriptions.Item label="ИНН">{c.tax_id ?? "—"}</Descriptions.Item>
+          <Descriptions.Item label="БИН/ИИН">
+            {c.tax_id ? (
+              <Space size={6}>
+                {c.tax_id}
+                <Tag color="geekblue">юрлицо</Tag>
+              </Space>
+            ) : (
+              <Space size={6}>
+                —
+                {/* Без БИН точка самостоятельна: у неё не может быть «сестёр». */}
+                <Tag>самостоятельная точка</Tag>
+              </Space>
+            )}
+          </Descriptions.Item>
           <Descriptions.Item label="Кредитный лимит">
             <Money value={c.credit_limit} />
+          </Descriptions.Item>
+          <Descriptions.Item label="Прайс-лист">
+            {canManageCustomer ? (
+              <Select
+                size="small"
+                allowClear
+                showSearch
+                optionFilterProp="label"
+                style={{ minWidth: 200 }}
+                placeholder={defaultMenuName}
+                loading={menus.isPending || setMenu.isPending}
+                value={c.menu_id ?? undefined}
+                onChange={(v) => setMenu.mutate(v ?? null)}
+                options={menus.data
+                  ?.filter((m) => !m.is_default)
+                  .map((m) => ({ value: m.menu_id, label: m.name }))}
+              />
+            ) : c.menu_id == null ? (
+              defaultMenuName
+            ) : (
+              menus.data?.find((m) => m.menu_id === c.menu_id)?.name ?? `#${c.menu_id}`
+            )}
+          </Descriptions.Item>
+          <Descriptions.Item label="Расчёты">
+            {canManageCustomer ? (
+              <Space size={6}>
+                <Select
+                  size="small"
+                  style={{ minWidth: 160 }}
+                  loading={setBillingMode.isPending}
+                  value={c.billing_mode}
+                  onChange={(v) => setBillingMode.mutate(v)}
+                  options={BILLING_MODE_OPTIONS}
+                />
+                <span style={{ color: "#999" }}>{BILLING_MODE[c.billing_mode]?.hint}</span>
+              </Space>
+            ) : (
+              <Space size={6}>
+                <BillingModeTag mode={c.billing_mode} />
+                <span style={{ color: "#999" }}>{BILLING_MODE[c.billing_mode]?.hint}</span>
+              </Space>
+            )}
           </Descriptions.Item>
           <Descriptions.Item label="Создан">{fmtDate(c.created_at)}</Descriptions.Item>
           <Descriptions.Item label="Примечание">{c.note ?? "—"}</Descriptions.Item>

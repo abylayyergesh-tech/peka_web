@@ -1,24 +1,41 @@
 /** Route registrations for the "sales" module. */
-import type { RouteObject } from "react-router-dom";
+import { Navigate, useLocation, type RouteObject } from "react-router-dom";
 
+import AnnouncementsPage from "@/pages/sales/AnnouncementsPage";
 import CheckDetailPage from "@/pages/sales/CheckDetailPage";
-import ChecksPage from "@/pages/sales/ChecksPage";
 import CustomerDetailPage from "@/pages/sales/CustomerDetailPage";
 import CustomersPage from "@/pages/sales/CustomersPage";
-import MenuItemsPage from "@/pages/sales/MenuItemsPage";
+import MenuPage, { PRICE_LISTS_TAB } from "@/pages/sales/MenuPage";
+import MenuPricesPage from "@/pages/sales/MenuPricesPage";
 import ReceivablesReportPage from "@/pages/sales/ReceivablesReportPage";
+import ReplacementsReportPage from "@/pages/sales/ReplacementsReportPage";
 import SalesReportPage from "@/pages/sales/SalesReportPage";
 import ShiftDetailPage from "@/pages/sales/ShiftDetailPage";
 import ShiftsPage from "@/pages/sales/ShiftsPage";
 
+/** /checks?shift=N → /shifts?tab=checks&shift=N: фильтр по смене не теряется. */
+function ChecksTabRedirect() {
+  const { search } = useLocation();
+  const params = new URLSearchParams(search);
+  params.set("tab", "checks");
+  return <Navigate to={{ pathname: "/shifts", search: params.toString() }} replace />;
+}
+
 export const salesRoutes: RouteObject[] = [
-  { path: "/menu-items", element: <MenuItemsPage /> },
+  { path: "/menu-items", element: <MenuPage /> },
+  // Список прайс-листов переехал во вкладку; ссылки и закладки живы.
+  { path: "/menus", element: <Navigate to={PRICE_LISTS_TAB} replace /> },
+  { path: "/menus/:id", element: <MenuPricesPage /> },
   { path: "/shifts", element: <ShiftsPage /> },
   { path: "/shifts/:id", element: <ShiftDetailPage /> },
-  { path: "/checks", element: <ChecksPage /> },
+  // Список чеков переехал во вкладку. Редирект сохраняет ?shift=N — по этой
+  // ссылке из отчёта по смене приходят с уже выбранной сменой.
+  { path: "/checks", element: <ChecksTabRedirect /> },
   { path: "/checks/:id", element: <CheckDetailPage /> },
   { path: "/customers", element: <CustomersPage /> },
   { path: "/customers/:id", element: <CustomerDetailPage /> },
+  { path: "/announcements", element: <AnnouncementsPage /> },
   { path: "/reports/sales", element: <SalesReportPage /> },
   { path: "/reports/receivables", element: <ReceivablesReportPage /> },
+  { path: "/reports/replacements", element: <ReplacementsReportPage /> },
 ];

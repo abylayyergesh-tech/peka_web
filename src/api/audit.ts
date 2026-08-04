@@ -3,7 +3,7 @@ import { api } from "@/api/client";
 import type { Page, PageParams } from "@/api/client";
 
 export interface AuditEventOut {
-  id: number;
+  audit_event_id: number;
   organization_id: number | null;
   user_id: number | null;
   action: string;

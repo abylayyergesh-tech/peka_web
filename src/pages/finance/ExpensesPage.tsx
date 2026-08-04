@@ -74,12 +74,12 @@ export default function ExpensesPage() {
 
   const categoryName = useMemo(() => {
     const m = new Map<number, string>();
-    for (const c of categoriesQuery.data ?? []) m.set(c.id, c.name);
+    for (const c of categoriesQuery.data ?? []) m.set(c.expense_category_id, c.name);
     return m;
   }, [categoriesQuery.data]);
   const supplierName = useMemo(() => {
     const m = new Map<number, string>();
-    for (const s of suppliersQuery.data ?? []) m.set(s.id, s.name);
+    for (const s of suppliersQuery.data ?? []) m.set(s.supplier_id, s.name);
     return m;
   }, [suppliersQuery.data]);
 
@@ -90,7 +90,7 @@ export default function ExpensesPage() {
 
   const save = useMutation({
     mutationFn: (body: ExpenseCreate) =>
-      editing ? updateExpense(editing.id, body) : createExpense(body),
+      editing ? updateExpense(editing.expense_id, body) : createExpense(body),
     onSuccess: () => {
       message.success(editing ? "Сохранено" : "Создано");
       setModalOpen(false);
@@ -176,7 +176,7 @@ export default function ExpensesPage() {
               title="Удалить расход?"
               okText="Да"
               cancelText="Нет"
-              onConfirm={() => remove.mutate(row.id)}
+              onConfirm={() => remove.mutate(row.expense_id)}
             >
               <a>Удалить</a>
             </Popconfirm>
@@ -208,7 +208,7 @@ export default function ExpensesPage() {
             setCategory(v);
             reset();
           }}
-          options={(categoriesQuery.data ?? []).map((c) => ({ value: c.id, label: c.name }))}
+          options={(categoriesQuery.data ?? []).map((c) => ({ value: c.expense_category_id, label: c.name }))}
         />
         <Select
           allowClear
@@ -221,7 +221,7 @@ export default function ExpensesPage() {
             setSupplier(v);
             reset();
           }}
-          options={(suppliersQuery.data ?? []).map((s) => ({ value: s.id, label: s.name }))}
+          options={(suppliersQuery.data ?? []).map((s) => ({ value: s.supplier_id, label: s.name }))}
         />
         <DatePicker.RangePicker
           value={range}
@@ -235,7 +235,7 @@ export default function ExpensesPage() {
       </Space>
 
       <Table
-        rowKey="id"
+        rowKey="expense_id"
         size="small"
         loading={query.isPending}
         dataSource={query.data?.items}
@@ -271,7 +271,7 @@ export default function ExpensesPage() {
               optionFilterProp="label"
               placeholder="Выберите статью"
               options={(categoriesQuery.data ?? []).map((c) => ({
-                value: c.id,
+                value: c.expense_category_id,
                 label: c.is_active ? c.name : `${c.name} (неактивна)`,
               }))}
             />
@@ -298,7 +298,7 @@ export default function ExpensesPage() {
               showSearch
               optionFilterProp="label"
               placeholder="Не указан"
-              options={(suppliersQuery.data ?? []).map((s) => ({ value: s.id, label: s.name }))}
+              options={(suppliersQuery.data ?? []).map((s) => ({ value: s.supplier_id, label: s.name }))}
             />
           </Form.Item>
           <Form.Item name="note" label="Описание">

@@ -24,7 +24,7 @@ interface Props {
 export default function MemberCapabilitiesDrawer({ member, open, onClose }: Props) {
   const { message } = App.useApp();
   const queryClient = useQueryClient();
-  const membershipId = member?.id;
+  const membershipId = member?.membership_id;
 
   const capsQuery = useQuery({
     queryKey: ["capabilities"],

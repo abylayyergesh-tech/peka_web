@@ -2,8 +2,8 @@
  * close (payment), void, text receipt drawer + print. */
 import { ArrowLeftOutlined, PlusOutlined, PrinterOutlined } from "@ant-design/icons";
 import {
-  Alert, App, Button, Card, Descriptions, Drawer, Form, InputNumber, Modal,
-  Popconfirm, Radio, Result, Select, Space, Spin, Table,
+  Alert, App, Button, Card, Checkbox, Descriptions, Drawer, Form, InputNumber, Modal,
+  Popconfirm, Radio, Result, Select, Space, Spin, Table, Tag, Typography,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useState } from "react";
@@ -96,7 +96,7 @@ export default function CheckDetailPage() {
   const lineSave = useMutation({
     mutationFn: (values: CheckLineIn) =>
       editingLine
-        ? updateCheckLine(checkId, editingLine.id, values)
+        ? updateCheckLine(checkId, editingLine.check_line_id, values)
         : addCheckLine(checkId, values),
     onSuccess: () => {
       message.success(editingLine ? "Строка изменена" : "Строка добавлена");
@@ -167,17 +167,17 @@ export default function CheckDetailPage() {
   const check = query.data;
   const isOpen = check.status === "open";
   const warehouseName =
-    warehouses.data?.items.find((w) => w.id === check.warehouse_id)?.name ??
+    warehouses.data?.items.find((w) => w.warehouse_id === check.warehouse_id)?.name ??
     `#${check.warehouse_id}`;
   const customerName =
     check.customer_id == null
       ? "—"
-      : customers.data?.items.find((c) => c.id === check.customer_id)?.name ??
+      : customers.data?.items.find((c) => c.customer_id === check.customer_id)?.name ??
         `#${check.customer_id}`;
   const menuItemName = (itemId: number) =>
-    menuItems.data?.items.find((m) => m.id === itemId)?.name ?? `#${itemId}`;
+    menuItems.data?.items.find((m) => m.menu_item_id === itemId)?.name ?? `#${itemId}`;
   const productName = (productId: number) =>
-    products.data?.items.find((p) => p.id === productId)?.name ?? `#${productId}`;
+    products.data?.items.find((p) => p.product_id === productId)?.name ?? `#${productId}`;
 
   function openAddLine() {
     setEditingLine(null);
@@ -211,13 +211,28 @@ export default function CheckDetailPage() {
   }
 
   const lineColumns: ColumnsType<CheckLineOut> = [
-    { title: "Позиция", dataIndex: "menu_item_id", render: (v: number) => menuItemName(v) },
+    {
+      title: "Позиция",
+      dataIndex: "menu_item_id",
+      render: (v: number, row) => (
+        <Space size={6}>
+          {menuItemName(v)}
+          {/* Нулевая цена в чеке без пометки читается как ошибка кассира. */}
+          {row.is_replacement && <Tag color="volcano">Замена</Tag>}
+        </Space>
+      ),
+    },
     { title: "Кол-во", dataIndex: "quantity", align: "right", render: (v: string) => fmtQty(v) },
     {
       title: "Цена",
       dataIndex: "unit_price",
       align: "right",
-      render: (v: string) => <Money value={v} />,
+      render: (v: string, row) =>
+        row.is_replacement ? (
+          <Typography.Text type="secondary">бесплатно</Typography.Text>
+        ) : (
+          <Money value={v} />
+        ),
     },
     {
       title: "Скидка",
@@ -242,7 +257,7 @@ export default function CheckDetailPage() {
             title="Удалить строку?"
             okText="Да"
             cancelText="Нет"
-            onConfirm={() => lineRemove.mutate(row.id)}
+            onConfirm={() => lineRemove.mutate(row.check_line_id)}
           >
             <a>Удалить</a>
           </Popconfirm>
@@ -272,7 +287,7 @@ export default function CheckDetailPage() {
             К чекам
           </Button>
           <h2 style={{ margin: 0 }}>
-            Чек №{check.number ?? check.id} <CheckStatusTag status={check.status} />
+            Чек №{check.number ?? check.check_id} <CheckStatusTag status={check.status} />
           </h2>
         </Space>
         <Space wrap>
@@ -351,7 +366,7 @@ export default function CheckDetailPage() {
         }
       >
         <Table
-          rowKey="id"
+          rowKey="check_line_id"
           size="small"
           dataSource={check.lines}
           pagination={false}
@@ -368,6 +383,11 @@ export default function CheckDetailPage() {
           <Descriptions.Item label="Скидка">
             <Money value={check.discount_total} />
           </Descriptions.Item>
+          {Number(check.delivery_fee ?? 0) > 0 && (
+            <Descriptions.Item label="Доставка (услуга)">
+              <Money value={check.delivery_fee} />
+            </Descriptions.Item>
+          )}
           <Descriptions.Item label="Итого">
             <b>
               <Money value={check.total} />
@@ -397,7 +417,7 @@ export default function CheckDetailPage() {
               optionFilterProp="label"
               loading={menuItems.isPending}
               options={menuItems.data?.items.map((m) => ({
-                value: m.id,
+                value: m.menu_item_id,
                 label: `${m.name} — ${fmtMoney(m.sale_price)}`,
               }))}
             />
@@ -410,16 +430,32 @@ export default function CheckDetailPage() {
           >
             <InputNumber min={0.000001} style={{ width: "100%" }} />
           </Form.Item>
-          <Form.Item name="discount_type" label="Тип скидки">
-            <Select allowClear options={DISCOUNT_TYPE_OPTIONS} />
-          </Form.Item>
           <Form.Item
-            name="discount_value"
-            label="Размер скидки"
-            dependencies={["discount_type"]}
-            rules={[discountPairRule]}
+            name="is_replacement"
+            valuePropName="checked"
+            tooltip="Клиент за позицию не платит, но со склада она списывается. Нужен контрагент в чеке."
           >
-            <InputNumber min={0} style={{ width: "100%" }} />
+            <Checkbox>Замена (не оплачивается)</Checkbox>
+          </Form.Item>
+          {/* Скидка к замене бессмысленна — цена уже 0, и бэкенд её отклонит. */}
+          <Form.Item shouldUpdate={(a, b) => a.is_replacement !== b.is_replacement} noStyle>
+            {({ getFieldValue }) =>
+              getFieldValue("is_replacement") ? null : (
+                <>
+                  <Form.Item name="discount_type" label="Тип скидки">
+                    <Select allowClear options={DISCOUNT_TYPE_OPTIONS} />
+                  </Form.Item>
+                  <Form.Item
+                    name="discount_value"
+                    label="Размер скидки"
+                    dependencies={["discount_type"]}
+                    rules={[discountPairRule]}
+                  >
+                    <InputNumber min={0} style={{ width: "100%" }} />
+                  </Form.Item>
+                </>
+              )
+            }
           </Form.Item>
         </Form>
       </Modal>
@@ -462,7 +498,7 @@ export default function CheckDetailPage() {
               showSearch
               optionFilterProp="label"
               loading={customers.isPending}
-              options={customers.data?.items.map((c) => ({ value: c.id, label: c.name }))}
+              options={customers.data?.items.map((c) => ({ value: c.customer_id, label: c.name }))}
             />
           </Form.Item>
         </Form>
@@ -514,14 +550,14 @@ export default function CheckDetailPage() {
               showSearch
               optionFilterProp="label"
               loading={customers.isPending}
-              options={customers.data?.items.map((c) => ({ value: c.id, label: c.name }))}
+              options={customers.data?.items.map((c) => ({ value: c.customer_id, label: c.name }))}
             />
           </Form.Item>
         </Form>
       </Modal>
 
       <Drawer
-        title={`Чек №${check.number ?? check.id}`}
+        title={`Чек №${check.number ?? check.check_id}`}
         open={receiptOpen}
         onClose={() => setReceiptOpen(false)}
         width={420}

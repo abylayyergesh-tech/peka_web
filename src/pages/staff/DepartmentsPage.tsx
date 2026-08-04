@@ -59,11 +59,11 @@ export default function DepartmentsPage() {
     staleTime: 60_000,
   });
   const empOptions =
-    empQuery.data?.items.map((e) => ({ value: e.id, label: e.full_name })) ?? [];
+    empQuery.data?.items.map((e) => ({ value: e.employee_id, label: e.full_name })) ?? [];
 
   const save = useMutation({
     mutationFn: (body: DepartmentCreate | DepartmentUpdate) =>
-      editing ? updateDepartment(editing.id, body) : createDepartment(body as DepartmentCreate),
+      editing ? updateDepartment(editing.department_id, body) : createDepartment(body as DepartmentCreate),
     onSuccess: () => {
       message.success(editing ? "Сохранено" : "Отдел создан");
       setModalOpen(false);
@@ -138,7 +138,7 @@ export default function DepartmentsPage() {
                 okText="Деактивировать"
                 cancelText="Отмена"
                 okButtonProps={{ danger: true, loading: deactivate.isPending }}
-                onConfirm={() => deactivate.mutate(row.id)}
+                onConfirm={() => deactivate.mutate(row.department_id)}
               >
                 <a style={{ color: "#cf1322" }}>Деактивировать</a>
               </Popconfirm>
@@ -172,7 +172,7 @@ export default function DepartmentsPage() {
       </Space>
 
       <Table
-        rowKey="id"
+        rowKey="department_id"
         size="small"
         loading={query.isPending}
         dataSource={query.data?.items}

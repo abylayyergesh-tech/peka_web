@@ -46,7 +46,7 @@ export default function RolesPage() {
         description: v.description || undefined,
         capabilities: v.capabilities ?? [],
       };
-      return editing ? updateRole(editing.id, body) : createRole(body);
+      return editing ? updateRole(editing.role_id, body) : createRole(body);
     },
     onSuccess: () => {
       message.success(editing ? "Роль сохранена" : "Роль создана");
@@ -116,7 +116,7 @@ export default function RolesPage() {
                 title="Удалить роль?"
                 okText="Удалить"
                 cancelText="Отмена"
-                onConfirm={() => remove.mutate(row.id)}
+                onConfirm={() => remove.mutate(row.role_id)}
               >
                 <a>Удалить</a>
               </Popconfirm>
@@ -137,7 +137,7 @@ export default function RolesPage() {
         )}
       </Space>
       <Table
-        rowKey="id"
+        rowKey="role_id"
         size="small"
         loading={rolesQuery.isPending}
         dataSource={rolesQuery.data}

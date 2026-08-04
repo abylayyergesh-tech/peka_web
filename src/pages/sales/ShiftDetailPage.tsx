@@ -1,13 +1,16 @@
-/** /shifts/:id — shift report: shift info, sales totals, payment breakdown. */
-import { ArrowLeftOutlined } from "@ant-design/icons";
+/** /shifts/:id — shift report: shift info, sales totals, payment breakdown,
+ * и печатный чек за смену (итоги или полный, со всеми проданными позициями). */
+import { ArrowLeftOutlined, CopyOutlined, PrinterOutlined } from "@ant-design/icons";
 import {
-  App, Button, Card, Col, Descriptions, Popconfirm, Result, Row, Space, Spin, Statistic,
+  Alert, App, Button, Card, Col, Descriptions, Modal, Popconfirm, Result, Row,
+  Segmented, Space, Spin, Statistic,
 } from "antd";
+import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { errorMessage } from "@/api/client";
-import { closeShift, getShift, listWarehousesLookup } from "@/api/sales";
+import { closeShift, getShift, getShiftReceipt, listWarehousesLookup } from "@/api/sales";
 import { useCan } from "@/auth/store";
 import { Money, fmtDateTime, fmtMoney } from "@/components/format";
 import { ShiftStatusTag, paymentMethodLabel } from "@/pages/sales/statusTags";
@@ -19,11 +22,20 @@ export default function ShiftDetailPage() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const canOperate = useCan("sale.operate");
+  const [receiptOpen, setReceiptOpen] = useState(false);
+  /** «Итоги» — Z-отчёт кассира, «Полный» — плюс все проданные позиции. */
+  const [receiptKind, setReceiptKind] = useState<"totals" | "full">("totals");
 
   const query = useQuery({
     queryKey: ["shift", shiftId],
     queryFn: () => getShift(shiftId),
     enabled: Number.isFinite(shiftId),
+  });
+
+  const receipt = useQuery({
+    queryKey: ["shift-receipt", shiftId, receiptKind],
+    queryFn: () => getShiftReceipt(shiftId, { items: receiptKind === "full" }),
+    enabled: receiptOpen && Number.isFinite(shiftId),
   });
 
   const warehouses = useQuery({
@@ -49,7 +61,7 @@ export default function ShiftDetailPage() {
 
   const { shift, totals } = query.data;
   const warehouseName =
-    warehouses.data?.items.find((w) => w.id === shift.warehouse_id)?.name ??
+    warehouses.data?.items.find((w) => w.warehouse_id === shift.warehouse_id)?.name ??
     `#${shift.warehouse_id}`;
   const methods = Object.entries(totals.by_method);
 
@@ -61,11 +73,14 @@ export default function ShiftDetailPage() {
             К сменам
           </Button>
           <h2 style={{ margin: 0 }}>
-            Смена №{shift.number ?? shift.id} <ShiftStatusTag status={shift.status} />
+            Смена №{shift.number ?? shift.shift_id} <ShiftStatusTag status={shift.status} />
           </h2>
         </Space>
         <Space>
-          <Link to={`/checks?shift=${shift.id}`}>
+          <Button icon={<PrinterOutlined />} onClick={() => setReceiptOpen(true)}>
+            Чек за смену
+          </Button>
+          <Link to={`/shifts?tab=checks&shift=${shift.shift_id}`}>
             <Button>Чеки смены</Button>
           </Link>
           {canOperate && shift.status === "open" && (
@@ -113,6 +128,11 @@ export default function ShiftDetailPage() {
         </Col>
         <Col xs={12} md={5}>
           <Card size="small">
+            <Statistic title="Доставка (услуга)" value={fmtMoney(totals.delivery_total)} />
+          </Card>
+        </Col>
+        <Col xs={12} md={5}>
+          <Card size="small">
             <Statistic title="Выручка" value={fmtMoney(totals.revenue)} />
           </Card>
         </Col>
@@ -136,6 +156,57 @@ export default function ShiftDetailPage() {
           </Descriptions>
         )}
       </Card>
+
+      {/* Чек за смену: тот же документ в двух подробностях. Итоги сдаёт кассир,
+          полный (со всеми позициями) нужен пекарне и бухгалтеру. */}
+      <Modal
+        open={receiptOpen}
+        onCancel={() => setReceiptOpen(false)}
+        title={`Чек за смену №${shift.number ?? shift.shift_id}`}
+        width={520}
+        footer={
+          <Space>
+            <Button
+              icon={<CopyOutlined />}
+              disabled={!receipt.data}
+              onClick={() => {
+                navigator.clipboard
+                  ?.writeText(receipt.data?.content ?? "")
+                  .then(() => message.success("Скопировано"))
+                  .catch(() => message.error("Не удалось скопировать"));
+              }}
+            >
+              Скопировать
+            </Button>
+            <Button
+              type="primary"
+              icon={<PrinterOutlined />}
+              disabled={!receipt.data}
+              onClick={() => window.print()}
+            >
+              Печать
+            </Button>
+          </Space>
+        }
+      >
+        <Segmented
+          block
+          style={{ marginBottom: 12 }}
+          value={receiptKind}
+          onChange={(v) => setReceiptKind(v as "totals" | "full")}
+          options={[
+            { value: "totals", label: "Итоги смены" },
+            { value: "full", label: "Полный чек" },
+          ]}
+        />
+        {receipt.isPending && <Spin />}
+        {receipt.isError && <Alert type="error" message={errorMessage(receipt.error)} />}
+        {receipt.data && (
+          <pre style={{ fontFamily: "monospace", fontSize: 13, whiteSpace: "pre-wrap", margin: 0 }}>
+            {receipt.data.content}
+          </pre>
+        )}
+      </Modal>
     </div>
   );
 }

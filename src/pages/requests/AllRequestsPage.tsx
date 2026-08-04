@@ -1,9 +1,15 @@
 /** /requests — управление (cap request.approve): все заявления, фильтры,
  * детали + история согласований, решения approve/reject, выплата аванса
- * (POST /pay гейтится на бэкенде правом finance.manage, не request.approve). */
+ * (POST /pay гейтится на бэкенде правом finance.manage, не request.approve).
+ *
+ * Согласование идёт по стадиям маршрута: кнопки решения показываются только
+ * когда бэкенд вернул can_decide = true (текущая стадия адресована этому
+ * пользователю лично или его роли). Финальная стадия применяет эффект
+ * заявления и регистрирует перевод в реестре выплат. */
+import { PlusOutlined } from "@ant-design/icons";
 import {
-  App, Button, DatePicker, Divider, Drawer, Form, Input, InputNumber, Modal,
-  Popconfirm, Select, Space, Spin, Table, Typography,
+  Alert, App, Button, DatePicker, Divider, Drawer, Form, Input, InputNumber,
+  Modal, Popconfirm, Select, Space, Spin, Table, Typography,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import dayjs, { type Dayjs } from "dayjs";
@@ -20,9 +26,11 @@ import {
 import { useCan } from "@/auth/store";
 import { fmtDateTime } from "@/components/format";
 import { usePagination } from "@/components/usePagination";
+import SubmitForEmployeeModal from "@/pages/requests/SubmitForEmployeeModal";
 import {
-  ApprovalsList, describeRequest, REQUEST_STATUS_OPTIONS, REQUEST_TYPE_OPTIONS,
-  RequestDetails, RequestStatusTags, RequestTypeTag,
+  ApprovalSteps, ApprovalsList, describeRequest, REQUEST_STATUS_OPTIONS,
+  REQUEST_TYPE_OPTIONS, RequestDetails, RequestStatusTags, RequestTypeTag,
+  TimesheetCorrectionLines,
 } from "@/pages/requests/shared";
 
 const PAYMENT_METHOD_OPTIONS: { value: PaymentMethod; label: string }[] = [
@@ -44,6 +52,8 @@ export default function AllRequestsPage() {
   const queryClient = useQueryClient();
   const canApprove = useCan("request.approve");
   const canPay = useCan("finance.manage");
+  const canSubmitAny = useCan("request.submit_any");
+  const [submitForOpen, setSubmitForOpen] = useState(false);
   const { limit, offset, tablePagination, reset } = usePagination();
   const [typeFilter, setTypeFilter] = useState<RequestType | undefined>();
   const [statusFilter, setStatusFilter] = useState<RequestStatus | undefined>();
@@ -85,10 +95,25 @@ export default function AllRequestsPage() {
       action === "approve"
         ? approveRequest(id, { comment: comment.trim() || null })
         : rejectRequest(id, { comment: comment.trim() || null }),
-    onSuccess: (_, { action }) => {
-      message.success(action === "approve" ? "Решение записано: одобрить" : "Заявление отклонено");
+    onSuccess: (data, { action }) => {
+      if (action !== "approve") {
+        message.success("Заявление отклонено");
+      } else if (data.status === "approved") {
+        // Последняя стадия пройдена: эффект применён, перевод зарегистрирован.
+        message.success(
+          data.payroll_payment_id != null
+            ? "Согласовано, перевод зарегистрирован в реестре выплат"
+            : "Заявление согласовано",
+        );
+      } else {
+        message.success(`Стадия согласована, заявление ушло дальше по маршруту`);
+      }
       setDecisionComment("");
       invalidate();
+      queryClient.invalidateQueries({ queryKey: ["payroll-payments"] });
+      queryClient.invalidateQueries({ queryKey: ["payroll-loans"] });
+      queryClient.invalidateQueries({ queryKey: ["timesheet-grid"] });
+      queryClient.invalidateQueries({ queryKey: ["payroll-compensations"] });
     },
     onError: (e) => message.error(errorMessage(e)),
   });
@@ -104,7 +129,7 @@ export default function AllRequestsPage() {
       return payRequest(id, body);
     },
     onSuccess: () => {
-      message.success("Аванс выплачен — расход создан в Финансах");
+      message.success("Расход по авансу создан в Финансах");
       setPayModalOpen(false);
       invalidate();
     },
@@ -139,18 +164,25 @@ export default function AllRequestsPage() {
       title: "",
       key: "actions",
       width: 90,
-      render: (_, row) => <a onClick={() => openDetail(row.id)}>Открыть</a>,
+      render: (_, row) => <a onClick={() => openDetail(row.request_id)}>Открыть</a>,
     },
   ];
 
   const req = detail.data;
+  // Отражение расходом — отдельный необязательный шаг: реестр выплат уже
+  // заполнен финальной стадией согласования, здесь создаётся Expense.
   const payable =
-    req != null && req.type === "advance" && req.status === "approved" && req.paid_at == null;
+    req != null && req.type === "advance" && req.status === "approved" && req.expense_id == null;
 
   return (
     <div>
       <Space style={{ marginBottom: 16, justifyContent: "space-between", width: "100%" }}>
         <h2 style={{ margin: 0 }}>Все заявления</h2>
+        {canSubmitAny && (
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => setSubmitForOpen(true)}>
+            Подать за сотрудника
+          </Button>
+        )}
       </Space>
       <Space style={{ marginBottom: 16 }} wrap>
         <Select
@@ -185,7 +217,7 @@ export default function AllRequestsPage() {
         />
       </Space>
       <Table
-        rowKey="id"
+        rowKey="request_id"
         size="small"
         loading={query.isPending}
         dataSource={query.data?.items}
@@ -194,7 +226,7 @@ export default function AllRequestsPage() {
       />
 
       <Drawer
-        title={req ? `Заявление #${req.id}` : "Заявление"}
+        title={req ? `Заявление #${req.request_id}` : "Заявление"}
         open={detailId != null}
         onClose={() => setDetailId(null)}
         width={640}
@@ -204,13 +236,36 @@ export default function AllRequestsPage() {
         ) : req ? (
           <>
             <RequestDetails req={req} showEmployee />
+            <TimesheetCorrectionLines req={req} />
+            <ApprovalSteps req={req} />
             <ApprovalsList req={req} />
-            {canApprove && req.status === "pending" && (
+            {canApprove && req.status === "pending" && !req.can_decide && (
+              <>
+                <Divider />
+                <Alert
+                  type="info"
+                  showIcon
+                  message="Решение сейчас не за вами"
+                  description="Текущая стадия маршрута адресована другому согласующему — либо вы субъект этого заявления."
+                />
+              </>
+            )}
+            {canApprove && req.status === "pending" && req.can_decide && (
               <>
                 <Divider />
                 <Typography.Title level={5} style={{ marginTop: 0 }}>
-                  Решение
+                  Решение по стадии {req.current_step_no ?? "—"}
+                  {req.current_step_title ? `: ${req.current_step_title}` : ""}
                 </Typography.Title>
+                {req.steps.find((s) => s.step_no === req.current_step_no)?.is_final && (
+                  <Alert
+                    type="warning"
+                    showIcon
+                    style={{ marginBottom: 12 }}
+                    message="Это финальная стадия"
+                    description="После согласования заявление вступит в силу, а по денежным типам будет зарегистрирован перевод в реестре выплат."
+                  />
+                )}
                 <Input.TextArea
                   rows={2}
                   maxLength={2000}
@@ -221,11 +276,11 @@ export default function AllRequestsPage() {
                 />
                 <Space>
                   <Popconfirm
-                    title="Согласовать заявление?"
+                    title="Согласовать стадию?"
                     okText="Согласовать"
                     cancelText="Отмена"
                     onConfirm={() =>
-                      decide.mutate({ id: req.id, action: "approve", comment: decisionComment })
+                      decide.mutate({ id: req.request_id, action: "approve", comment: decisionComment })
                     }
                   >
                     <Button type="primary" loading={decide.isPending}>
@@ -238,7 +293,7 @@ export default function AllRequestsPage() {
                     okText="Отклонить"
                     cancelText="Отмена"
                     onConfirm={() =>
-                      decide.mutate({ id: req.id, action: "reject", comment: decisionComment })
+                      decide.mutate({ id: req.request_id, action: "reject", comment: decisionComment })
                     }
                   >
                     <Button danger loading={decide.isPending}>
@@ -251,21 +306,25 @@ export default function AllRequestsPage() {
             {payable && canPay && (
               <>
                 <Divider />
-                <Button type="primary" onClick={() => openPay(req)}>
-                  Выплатить аванс
-                </Button>
+                <Typography.Paragraph type="secondary">
+                  Перевод уже зарегистрирован в реестре выплат. Отразить его ещё и
+                  расходом по статье — необязательный шаг.
+                </Typography.Paragraph>
+                <Button onClick={() => openPay(req)}>Отразить расходом</Button>
               </>
             )}
           </>
         ) : null}
       </Drawer>
 
+      <SubmitForEmployeeModal open={submitForOpen} onClose={() => setSubmitForOpen(false)} />
+
       <Modal
-        title="Выплата аванса"
+        title="Отразить аванс расходом"
         open={payModalOpen}
         onCancel={() => setPayModalOpen(false)}
         onOk={() => payForm.submit()}
-        okText="Выплатить"
+        okText="Создать расход"
         cancelText="Отмена"
         confirmLoading={pay.isPending}
         destroyOnClose
@@ -285,7 +344,7 @@ export default function AllRequestsPage() {
               optionFilterProp="label"
               loading={categories.isPending}
               placeholder="Выберите статью"
-              options={categories.data?.map((c) => ({ value: c.id, label: c.name }))}
+              options={categories.data?.map((c) => ({ value: c.expense_category_id, label: c.name }))}
             />
           </Form.Item>
           <Form.Item name="expense_date" label="Дата расхода">

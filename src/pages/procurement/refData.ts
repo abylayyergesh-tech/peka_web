@@ -2,8 +2,8 @@
 import { useQuery } from "@tanstack/react-query";
 
 import {
+  listAllSuppliers,
   listProductRefs,
-  listSuppliers,
   listUnitRefs,
   listWarehouseRefs,
   type ProductRef,
@@ -22,10 +22,10 @@ export function useProductRefs() {
     staleTime: 60_000,
   });
   const all = query.data ?? [];
-  const byId = new Map<number, ProductRef>(all.map((p) => [p.id, p]));
+  const byId = new Map<number, ProductRef>(all.map((p) => [p.product_id, p]));
   const options: SelectOption[] = all
     .filter((p) => p.is_active)
-    .map((p) => ({ value: p.id, label: p.name }));
+    .map((p) => ({ value: p.product_id, label: p.name }));
   /** Lookup tolerant to not-yet-filled form values. */
   function get(id: number | null | undefined): ProductRef | undefined {
     return id == null ? undefined : byId.get(id);
@@ -40,8 +40,8 @@ export function useUnitRefs() {
     staleTime: 60_000,
   });
   const all = query.data ?? [];
-  const byId = new Map<number, UnitRef>(all.map((u) => [u.id, u]));
-  const options: SelectOption[] = all.map((u) => ({ value: u.id, label: u.name }));
+  const byId = new Map<number, UnitRef>(all.map((u) => [u.unit_id, u]));
+  const options: SelectOption[] = all.map((u) => ({ value: u.unit_id, label: u.name }));
 
   /** Units usable for a product: same dimension as the product's base unit. */
   function optionsForProduct(product: ProductRef | undefined): SelectOption[] {
@@ -50,7 +50,7 @@ export function useUnitRefs() {
     if (!base) return options;
     return all
       .filter((u) => u.dimension === base.dimension)
-      .map((u) => ({ value: u.id, label: u.name }));
+      .map((u) => ({ value: u.unit_id, label: u.name }));
   }
 
   return { byId, options, optionsForProduct, isPending: query.isPending };
@@ -63,25 +63,25 @@ export function useWarehouseRefs() {
     staleTime: 60_000,
   });
   const all = query.data ?? [];
-  const byId = new Map<number, string>(all.map((w) => [w.id, w.name]));
+  const byId = new Map<number, string>(all.map((w) => [w.warehouse_id, w.name]));
   const options: SelectOption[] = all
     .filter((w) => w.is_active)
-    .map((w) => ({ value: w.id, label: w.name }));
+    .map((w) => ({ value: w.warehouse_id, label: w.name }));
   return { byId, options, isPending: query.isPending };
 }
 
 export function useSupplierRefs() {
   const query = useQuery({
-    queryKey: ["procurement", "supplier-refs"],
-    queryFn: () => listSuppliers({ limit: 200 }),
+    queryKey: ["procurement", "supplier-refs", "all"],
+    queryFn: listAllSuppliers,
     staleTime: 60_000,
   });
-  const all = query.data?.items ?? [];
-  const byId = new Map<number, string>(all.map((s) => [s.id, s.name]));
-  const options: SelectOption[] = all.map((s) => ({ value: s.id, label: s.name }));
+  const all = query.data ?? [];
+  const byId = new Map<number, string>(all.map((s) => [s.supplier_id, s.name]));
+  const options: SelectOption[] = all.map((s) => ({ value: s.supplier_id, label: s.name }));
   const activeOptions: SelectOption[] = all
     .filter((s) => s.is_active)
-    .map((s) => ({ value: s.id, label: s.name }));
+    .map((s) => ({ value: s.supplier_id, label: s.name }));
   return { byId, options, activeOptions, isPending: query.isPending };
 }
 

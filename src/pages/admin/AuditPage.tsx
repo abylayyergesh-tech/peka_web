@@ -94,7 +94,7 @@ export default function AuditPage() {
         />
       </Space>
       <Table
-        rowKey="id"
+        rowKey="audit_event_id"
         size="small"
         loading={query.isPending}
         dataSource={query.data?.items}

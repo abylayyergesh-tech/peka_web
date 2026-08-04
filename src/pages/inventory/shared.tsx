@@ -5,6 +5,7 @@ import { Tag } from "antd";
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 
+import { fetchAllPages } from "@/api/client";
 import {
   listProducts,
   listSuppliers,
@@ -82,16 +83,18 @@ interface Lookup<T> {
 
 export function useProductsLookup(): Lookup<ProductOut> {
   const q = useQuery({
-    queryKey: ["lookup", "products"],
-    queryFn: () => listProducts({ limit: 200 }),
+    queryKey: ["lookup", "products", "all"],
+    // Продуктов ~1000, а страница у API максимум 200: без обхода всех страниц
+    // в отчётах вместо названий оставались «#id».
+    queryFn: () => fetchAllPages((pg) => listProducts(pg)),
     staleTime: 60_000,
   });
-  const items = q.data?.items ?? [];
+  const items = q.data ?? [];
   return {
     items,
-    byId: useMemo(() => new Map(items.map((p) => [p.id, p])), [items]),
+    byId: useMemo(() => new Map(items.map((p) => [p.product_id, p])), [items]),
     options: useMemo(
-      () => items.map((p) => ({ value: p.id, label: p.name })),
+      () => items.map((p) => ({ value: p.product_id, label: p.name })),
       [items],
     ),
     isPending: q.isPending,
@@ -100,20 +103,20 @@ export function useProductsLookup(): Lookup<ProductOut> {
 
 export function useWarehousesLookup(): Lookup<WarehouseOut> {
   const q = useQuery({
-    queryKey: ["lookup", "warehouses"],
-    queryFn: () => listWarehouses({ limit: 200, include_inactive: true }),
+    queryKey: ["lookup", "warehouses", "all"],
+    queryFn: () => fetchAllPages((pg) => listWarehouses({ ...pg, include_inactive: true })),
     staleTime: 60_000,
   });
-  const items = q.data?.items ?? [];
+  const items = q.data ?? [];
   return {
     items,
-    byId: useMemo(() => new Map(items.map((w) => [w.id, w])), [items]),
+    byId: useMemo(() => new Map(items.map((w) => [w.warehouse_id, w])), [items]),
     // active-only options for pickers; the map above still resolves inactive names
     options: useMemo(
       () =>
         items
           .filter((w) => w.is_active)
-          .map((w) => ({ value: w.id, label: w.name })),
+          .map((w) => ({ value: w.warehouse_id, label: w.name })),
       [items],
     ),
     isPending: q.isPending,
@@ -122,16 +125,17 @@ export function useWarehousesLookup(): Lookup<WarehouseOut> {
 
 export function useSuppliersLookup(): Lookup<SupplierOut> {
   const q = useQuery({
-    queryKey: ["lookup", "suppliers"],
-    queryFn: () => listSuppliers({ limit: 200 }),
+    queryKey: ["lookup", "suppliers", "all"],
+    // Поставщиков ~700 — та же причина, что и с продуктами.
+    queryFn: () => fetchAllPages((pg) => listSuppliers(pg)),
     staleTime: 60_000,
   });
-  const items = q.data?.items ?? [];
+  const items = q.data ?? [];
   return {
     items,
-    byId: useMemo(() => new Map(items.map((s) => [s.id, s])), [items]),
+    byId: useMemo(() => new Map(items.map((s) => [s.supplier_id, s])), [items]),
     options: useMemo(
-      () => items.map((s) => ({ value: s.id, label: s.name })),
+      () => items.map((s) => ({ value: s.supplier_id, label: s.name })),
       [items],
     ),
     isPending: q.isPending,

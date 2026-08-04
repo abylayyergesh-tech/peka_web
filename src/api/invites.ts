@@ -5,7 +5,7 @@ import { api } from "@/api/client";
 export type InviteStatus = "pending" | "accepted" | "revoked";
 
 export interface InviteOut {
-  id: number;
+  invite_id: number;
   organization_id: number;
   email: string;
   role: string;

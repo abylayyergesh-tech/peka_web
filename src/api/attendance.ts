@@ -9,7 +9,7 @@ export type ShiftStatus = "open" | "closed";
 
 // ---- work locations ----
 export interface WorkLocationOut {
-  id: number;
+  work_location_id: number;
   organization_id: number;
   name: string;
   latitude: string;
@@ -36,7 +36,7 @@ export interface WorkLocationUpdate {
 
 // ---- attendance shifts ----
 export interface AttendanceShiftOut {
-  id: number;
+  attendance_shift_id: number;
   organization_id: number;
   employee_id: number;
   employee_name: string | null;

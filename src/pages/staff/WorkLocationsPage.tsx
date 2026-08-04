@@ -57,7 +57,7 @@ export default function WorkLocationsPage() {
   const save = useMutation({
     mutationFn: (body: WorkLocationCreate | WorkLocationUpdate) =>
       editing
-        ? updateWorkLocation(editing.id, body)
+        ? updateWorkLocation(editing.work_location_id, body)
         : createWorkLocation(body as WorkLocationCreate),
     onSuccess: () => {
       message.success(editing ? "Сохранено" : "Локация создана");
@@ -137,7 +137,7 @@ export default function WorkLocationsPage() {
                 okText="Деактивировать"
                 cancelText="Отмена"
                 okButtonProps={{ danger: true, loading: deactivate.isPending }}
-                onConfirm={() => deactivate.mutate(row.id)}
+                onConfirm={() => deactivate.mutate(row.work_location_id)}
               >
                 <a style={{ color: "#cf1322" }}>Деактивировать</a>
               </Popconfirm>
@@ -171,7 +171,7 @@ export default function WorkLocationsPage() {
       </Space>
 
       <Table
-        rowKey="id"
+        rowKey="work_location_id"
         size="small"
         loading={query.isPending}
         dataSource={query.data?.items}

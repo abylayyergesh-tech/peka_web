@@ -175,7 +175,7 @@ export default function PurchaseOrderDetailPage() {
       width: 150,
       align: "right",
       render: (_, row) => {
-        const f = fulfillmentByLine.get(row.id);
+        const f = fulfillmentByLine.get(row.purchase_order_line_id);
         return fmtQty(f ? f.received_base : row.received_base_qty);
       },
     },
@@ -183,7 +183,7 @@ export default function PurchaseOrderDetailPage() {
       title: "Выполнение",
       width: 150,
       render: (_, row) => {
-        const f = fulfillmentByLine.get(row.id);
+        const f = fulfillmentByLine.get(row.purchase_order_line_id);
         if (!f) return "—";
         if (f.fully_received) return <Tag color="green">Полностью</Tag>;
         if (Number(f.received_base) > 0) return <Tag color="gold">Частично</Tag>;
@@ -197,7 +197,7 @@ export default function PurchaseOrderDetailPage() {
       <Space style={{ marginBottom: 8, justifyContent: "space-between", width: "100%" }}>
         <Space align="center">
           <h2 style={{ margin: 0 }}>
-            {po.number != null ? `Заказ № ${po.number}` : `Заказ #${po.id}`}
+            {po.number != null ? `Заказ № ${po.number}` : `Заказ #${po.purchase_order_id}`}
           </h2>
           <POStatusTag status={po.status} />
         </Space>
@@ -261,7 +261,7 @@ export default function PurchaseOrderDetailPage() {
         <Descriptions.Item label="Примечание">{po.note ?? "—"}</Descriptions.Item>
       </Descriptions>
       <Table
-        rowKey="id"
+        rowKey="purchase_order_line_id"
         size="small"
         dataSource={po.lines}
         pagination={false}

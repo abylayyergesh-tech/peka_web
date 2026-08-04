@@ -1,8 +1,9 @@
-import { PlusOutlined } from "@ant-design/icons";
+import { PlusOutlined, SearchOutlined } from "@ant-design/icons";
 import {
   App,
   Button,
   Form,
+  Input,
   InputNumber,
   Modal,
   Popconfirm,
@@ -25,6 +26,7 @@ import {
 } from "@/api/recipes";
 import { useCan } from "@/auth/store";
 import { fmtQty } from "@/components/format";
+import { useListControls } from "@/components/useListControls";
 import { usePagination } from "@/components/usePagination";
 import RecipeItemsField from "@/pages/catalog/RecipeItemsField";
 import {
@@ -50,7 +52,10 @@ export default function RecipesPage() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const canManage = useCan("recipe.manage");
-  const { limit, offset, tablePagination } = usePagination();
+  const { limit, offset, tablePagination, reset } = usePagination();
+  // Колонка показывает product_id, а API сортирует по `product` (имени изделия).
+  const { search, setSearch, searchParam, sort, onTableChange } =
+    useListControls<RecipeOut>({ onReset: reset, fieldMap: { product_id: "product" } });
   const products = useProductOptions();
   const units = useUnitOptions();
 
@@ -58,8 +63,8 @@ export default function RecipesPage() {
   const [form] = Form.useForm<RecipeCreateForm>();
 
   const query = useQuery({
-    queryKey: ["recipes", { limit, offset }],
-    queryFn: () => listRecipes({ limit, offset }),
+    queryKey: ["recipes", { limit, offset, searchParam, sort }],
+    queryFn: () => listRecipes({ limit, offset, search: searchParam, sort }),
   });
 
   const create = useMutation({
@@ -78,7 +83,7 @@ export default function RecipesPage() {
       message.success("Тех-карта создана");
       setModalOpen(false);
       queryClient.invalidateQueries({ queryKey: ["recipes"] });
-      navigate(`/recipes/${recipe.id}`);
+      navigate(`/recipes/${recipe.recipe_id}`);
     },
     onError: (e) => message.error(errorMessage(e)),
   });
@@ -102,12 +107,15 @@ export default function RecipesPage() {
     {
       title: "Продукт",
       dataIndex: "product_id",
+      sorter: true,
       render: (id: number) => products.nameOf(id),
     },
     {
       title: "Выход",
-      key: "output",
+      key: "output_quantity",
+      dataIndex: "output_quantity",
       width: 200,
+      sorter: true,
       render: (_, row) =>
         `${fmtQty(row.output_quantity)} ${units.nameOf(row.output_unit_id)}`,
     },
@@ -129,13 +137,13 @@ export default function RecipesPage() {
       width: 160,
       render: (_, row) => (
         <Space size="middle">
-          <a onClick={() => navigate(`/recipes/${row.id}`)}>Открыть</a>
+          <a onClick={() => navigate(`/recipes/${row.recipe_id}`)}>Открыть</a>
           {canManage && (
             <Popconfirm
               title="Удалить тех-карту?"
               okText="Да"
               cancelText="Нет"
-              onConfirm={() => remove.mutate(row.id)}
+              onConfirm={() => remove.mutate(row.recipe_id)}
             >
               <a>Удалить</a>
             </Popconfirm>
@@ -150,7 +158,17 @@ export default function RecipesPage() {
       <Space
         style={{ marginBottom: 16, justifyContent: "space-between", width: "100%" }}
       >
-        <h2 style={{ margin: 0 }}>Тех-карты</h2>
+        <Space wrap>
+          <h2 style={{ margin: 0 }}>Тех-карты</h2>
+          <Input
+            allowClear
+            prefix={<SearchOutlined />}
+            placeholder="Поиск по названию изделия"
+            style={{ width: 260 }}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </Space>
         {canManage && (
           <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
             Новая тех-карта
@@ -159,12 +177,13 @@ export default function RecipesPage() {
       </Space>
 
       <Table<RecipeOut>
-        rowKey="id"
+        rowKey="recipe_id"
         size="small"
         loading={query.isPending}
         dataSource={query.data?.items}
         pagination={tablePagination(query.data?.total)}
         columns={columns}
+        onChange={onTableChange}
       />
 
       <Modal

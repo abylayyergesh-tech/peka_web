@@ -83,11 +83,11 @@ export default function EmployeesPage() {
     staleTime: 60_000,
   });
   const deptOptions =
-    deptQuery.data?.items.map((d) => ({ value: d.id, label: d.name })) ?? [];
+    deptQuery.data?.items.map((d) => ({ value: d.department_id, label: d.name })) ?? [];
 
   const save = useMutation({
     mutationFn: (body: EmployeeCreate | EmployeeUpdate) =>
-      editing ? updateEmployee(editing.id, body) : createEmployee(body as EmployeeCreate),
+      editing ? updateEmployee(editing.employee_id, body) : createEmployee(body as EmployeeCreate),
     onSuccess: () => {
       message.success(editing ? "Сохранено" : "Сотрудник создан");
       setModalOpen(false);
@@ -191,7 +191,7 @@ export default function EmployeesPage() {
                 }}
                 onConfirm={() =>
                   terminate.mutate({
-                    id: row.id,
+                    id: row.employee_id,
                     date: terminationDate ? terminationDate.format("YYYY-MM-DD") : null,
                   })
                 }
@@ -258,7 +258,7 @@ export default function EmployeesPage() {
       </Space>
 
       <Table
-        rowKey="id"
+        rowKey="employee_id"
         size="small"
         loading={query.isPending}
         dataSource={query.data?.items}

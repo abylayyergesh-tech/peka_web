@@ -8,7 +8,7 @@ export type PaymentMethod = "cash" | "card" | "bank" | "other";
 
 // ---- expense categories ----
 export interface ExpenseCategoryOut {
-  id: number;
+  expense_category_id: number;
   organization_id: number;
   name: string;
   is_active: boolean;
@@ -51,7 +51,7 @@ export async function deactivateExpenseCategory(id: number): Promise<ExpenseCate
 
 // ---- expenses ----
 export interface ExpenseOut {
-  id: number;
+  expense_id: number;
   organization_id: number;
   expense_date: string;
   category_id: number;
@@ -99,36 +99,6 @@ export async function deleteExpense(id: number): Promise<void> {
   await api.delete(`/expenses/${id}`);
 }
 
-// ---- accounting periods ----
-export interface AccountingPeriodOut {
-  id: number;
-  organization_id: number;
-  year: number;
-  month: number;
-  status: string;
-  closed_at: string | null;
-}
-
-export interface PeriodRef {
-  year: number;
-  month: number;
-}
-
-/** Returns closed periods only (backend list_closed_periods). */
-export async function listPeriods(): Promise<AccountingPeriodOut[]> {
-  const { data } = await api.get<AccountingPeriodOut[]>("/accounting-periods");
-  return data;
-}
-
-export async function closePeriod(body: PeriodRef): Promise<AccountingPeriodOut> {
-  const { data } = await api.post<AccountingPeriodOut>("/accounting-periods/close", body);
-  return data;
-}
-
-export async function reopenPeriod(body: PeriodRef): Promise<AccountingPeriodOut> {
-  const { data } = await api.post<AccountingPeriodOut>("/accounting-periods/reopen", body);
-  return data;
-}
 
 // ---- reports ----
 export interface PnLReport {
@@ -171,7 +141,7 @@ export async function fetchFinancialSummary(): Promise<FinancialSummary> {
 
 // ---- suppliers (cross-module ref for expense form/filter; any org member) ----
 export interface SupplierRef {
-  id: number;
+  supplier_id: number;
   name: string;
 }
 

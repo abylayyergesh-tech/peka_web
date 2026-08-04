@@ -65,7 +65,7 @@ export default function RequestPoliciesPage() {
         Один отказ отклоняет заявление независимо от порога.
       </Typography.Paragraph>
       <Table
-        rowKey="id"
+        rowKey="request_policy_id"
         size="small"
         loading={query.isPending}
         dataSource={query.data}

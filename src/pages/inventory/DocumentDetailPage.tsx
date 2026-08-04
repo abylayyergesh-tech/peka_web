@@ -166,7 +166,7 @@ export default function DocumentDetailPage() {
             onClick={() => navigate("/documents")}
           />
           <h2 style={{ margin: 0 }}>
-            Документ №{doc.number ?? doc.id} <DocTypeTag type={doc.type} />
+            Документ №{doc.number ?? doc.document_id} <DocTypeTag type={doc.type} />
           </h2>
         </Space>
         {isDraft && (
@@ -242,7 +242,7 @@ export default function DocumentDetailPage() {
       )}
 
       <Table<DocumentLineOut>
-        rowKey="id"
+        rowKey="document_line_id"
         size="small"
         dataSource={doc.lines}
         columns={columns}

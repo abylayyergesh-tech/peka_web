@@ -8,7 +8,10 @@ import ReactDOM from "react-dom/client";
 import { RouterProvider } from "react-router-dom";
 
 import { router } from "@/routes";
+import { theme } from "@/theme";
 import "antd/dist/reset.css";
+// После reset.css: наши правила должны его перебивать, а не наоборот.
+import "@/index.css";
 
 dayjs.locale("ru");
 
@@ -23,7 +26,7 @@ const queryClient = new QueryClient({
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <ConfigProvider locale={ruRU}>
+    <ConfigProvider locale={ruRU} theme={theme}>
       <AntApp>
         <QueryClientProvider client={queryClient}>
           <RouterProvider router={router} />

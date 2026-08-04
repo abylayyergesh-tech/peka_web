@@ -130,7 +130,7 @@ export default function MovementsReportPage() {
       </Space>
 
       <Table<MovementRow>
-        rowKey="id"
+        rowKey="stock_movement_id"
         size="small"
         loading={query.isPending}
         dataSource={rows}

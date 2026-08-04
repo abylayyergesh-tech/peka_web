@@ -14,7 +14,7 @@ import {
   type DocumentStatus,
   type DocumentType,
 } from "@/api/inventory";
-import { fmtDate } from "@/components/format";
+import { Money, fmtDate } from "@/components/format";
 import { usePagination } from "@/components/usePagination";
 import DocumentCreateModal from "@/pages/inventory/DocumentCreateModal";
 import {
@@ -81,10 +81,21 @@ export default function DocumentsPage() {
       render: (v: string | null) => v || "—",
     },
     {
+      // Из агрегата, а не из `lines`: в списке строк нет, и раньше здесь всегда
+      // стоял ноль.
       title: "Строк",
+      dataIndex: "lines_count",
       width: 80,
       align: "right",
-      render: (_, row) => row.lines.length,
+    },
+    {
+      title: "Сумма",
+      dataIndex: "total_amount",
+      width: 140,
+      align: "right",
+      // Прочерк, а не ноль: у расходных документов суммы не существует, и ноль
+      // читался бы как «отдали бесплатно».
+      render: (v: string | null) => (v == null ? "—" : <Money value={v} />),
     },
     {
       title: "Статус",
@@ -143,14 +154,14 @@ export default function DocumentsPage() {
       </Space>
 
       <Table<DocumentOut>
-        rowKey="id"
+        rowKey="document_id"
         size="small"
         loading={query.isPending}
         dataSource={query.data?.items}
         pagination={tablePagination(query.data?.total)}
         columns={columns}
         onRow={(row) => ({
-          onClick: () => navigate(`/documents/${row.id}`),
+          onClick: () => navigate(`/documents/${row.document_id}`),
           style: { cursor: "pointer" },
         })}
       />

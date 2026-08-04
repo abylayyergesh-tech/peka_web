@@ -37,7 +37,7 @@ export default function DocumentCreateModal({ open, onClose, onCreated }: Props)
     onSuccess: (doc) => {
       message.success("Документ создан");
       queryClient.invalidateQueries({ queryKey: ["documents"] });
-      onCreated(doc.id);
+      onCreated(doc.document_id);
     },
     onError: (e) => message.error(errorMessage(e)),
   });

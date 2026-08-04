@@ -6,7 +6,7 @@ import { visibleSections } from "@/layout/menu";
 
 export default function DashboardPage() {
   const { me, activeOrgId, caps } = useAuthStore();
-  const org = me?.organizations.find((o) => o.id === activeOrgId);
+  const org = me?.organizations.find((o) => o.organization_id === activeOrgId);
   const sections = visibleSections(caps);
 
   return (

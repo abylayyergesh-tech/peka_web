@@ -7,12 +7,31 @@ export type Box2D = [number, number, number, number] | number[];
 
 export interface DigitizedLineOut {
   raw_name: string;
-  /** Decimal как строка (или null, если не распознано). */
+  /** Decimal как строка (или null, если не распознано).
+   *  Уже пересчитано в базовую единицу товара, если в накладной штуки, а товар
+   *  ведётся в килограммах (см. pack_*). */
   quantity: string | null;
   /** Единица измерения как напечатана в документе. */
   unit_raw: string | null;
   price: string | null;
   line_total: string | null;
+  /** Как напечатано в документе — до пересчёта через фасовку. */
+  quantity_printed: string | null;
+  price_printed: string | null;
+  /** Единица из справочника, найденная по напечатанному написанию (null — такой
+   *  у нас нет: «уп», «ведро»). По ней видно, нужна ли фасовка. */
+  unit_printed_id: number | null;
+  /** Фасовка: сколько БАЗОВЫХ единиц товара в одной напечатанной единице. */
+  pack_qty: string | null;
+  /** Базовая единица товара, в которой выражена pack_qty. */
+  pack_unit_name: string | null;
+  /** Кусок наименования, откуда прочитана фасовка («5кг ведро»). */
+  pack_raw: string | null;
+  /** "alias" — фасовку подтвердили на прошлых накладных, "name" — из наименования. */
+  pack_source: "alias" | "name" | null;
+  /** true — единицы не совпадают, а фасовку определить не удалось: количество и
+   *  цена остались как в накладной, нужен ответ человека. */
+  needs_pack: boolean;
   /** НДС/скидка строки как напечатаны в документе (информативно). */
   vat_rate: string | null;
   vat_amount: string | null;
@@ -56,10 +75,16 @@ export interface DigitizedInvoiceOut {
   lines: DigitizedLineOut[];
 }
 
-/** Запомнить подтверждённые пары «текст строки → товар» — со следующей
- *  накладной эти строки будут матчиться точно (100%). */
+/** Запомнить подтверждённые пары «текст строки → товар (+ фасовка)» — со
+ *  следующей накладной эти строки будут матчиться точно (100%) и с готовым
+ *  пересчётом «шт → кг». pack_unit_id обязан быть базовой единицей товара. */
 export async function saveDigitizeAliases(
-  pairs: { raw_text: string; product_id: number }[],
+  pairs: {
+    raw_text: string;
+    product_id: number;
+    pack_qty?: string;
+    pack_unit_id?: number;
+  }[],
 ): Promise<{ saved: number }> {
   const { data } = await api.post<{ saved: number }>("/digitize/aliases", { pairs });
   return data;

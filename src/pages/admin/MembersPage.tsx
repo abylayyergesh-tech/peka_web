@@ -1,9 +1,15 @@
 /** Участники организации: список, приглашения по email, добавление, смена роли,
- * удаление, drawer индивидуальных прав (при наличии role.manage). */
+ * выдача пароля, удаление, drawer индивидуальных прав (при наличии role.manage).
+ *
+ * Пароль выдаётся здесь, а не письмом: у сотрудников цеха технические адреса в
+ * нероутируемом домене, и приглашение до них не доходит. Сгенерированный пароль
+ * показывается один раз — дальше в базе только хэш. */
 import { MailOutlined, PlusOutlined } from "@ant-design/icons";
 import {
+  Alert,
   App,
   Button,
+  Descriptions,
   Form,
   Input,
   Modal,
@@ -25,6 +31,8 @@ import {
   listMembers,
   listRoles,
   removeMember,
+  setMemberPassword,
+  type MemberPasswordOut,
   TENANCY_ROLE_NAMES,
   updateMemberRole,
   type MemberOut,
@@ -60,6 +68,8 @@ export default function MembersPage() {
   const [roleTarget, setRoleTarget] = useState<MemberOut | null>(null);
   const [drawerMember, setDrawerMember] = useState<MemberOut | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  /** Выданный пароль: показывается один раз, поэтому живёт в модалке. */
+  const [issued, setIssued] = useState<MemberPasswordOut | null>(null);
   const [addForm] = Form.useForm();
   const [inviteForm] = Form.useForm();
   const [roleForm] = Form.useForm();
@@ -102,7 +112,7 @@ export default function MembersPage() {
       const target = roles?.find((r) => r.name === v.role);
       if (!target) return addMember(orgId, v); // бэкенд ответит 422 — покажем ошибку
       const created = await addMember(orgId, { email: v.email, role: "employee" });
-      await assignRole(created.id, target.id);
+      await assignRole(created.membership_id, target.role_id);
       return created;
     },
     onSuccess: () => {
@@ -116,9 +126,9 @@ export default function MembersPage() {
   const changeRole = useMutation({
     mutationFn: async (v: { role: number | string }) => {
       if (typeof v.role === "number") {
-        await assignRole((roleTarget as MemberOut).id, v.role);
+        await assignRole((roleTarget as MemberOut).membership_id, v.role);
       } else {
-        await updateMemberRole(orgId, (roleTarget as MemberOut).id, v.role);
+        await updateMemberRole(orgId, (roleTarget as MemberOut).membership_id, v.role);
       }
     },
     onSuccess: () => {
@@ -183,7 +193,7 @@ export default function MembersPage() {
   function openChangeRole(row: MemberOut) {
     setRoleTarget(row);
     roleForm.setFieldsValue({
-      role: roles ? roles.find((r) => r.name === row.role)?.id : row.role,
+      role: roles ? roles.find((r) => r.name === row.role)?.role_id : row.role,
     });
   }
 
@@ -199,8 +209,18 @@ export default function MembersPage() {
   // Смена роли: с role.manage — по role_id (RBAC, любые роли);
   // иначе — по имени встроенной роли (tenancy PATCH).
   const changeRoleOptions: { value: number | string; label: string }[] = roles
-    ? roles.map((r) => ({ value: r.id, label: roleLabel(r.name) }))
+    ? roles.map((r) => ({ value: r.role_id, label: roleLabel(r.name) }))
     : TENANCY_ROLE_NAMES.map((name) => ({ value: name, label: roleLabel(name) }));
+
+  const passwordReset = useMutation({
+    mutationFn: (row: MemberOut) => setMemberPassword(orgId, row.membership_id),
+    onSuccess: (out) => {
+      // Пароль виден ОДИН раз: в базе только хэш. Поэтому не toast, а модалка,
+      // которую можно спокойно скопировать и передать человеку.
+      setIssued(out);
+    },
+    onError: (e) => message.error(errorMessage(e)),
+  });
 
   const columns: ColumnsType<MemberOut> = [
     { title: "Имя", dataIndex: "full_name", render: (v: string | null) => v || "—" },
@@ -213,17 +233,28 @@ export default function MembersPage() {
     },
     {
       title: "",
-      width: 260,
+      width: 330,
       render: (_, row) => (
         <Space size="middle">
           {canMember && <a onClick={() => openChangeRole(row)}>Сменить роль</a>}
+          {canMember && (
+            <Popconfirm
+              title="Выдать новый пароль?"
+              description="Старый перестанет работать, все сессии участника закроются."
+              okText="Выдать"
+              cancelText="Отмена"
+              onConfirm={() => passwordReset.mutate(row)}
+            >
+              <a>Пароль</a>
+            </Popconfirm>
+          )}
           {canRole && <a onClick={() => openDrawer(row)}>Права</a>}
           {canMember && (
             <Popconfirm
               title="Удалить участника?"
               okText="Удалить"
               cancelText="Отмена"
-              onConfirm={() => remove.mutate(row.id)}
+              onConfirm={() => remove.mutate(row.membership_id)}
             >
               <a>Удалить</a>
             </Popconfirm>
@@ -265,7 +296,7 @@ export default function MembersPage() {
             title="Отозвать приглашение?"
             okText="Отозвать"
             cancelText="Отмена"
-            onConfirm={() => revoke.mutate(row.id)}
+            onConfirm={() => revoke.mutate(row.invite_id)}
           >
             <a>Отозвать</a>
           </Popconfirm>
@@ -296,7 +327,7 @@ export default function MembersPage() {
         )}
       </Space>
       <Table
-        rowKey="id"
+        rowKey="membership_id"
         size="small"
         loading={membersQuery.isPending}
         dataSource={membersQuery.data}
@@ -308,7 +339,7 @@ export default function MembersPage() {
         <>
           <h3 style={{ margin: "24px 0 12px" }}>Приглашения</h3>
           <Table
-            rowKey="id"
+            rowKey="invite_id"
             size="small"
             loading={invitesQuery.isPending}
             dataSource={invitesQuery.data}
@@ -418,6 +449,36 @@ export default function MembersPage() {
             />
           </Form.Item>
         </Form>
+      </Modal>
+
+      <Modal
+        open={issued != null}
+        onCancel={() => setIssued(null)}
+        title="Пароль выдан"
+        okText="Готово"
+        onOk={() => setIssued(null)}
+        cancelButtonProps={{ style: { display: "none" } }}
+      >
+        <Alert
+          type="warning"
+          showIcon
+          style={{ marginBottom: 16 }}
+          message="Запишите пароль сейчас"
+          description="Второй раз его не показать: в базе хранится только хэш. Все прежние сессии участника закрыты."
+        />
+        <Descriptions column={1} size="small" bordered>
+          <Descriptions.Item label="Сотрудник">
+            {issued?.full_name || "—"}
+          </Descriptions.Item>
+          <Descriptions.Item label="Логин">
+            <Typography.Text copyable code>{issued?.email}</Typography.Text>
+          </Descriptions.Item>
+          <Descriptions.Item label="Пароль">
+            <Typography.Text copyable code strong>
+              {issued?.password}
+            </Typography.Text>
+          </Descriptions.Item>
+        </Descriptions>
       </Modal>
 
       <MemberCapabilitiesDrawer

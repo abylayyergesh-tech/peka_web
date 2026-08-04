@@ -3,12 +3,12 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
 export interface OrganizationOut {
-  id: number;
+  organization_id: number;
   name: string;
 }
 
 export interface Me {
-  id: number;
+  user_id: number;
   email: string;
   full_name: string;
   organizations: OrganizationOut[];

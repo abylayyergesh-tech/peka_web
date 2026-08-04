@@ -53,7 +53,7 @@ export default function SupplierLedgerTab({ supplierId }: { supplierId: number }
   return (
     <div>
       <Table
-        rowKey="id"
+        rowKey="payable_entry_id"
         size="small"
         loading={query.isPending}
         dataSource={entries}

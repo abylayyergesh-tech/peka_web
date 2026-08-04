@@ -101,7 +101,7 @@ export default function SupplierPaymentsTab({ supplierId }: { supplierId: number
             title="Аннулировать платёж?"
             okText="Да"
             cancelText="Отмена"
-            onConfirm={() => doVoid.mutate(row.id)}
+            onConfirm={() => doVoid.mutate(row.supplier_payment_id)}
           >
             <a style={{ color: "#cf1322" }}>Аннулировать</a>
           </Popconfirm>
@@ -125,7 +125,7 @@ export default function SupplierPaymentsTab({ supplierId }: { supplierId: number
         </Button>
       )}
       <Table
-        rowKey="id"
+        rowKey="supplier_payment_id"
         size="small"
         loading={query.isPending}
         dataSource={query.data}

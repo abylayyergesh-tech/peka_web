@@ -29,8 +29,8 @@ export default function RequireAuth() {
     setMe(meQuery.data);
     const orgs = meQuery.data.organizations;
     // Active org missing or no longer a membership -> fall back to the first org.
-    if (orgs.length > 0 && !orgs.some((o) => o.id === activeOrgId)) {
-      setActiveOrg(orgs[0].id);
+    if (orgs.length > 0 && !orgs.some((o) => o.organization_id === activeOrgId)) {
+      setActiveOrg(orgs[0].organization_id);
     }
   }, [meQuery.data, activeOrgId, setMe, setActiveOrg]);
 

@@ -35,7 +35,7 @@ export default function ExpenseCategoriesPage() {
   const save = useMutation({
     mutationFn: (values: CategoryForm) =>
       editing
-        ? updateExpenseCategory(editing.id, { name: values.name, is_active: values.is_active })
+        ? updateExpenseCategory(editing.expense_category_id, { name: values.name, is_active: values.is_active })
         : createExpenseCategory({ name: values.name }),
     onSuccess: () => {
       message.success(editing ? "Сохранено" : "Создано");
@@ -87,7 +87,7 @@ export default function ExpenseCategoriesPage() {
                 title="Деактивировать статью?"
                 okText="Да"
                 cancelText="Нет"
-                onConfirm={() => deactivate.mutate(row.id)}
+                onConfirm={() => deactivate.mutate(row.expense_category_id)}
               >
                 <a>Деактивировать</a>
               </Popconfirm>
@@ -108,7 +108,7 @@ export default function ExpenseCategoriesPage() {
         )}
       </Space>
       <Table
-        rowKey="id"
+        rowKey="expense_category_id"
         size="small"
         loading={query.isPending}
         dataSource={query.data}

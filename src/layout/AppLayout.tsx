@@ -5,7 +5,6 @@ import {
   FileTextOutlined,
   LockOutlined,
   LogoutOutlined,
-  PieChartOutlined,
   PlusOutlined,
   ShopOutlined,
   ShoppingCartOutlined,
@@ -14,7 +13,7 @@ import {
   WalletOutlined,
 } from "@ant-design/icons";
 import type { MenuProps } from "antd";
-import { App, Dropdown, Form, Layout, Menu, Modal, Select, Input } from "antd";
+import { App, Button, Dropdown, Form, Layout, Menu, Modal, Result, Select, Input } from "antd";
 import { useMemo, useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 
@@ -22,19 +21,22 @@ import { changePassword, createOrganization, logoutApi } from "@/api/auth";
 import { errorMessage } from "@/api/client";
 import { useAuthStore } from "@/auth/store";
 import { visibleSections } from "@/layout/menu";
+import { BRAND } from "@/theme";
 import { useQueryClient } from "@tanstack/react-query";
+
+/** Адрес личного кабинета сотрудника — ссылка со стоп-экрана. */
+const STAFF_URL = import.meta.env.VITE_STAFF_URL as string | undefined;
 
 const SECTION_ICONS: Record<string, React.ReactNode> = {
   catalog: <AppstoreOutlined />,
-  inventory: <BankOutlined />,
-  procurement: <ShoppingCartOutlined />,
+  inventory: <ShoppingCartOutlined />,
   sales: <ShopOutlined />,
   finance: <WalletOutlined />,
-  reports: <PieChartOutlined />,
   staff: <TeamOutlined />,
+  payroll: <BankOutlined />,
   my: <UserOutlined />,
   requests: <FileTextOutlined />,
-  admin: <TeamOutlined />,
+  admin: <LockOutlined />,
 };
 
 export default function AppLayout() {
@@ -52,8 +54,13 @@ export default function AppLayout() {
   const [pwdSaving, setPwdSaving] = useState(false);
   const [pwdForm] = Form.useForm();
 
+  // peka_web — рабочее место администрации. Участник без единого
+  // административного права (обычный сотрудник цеха) не должен видеть здесь
+  // пустой каркас: ему показывается, куда идти, — в личный кабинет.
+  const sections = useMemo(() => visibleSections(caps), [caps]);
+  const hasAnyModule = sections.length > 0;
+
   const menuItems: MenuProps["items"] = useMemo(() => {
-    const sections = visibleSections(caps);
     return [
       { key: "/", icon: <DashboardOutlined />, label: "Дашборд" },
       ...sections.map((s) => ({
@@ -63,16 +70,25 @@ export default function AppLayout() {
         children: s.items.map((i) => ({ key: i.path, label: i.label })),
       })),
     ];
-  }, [caps]);
+  }, [sections]);
 
   // Highlight the deepest nav path that prefixes the current URL, so detail
-  // pages (/suppliers/5) still highlight their list item (/suppliers).
+  // pages (/suppliers/5) still highlight their list item (/suppliers). Items may
+  // claim extra prefixes via `match` — the key stays the item's own path.
   const selectedKey = useMemo(() => {
     if (location.pathname === "/") return "/";
-    const all = visibleSections(caps).flatMap((s) => s.items.map((i) => i.path));
-    return all
-      .filter((p) => location.pathname === p || location.pathname.startsWith(p + "/"))
-      .sort((a, b) => b.length - a.length)[0] ?? location.pathname;
+    const prefixes = visibleSections(caps).flatMap((s) =>
+      s.items.flatMap((i) =>
+        [i.path, ...(i.match ?? [])].map((prefix) => ({ prefix, key: i.path })),
+      ),
+    );
+    const hit = prefixes
+      .filter(
+        ({ prefix }) =>
+          location.pathname === prefix || location.pathname.startsWith(prefix + "/"),
+      )
+      .sort((a, b) => b.prefix.length - a.prefix.length)[0];
+    return hit?.key ?? location.pathname;
   }, [location.pathname, caps]);
 
   async function switchOrg(orgId: number) {
@@ -91,7 +107,7 @@ export default function AppLayout() {
       setOrgModalOpen(false);
       setNewOrgName("");
       await queryClient.invalidateQueries({ queryKey: ["auth", "me"] });
-      await switchOrg(org.id);
+      await switchOrg(org.organization_id);
     } catch (e) {
       message.error(errorMessage(e));
     } finally {
@@ -135,7 +151,9 @@ export default function AppLayout() {
 
   return (
     <Layout style={{ minHeight: "100vh" }}>
-      <Layout.Sider collapsible collapsed={collapsed} onCollapse={setCollapsed} width={230}>
+      {/* Шире прежних 230: при базовом кегле 16 длинные пункты («Взаиморасчёты»,
+          «Прайс-листы поставщиков») переносились на вторую строку. */}
+      <Layout.Sider collapsible collapsed={collapsed} onCollapse={setCollapsed} width={252}>
         <div
           style={{
             height: 48,
@@ -143,13 +161,25 @@ export default function AppLayout() {
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
+            gap: 8,
             color: "#fff",
             fontWeight: 700,
-            fontSize: collapsed ? 14 : 18,
+            fontSize: 12,
             letterSpacing: 1,
           }}
         >
-          {collapsed ? "RSM" : "Peka RSM"}
+          {/* Логотип словесный и тёмно-зелёный, а сайдбар — того же зелёного,
+              поэтому выводим его в белом: filter вместо второго файла. */}
+          <img
+            src="/logo.png"
+            alt="Pekarelli"
+            style={{
+              height: collapsed ? 10 : 16,
+              width: "auto",
+              filter: "brightness(0) invert(1)",
+            }}
+          />
+          {!collapsed && <span style={{ opacity: 0.7 }}>RSM</span>}
         </div>
         <Menu
           theme="dark"
@@ -169,14 +199,14 @@ export default function AppLayout() {
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
-            borderBottom: "1px solid #f0f0f0",
+            borderBottom: `2px solid ${BRAND.cream}`,
           }}
         >
           <Select
             style={{ minWidth: 220 }}
             value={activeOrgId ?? undefined}
             onChange={switchOrg}
-            options={me?.organizations.map((o) => ({ value: o.id, label: o.name }))}
+            options={me?.organizations.map((o) => ({ value: o.organization_id, label: o.name }))}
             placeholder="Организация"
             popupMatchSelectWidth={false}
             dropdownRender={(menu) => (
@@ -208,7 +238,28 @@ export default function AppLayout() {
           </Dropdown>
         </Layout.Header>
         <Layout.Content style={{ padding: 24 }}>
-          <Outlet />
+          {hasAnyModule ? (
+            <Outlet />
+          ) : (
+            <Result
+              status="info"
+              title="Это рабочее место администрации"
+              subTitle={
+                <>
+                  Ваша смена и заявления — в личном кабинете сотрудника.
+                  {STAFF_URL && (
+                    <>
+                      {" "}
+                      <a href={STAFF_URL}>Открыть кабинет</a>
+                    </>
+                  )}
+                </>
+              }
+              extra={
+                <Button onClick={handleLogout}>Выйти</Button>
+              }
+            />
+          )}
         </Layout.Content>
       </Layout>
       <Modal

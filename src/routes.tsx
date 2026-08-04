@@ -10,9 +10,11 @@ import ResetPasswordPage from "@/auth/ResetPasswordPage";
 import AppLayout from "@/layout/AppLayout";
 import DashboardPage from "@/pages/DashboardPage";
 import { adminRoutes } from "@/pages/admin/routes";
+import { bankingRoutes } from "@/pages/banking/routes";
 import { catalogRoutes } from "@/pages/catalog/routes";
 import { financeRoutes } from "@/pages/finance/routes";
 import { inventoryRoutes } from "@/pages/inventory/routes";
+import { payrollRoutes } from "@/pages/payroll/routes";
 import { procurementRoutes } from "@/pages/procurement/routes";
 import { requestsRoutes } from "@/pages/requests/routes";
 import { salesRoutes } from "@/pages/sales/routes";
@@ -36,7 +38,9 @@ export const router = createBrowserRouter([
           ...procurementRoutes,
           ...salesRoutes,
           ...financeRoutes,
+          ...bankingRoutes,
           ...staffRoutes,
+          ...payrollRoutes,
           ...requestsRoutes,
           ...adminRoutes,
           {

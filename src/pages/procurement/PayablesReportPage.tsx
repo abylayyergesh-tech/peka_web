@@ -29,11 +29,38 @@ export default function PayablesReportPage() {
       render: (_, row) => <Link to={`/suppliers/${row.supplier_id}`}>{row.supplier_name}</Link>,
     },
     {
-      title: "Баланс (задолженность)",
-      dataIndex: "balance",
-      width: 200,
+      title: "Получено (дебет)",
+      dataIndex: "total_received",
+      width: 180,
       align: "right",
+      sorter: (a, b) => Number(a.total_received) - Number(b.total_received),
       render: (v: string) => <Money value={v} />,
+    },
+    {
+      title: "Оплачено (кредит)",
+      dataIndex: "total_paid",
+      width: 180,
+      align: "right",
+      sorter: (a, b) => Number(a.total_paid) - Number(b.total_paid),
+      render: (v: string) => <Money value={v} />,
+    },
+    {
+      title: "Разница (долг)",
+      dataIndex: "balance",
+      width: 190,
+      align: "right",
+      defaultSortOrder: "descend",
+      sorter: (a, b) => Number(a.balance) - Number(b.balance),
+      render: (v: string) => {
+        const n = Number(v);
+        // Долг красным, переплата зелёным: иначе минус в длинном списке не заметен.
+        const color = n > 0 ? "#cf1322" : n < 0 ? "#389e0d" : undefined;
+        return (
+          <b style={{ color }}>
+            <Money value={v} />
+          </b>
+        );
+      },
     },
   ];
 
@@ -75,7 +102,8 @@ export default function PayablesReportPage() {
         pagination={false}
         columns={columns}
         summary={(rows) => {
-          const total = rows.reduce((sum, r) => sum + Number(r.balance), 0);
+          const sum = (pick: (r: SupplierBalanceOut) => string) =>
+            rows.reduce((acc, r) => acc + Number(pick(r)), 0);
           return (
             <Table.Summary.Row>
               <Table.Summary.Cell index={0}>
@@ -83,7 +111,17 @@ export default function PayablesReportPage() {
               </Table.Summary.Cell>
               <Table.Summary.Cell index={1} align="right">
                 <b>
-                  <Money value={total} />
+                  <Money value={sum((r) => r.total_received)} />
+                </b>
+              </Table.Summary.Cell>
+              <Table.Summary.Cell index={2} align="right">
+                <b>
+                  <Money value={sum((r) => r.total_paid)} />
+                </b>
+              </Table.Summary.Cell>
+              <Table.Summary.Cell index={3} align="right">
+                <b>
+                  <Money value={sum((r) => r.balance)} />
                 </b>
               </Table.Summary.Cell>
             </Table.Summary.Row>

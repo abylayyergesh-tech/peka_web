@@ -1,12 +1,12 @@
 /** Procurement API: suppliers, price lists, purchase orders, payments, payables.
  * DTOs mirror app/procurement/schemas.py 1:1 (Decimal -> string, date/datetime -> ISO string). */
-import { api } from "@/api/client";
+import { api, fetchAllPages } from "@/api/client";
 import type { Page, PageParams } from "@/api/client";
 
 // ---------------- suppliers ----------------
 
 export interface SupplierOut {
-  id: number;
+  supplier_id: number;
   organization_id: number;
   name: string;
   tax_id: string | null;
@@ -37,6 +37,12 @@ export async function listSuppliers(params: SupplierListParams = {}): Promise<Pa
   return data;
 }
 
+/** All suppliers across every page (for id->name lookups / selects). */
+export async function listAllSuppliers(): Promise<SupplierOut[]> {
+  return fetchAllPages<SupplierOut>((p) =>
+    api.get<Page<SupplierOut>>("/suppliers", { params: p }).then((r) => r.data));
+}
+
 export async function getSupplier(id: number): Promise<SupplierOut> {
   const { data } = await api.get<SupplierOut>(`/suppliers/${id}`);
   return data;
@@ -61,7 +67,7 @@ export async function deleteSupplier(id: number): Promise<SupplierOut> {
 // ---------------- price lists ----------------
 
 export interface SupplierPriceOut {
-  id: number;
+  supplier_price_id: number;
   supplier_id: number;
   product_id: number;
   unit_id: number;
@@ -127,7 +133,7 @@ export interface PurchaseOrderUpdate {
 }
 
 export interface POLineOut {
-  id: number;
+  purchase_order_line_id: number;
   product_id: number;
   unit_id: number;
   quantity_ordered: string;
@@ -145,7 +151,7 @@ export interface POLineFulfillment {
 }
 
 export interface PurchaseOrderOut {
-  id: number;
+  purchase_order_id: number;
   organization_id: number;
   supplier_id: number;
   warehouse_id: number;
@@ -219,7 +225,7 @@ export interface PaymentCreate {
 }
 
 export interface PaymentOut {
-  id: number;
+  supplier_payment_id: number;
   supplier_id: number;
   payment_date: string;
   amount: string;
@@ -248,9 +254,16 @@ export async function voidPayment(supplierId: number, paymentId: number): Promis
 
 // ---------------- reports ----------------
 
+/** Счёт поставщика: дебет (получено), кредит (оплачено) и разница.
+ *  Обе суммы накопительные; `balance = total_received − total_paid` — сколько мы
+ *  должны сейчас (отрицательное значение = переплата). */
 export interface SupplierBalanceOut {
   supplier_id: number;
   supplier_name: string;
+  /** Дебет: сумма всех приходов по накладным от этого поставщика. */
+  total_received: string;
+  /** Кредит: сумма оплат ему; отменённый платёж из суммы вычитается. */
+  total_paid: string;
   balance: string;
 }
 
@@ -269,7 +282,7 @@ export async function reportPayables(
 export type PayableSourceType = "receipt" | "payment" | "payment_void";
 
 export interface PayableEntryOut {
-  id: number;
+  payable_entry_id: number;
   supplier_id: number;
   amount_delta: string;
   balance_after: string;
@@ -297,27 +310,27 @@ export async function supplierLedger(
 // reads. No dedicated catalog/inventory api file exists yet to import from.
 
 export interface ProductRef {
-  id: number;
+  product_id: number;
   name: string;
   base_unit_id: number;
   is_active: boolean;
 }
 
 export interface UnitRef {
-  id: number;
+  unit_id: number;
   name: string;
   dimension: string;
 }
 
 export interface WarehouseRef {
-  id: number;
+  warehouse_id: number;
   name: string;
   is_active: boolean;
 }
 
 export async function listProductRefs(): Promise<ProductRef[]> {
-  const { data } = await api.get<Page<ProductRef>>("/products", { params: { limit: 200 } });
-  return data.items;
+  return fetchAllPages<ProductRef>((p) =>
+    api.get<Page<ProductRef>>("/products", { params: p }).then((r) => r.data));
 }
 
 export async function listUnitRefs(): Promise<UnitRef[]> {

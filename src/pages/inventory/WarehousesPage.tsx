@@ -1,160 +1,32 @@
-/** /warehouses — склады. Backend supports create + soft-delete (deactivate)
- *  only; there is no rename endpoint, so this is create / list / deactivate. */
-import { PlusOutlined } from "@ant-design/icons";
-import {
-  App,
-  Button,
-  Form,
-  Input,
-  Modal,
-  Popconfirm,
-  Space,
-  Switch,
-  Table,
-  Tag,
-} from "antd";
-import { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+/** /warehouses — склады: остатки и сам справочник складов.
+ *
+ * Раньше это были две страницы («Остатки на складах» и «Склады»), но говорят они
+ * об одном: остатки без списка складов не читаются, а список складов без остатков
+ * ничего не сообщает. Поэтому одна страница с вкладками; вкладка по умолчанию —
+ * остатки, справочник нужен раз в полгода. Старый адрес /reports/stock ведёт сюда.
+ */
+import { Tabs } from "antd";
 
-import { errorMessage } from "@/api/client";
-import {
-  createWarehouse,
-  deleteWarehouse,
-  listWarehouses,
-  type WarehouseOut,
-} from "@/api/inventory";
-import { useCan } from "@/auth/store";
-import { fmtDateTime } from "@/components/format";
-import { usePagination } from "@/components/usePagination";
+import { useTabParam } from "@/components/useTabParam";
+import StockTab from "@/pages/inventory/StockTab";
+import WarehouseListTab from "@/pages/inventory/WarehouseListTab";
+
+const TABS = ["stock", "list"] as const;
 
 export default function WarehousesPage() {
-  const { message } = App.useApp();
-  const queryClient = useQueryClient();
-  const canManage = useCan("inventory.manage");
-  const { limit, offset, tablePagination } = usePagination();
-  const [includeInactive, setIncludeInactive] = useState(false);
-  const [modalOpen, setModalOpen] = useState(false);
-  const [form] = Form.useForm<{ name: string }>();
-
-  const query = useQuery({
-    queryKey: ["warehouses", { limit, offset, includeInactive }],
-    queryFn: () =>
-      listWarehouses({ limit, offset, include_inactive: includeInactive }),
-  });
-
-  const create = useMutation({
-    mutationFn: (values: { name: string }) => createWarehouse(values),
-    onSuccess: () => {
-      message.success("Склад создан");
-      setModalOpen(false);
-      queryClient.invalidateQueries({ queryKey: ["warehouses"] });
-      queryClient.invalidateQueries({ queryKey: ["lookup", "warehouses"] });
-    },
-    onError: (e) => message.error(errorMessage(e)),
-  });
-
-  const remove = useMutation({
-    mutationFn: (id: number) => deleteWarehouse(id),
-    onSuccess: () => {
-      message.success("Склад деактивирован");
-      queryClient.invalidateQueries({ queryKey: ["warehouses"] });
-      queryClient.invalidateQueries({ queryKey: ["lookup", "warehouses"] });
-    },
-    onError: (e) => message.error(errorMessage(e)),
-  });
-
-  function openCreate() {
-    form.resetFields();
-    setModalOpen(true);
-  }
+  const [tab, setTab] = useTabParam("stock", TABS);
 
   return (
     <div>
-      <Space
-        style={{ marginBottom: 16, justifyContent: "space-between", width: "100%" }}
-      >
-        <h2 style={{ margin: 0 }}>Склады</h2>
-        <Space>
-          <Space size={6}>
-            <Switch
-              checked={includeInactive}
-              onChange={setIncludeInactive}
-              size="small"
-            />
-            <span>Показывать неактивные</span>
-          </Space>
-          {canManage && (
-            <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-              Добавить
-            </Button>
-          )}
-        </Space>
-      </Space>
-
-      <Table<WarehouseOut>
-        rowKey="id"
-        size="small"
-        loading={query.isPending}
-        dataSource={query.data?.items}
-        pagination={tablePagination(query.data?.total)}
-        columns={[
-          { title: "Название", dataIndex: "name" },
-          {
-            title: "Статус",
-            dataIndex: "is_active",
-            width: 130,
-            render: (active: boolean) =>
-              active ? (
-                <Tag color="green">Активен</Tag>
-              ) : (
-                <Tag>Неактивен</Tag>
-              ),
-          },
-          {
-            title: "Создан",
-            dataIndex: "created_at",
-            width: 160,
-            render: (v: string) => fmtDateTime(v),
-          },
-          {
-            title: "",
-            width: 130,
-            render: (_, row) =>
-              canManage &&
-              row.is_active && (
-                <Popconfirm
-                  title="Деактивировать склад?"
-                  okText="Деактивировать"
-                  cancelText="Отмена"
-                  onConfirm={() => remove.mutate(row.id)}
-                >
-                  <a>Деактивировать</a>
-                </Popconfirm>
-              ),
-          },
+      <h2 style={{ marginTop: 0, marginBottom: 8 }}>Склады</h2>
+      <Tabs
+        activeKey={tab}
+        onChange={setTab}
+        items={[
+          { key: "stock", label: "Остатки", children: <StockTab /> },
+          { key: "list", label: "Список складов", children: <WarehouseListTab /> },
         ]}
       />
-
-      <Modal
-        title="Новый склад"
-        open={modalOpen}
-        onCancel={() => setModalOpen(false)}
-        onOk={() => form.submit()}
-        okText="Создать"
-        cancelText="Отмена"
-        confirmLoading={create.isPending}
-        destroyOnClose
-      >
-        <Form form={form} layout="vertical" onFinish={(v) => create.mutate(v)}>
-          <Form.Item
-            name="name"
-            label="Название"
-            rules={[{ required: true, message: "Обязательное поле" }]}
-          >
-            <Input autoFocus maxLength={256} />
-          </Form.Item>
-        </Form>
-      </Modal>
     </div>
   );
 }

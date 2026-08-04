@@ -10,7 +10,7 @@ import { api } from "@/api/client";
 
 /** app.tenancy.schemas.MemberOut */
 export interface MemberOut {
-  id: number;
+  membership_id: number;
   organization_id: number;
   user_id: number;
   role: string;
@@ -52,6 +52,33 @@ export async function updateMemberRole(
   return data;
 }
 
+export interface MemberPasswordOut {
+  membership_id: number;
+  email: string;
+  full_name: string | null;
+  /** Заполнен ТОЛЬКО когда пароль сгенерировал сервер: другого шанса увидеть
+   *  его не будет — в базе лежит хэш. */
+  password: string | null;
+}
+
+/** Выдать участнику пароль вместо него.
+ *
+ *  Для цеха это единственный работающий путь: у сотрудников технические адреса в
+ *  нероутируемом домене `.local`, и письмо-приглашение туда не уйдёт. Без
+ *  `password` сервер сгенерирует пароль и вернёт его один раз. Все сессии этого
+ *  пользователя гасятся. */
+export async function setMemberPassword(
+  organizationId: number,
+  membershipId: number,
+  password?: string,
+): Promise<MemberPasswordOut> {
+  const { data } = await api.post<MemberPasswordOut>(
+    `/organizations/${organizationId}/members/${membershipId}/password`,
+    { password: password || null },
+  );
+  return data;
+}
+
 export async function removeMember(
   organizationId: number,
   membershipId: number,
@@ -69,7 +96,7 @@ export interface CapabilityOut {
 
 /** app.rbac.schemas.RoleOut */
 export interface RoleOut {
-  id: number;
+  role_id: number;
   name: string;
   description: string | null;
   is_builtin: boolean;

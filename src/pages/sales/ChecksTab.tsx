@@ -19,7 +19,7 @@ import { CheckStatusTag, paymentMethodLabel } from "@/pages/sales/statusTags";
 
 const { RangePicker } = DatePicker;
 
-export default function ChecksPage() {
+export default function ChecksTab() {
   const { message } = App.useApp();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -77,20 +77,20 @@ export default function ChecksPage() {
   const create = useMutation({
     mutationFn: (values: CheckCreate) => createCheck(values),
     onSuccess: (chk) => {
-      message.success(`Чек №${chk.number ?? chk.id} создан`);
+      message.success(`Чек №${chk.number ?? chk.check_id} создан`);
       setCreateOpen(false);
       queryClient.invalidateQueries({ queryKey: ["checks"] });
-      navigate(`/checks/${chk.id}`);
+      navigate(`/checks/${chk.check_id}`);
     },
     onError: (e) => message.error(errorMessage(e)),
   });
 
   const shiftLabel = (id: number) => {
-    const s = shifts.data?.items.find((x) => x.id === id);
-    return s ? `№${s.number ?? s.id} от ${fmtDate(s.opened_at)}` : `#${id}`;
+    const s = shifts.data?.items.find((x) => x.shift_id === id);
+    return s ? `№${s.number ?? s.shift_id} от ${fmtDate(s.opened_at)}` : `#${id}`;
   };
   const customerName = (id: number | null) =>
-    id == null ? "—" : customers.data?.items.find((c) => c.id === id)?.name ?? `#${id}`;
+    id == null ? "—" : customers.data?.items.find((c) => c.customer_id === id)?.name ?? `#${id}`;
 
   if (!canOperate) {
     return <Result status="403" title="Недостаточно прав" subTitle="Нужно право sale.operate" />;
@@ -101,7 +101,7 @@ export default function ChecksPage() {
       title: "№",
       dataIndex: "number",
       width: 80,
-      render: (v: number | null, row) => <Link to={`/checks/${row.id}`}>{v ?? row.id}</Link>,
+      render: (v: number | null, row) => <Link to={`/checks/${row.check_id}`}>{v ?? row.check_id}</Link>,
     },
     { title: "Смена", dataIndex: "shift_id", render: (v: number) => shiftLabel(v) },
     {
@@ -127,14 +127,13 @@ export default function ChecksPage() {
     {
       title: "",
       width: 90,
-      render: (_, row) => <Link to={`/checks/${row.id}`}>Открыть</Link>,
+      render: (_, row) => <Link to={`/checks/${row.check_id}`}>Открыть</Link>,
     },
   ];
 
   return (
     <div>
-      <Space style={{ marginBottom: 16, justifyContent: "space-between", width: "100%" }}>
-        <h2 style={{ margin: 0 }}>Чеки</h2>
+      <Space style={{ marginBottom: 16, justifyContent: "flex-end", width: "100%" }}>
         {canOperate && (
           <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
             Новый чек
@@ -154,8 +153,8 @@ export default function ChecksPage() {
             reset();
           }}
           options={shifts.data?.items.map((s) => ({
-            value: s.id,
-            label: `Смена №${s.number ?? s.id} от ${fmtDate(s.opened_at)}`,
+            value: s.shift_id,
+            label: `Смена №${s.number ?? s.shift_id} от ${fmtDate(s.opened_at)}`,
           }))}
         />
         <Select
@@ -182,7 +181,7 @@ export default function ChecksPage() {
         />
       </Space>
       <Table
-        rowKey="id"
+        rowKey="check_id"
         size="small"
         loading={query.isPending}
         dataSource={query.data?.items}
@@ -209,7 +208,7 @@ export default function ChecksPage() {
               showSearch
               optionFilterProp="label"
               loading={warehouses.isPending}
-              options={warehouses.data?.items.map((w) => ({ value: w.id, label: w.name }))}
+              options={warehouses.data?.items.map((w) => ({ value: w.warehouse_id, label: w.name }))}
             />
           </Form.Item>
           <Form.Item name="customer_id" label="Клиент">
@@ -218,7 +217,7 @@ export default function ChecksPage() {
               showSearch
               optionFilterProp="label"
               loading={customers.isPending}
-              options={customers.data?.items.map((c) => ({ value: c.id, label: c.name }))}
+              options={customers.data?.items.map((c) => ({ value: c.customer_id, label: c.name }))}
             />
           </Form.Item>
         </Form>

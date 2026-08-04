@@ -45,6 +45,9 @@ export default function SuppliersPage() {
   function invalidate() {
     queryClient.invalidateQueries({ queryKey: ["suppliers"] });
     queryClient.invalidateQueries({ queryKey: ["procurement", "supplier-refs"] });
+    // Оцифровка накладной и формы приходов берут справочник хуком
+    // useSuppliersLookup — у него свой ключ кэша.
+    queryClient.invalidateQueries({ queryKey: ["lookup", "suppliers"] });
   }
 
   const save = useMutation({
@@ -56,7 +59,7 @@ export default function SuppliersPage() {
         email: nullIfEmpty(values.email),
         note: nullIfEmpty(values.note),
       };
-      return editing ? updateSupplier(editing.id, body) : createSupplier(body);
+      return editing ? updateSupplier(editing.supplier_id, body) : createSupplier(body);
     },
     onSuccess: () => {
       message.success(editing ? "Сохранено" : "Поставщик создан");
@@ -97,7 +100,7 @@ export default function SuppliersPage() {
     {
       title: "Название",
       dataIndex: "name",
-      render: (_, row) => <Link to={`/suppliers/${row.id}`}>{row.name}</Link>,
+      render: (_, row) => <Link to={`/suppliers/${row.supplier_id}`}>{row.name}</Link>,
     },
     { title: "ИНН/БИН", dataIndex: "tax_id", render: (v) => v ?? "—" },
     { title: "Телефон", dataIndex: "phone", render: (v) => v ?? "—" },
@@ -121,7 +124,7 @@ export default function SuppliersPage() {
                 title="Деактивировать поставщика?"
                 okText="Да"
                 cancelText="Отмена"
-                onConfirm={() => remove.mutate(row.id)}
+                onConfirm={() => remove.mutate(row.supplier_id)}
               >
                 <a style={{ color: "#cf1322" }}>Удалить</a>
               </Popconfirm>
@@ -158,7 +161,7 @@ export default function SuppliersPage() {
         )}
       </Space>
       <Table
-        rowKey="id"
+        rowKey="supplier_id"
         size="small"
         loading={query.isPending}
         dataSource={query.data?.items}
