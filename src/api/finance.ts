@@ -139,6 +139,132 @@ export async function fetchFinancialSummary(): Promise<FinancialSummary> {
   return data;
 }
 
+// ---- продажи по товарам ----
+export interface ProductSalesRow {
+  product_id: number;
+  sku: string | null;
+  name: string;
+  category: string | null;
+  quantity: string;
+  /** Сумма строк чеков со скидкой строки; без скидки чека и доставки. */
+  revenue: string;
+  replacement_quantity: string;
+  check_count: number;
+  avg_price: string | null;
+  cost: string;
+  profit: string;
+  margin_pct: string | null;
+  food_cost_pct: string | null;
+  /** Продано, а себестоимость нулевая — она не посчитана, прибыль завышена. */
+  cost_missing: boolean;
+}
+
+export interface SalesByProductTotals {
+  check_count: number;
+  quantity: string;
+  revenue_lines: string;
+  check_discount_total: string;
+  delivery_total: string;
+  revenue_checks: string;
+  cost: string;
+  profit: string;
+  margin_pct: string | null;
+  positions: number;
+}
+
+export interface SalesByProductReport {
+  date_from: string;
+  date_to: string;
+  rows: ProductSalesRow[];
+  totals: SalesByProductTotals;
+}
+
+export interface ReportRangeParams {
+  from: string;
+  to: string;
+  customer?: number;
+  menu?: number;
+}
+
+export async function fetchSalesByProduct(
+  params: ReportRangeParams,
+): Promise<SalesByProductReport> {
+  const { data } = await api.get<SalesByProductReport>("/reports/sales-by-product", {
+    params,
+  });
+  return data;
+}
+
+// ---- ABC ----
+export type AbcMetric = "revenue" | "profit" | "quantity";
+
+export interface AbcRow extends ProductSalesRow {
+  abc_class: "A" | "B" | "C";
+  metric_value: string;
+  share_pct: string;
+  cumulative_pct: string;
+}
+
+export interface AbcClassSummary {
+  abc_class: "A" | "B" | "C";
+  positions: number;
+  metric_value: string;
+  share_pct: string;
+  revenue: string;
+  profit: string;
+}
+
+export interface AbcReport {
+  date_from: string;
+  date_to: string;
+  metric: AbcMetric;
+  a_pct: string;
+  b_pct: string;
+  rows: AbcRow[];
+  classes: AbcClassSummary[];
+  metric_total: string;
+}
+
+export async function fetchAbc(
+  params: ReportRangeParams & { metric?: AbcMetric; a_pct?: number; b_pct?: number },
+): Promise<AbcReport> {
+  const { data } = await api.get<AbcReport>("/reports/abc", { params });
+  return data;
+}
+
+// ---- движение денег ----
+export interface CashFlowLine {
+  source: string;
+  label: string;
+  amount: string;
+}
+
+export interface CashFlowDay {
+  day: string;
+  inflow: string;
+  outflow: string;
+  net: string;
+}
+
+export interface CashFlowReport {
+  date_from: string;
+  date_to: string;
+  inflow_total: string;
+  outflow_total: string;
+  net: string;
+  inflow: CashFlowLine[];
+  outflow: CashFlowLine[];
+  by_day: CashFlowDay[];
+}
+
+export async function fetchCashFlow(params: {
+  from: string;
+  to: string;
+}): Promise<CashFlowReport> {
+  const { data } = await api.get<CashFlowReport>("/reports/cash-flow", { params });
+  return data;
+}
+
 // ---- suppliers (cross-module ref for expense form/filter; any org member) ----
 export interface SupplierRef {
   supplier_id: number;

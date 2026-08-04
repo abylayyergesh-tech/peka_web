@@ -137,6 +137,8 @@ export interface MenuItemOut {
   portion_qty: string;
   sale_price: string;
   category: string | null;
+  /** Фото для витрины клиентского сайта — ссылкой; null — там будет заглушка. */
+  image_url: string | null;
   is_active: boolean;
 }
 
@@ -147,6 +149,7 @@ export interface MenuItemCreate {
   portion_qty?: number | string;
   sale_price: number | string;
   category?: string | null;
+  image_url?: string | null;
 }
 
 export interface MenuItemUpdate {
@@ -156,6 +159,7 @@ export interface MenuItemUpdate {
   portion_qty?: number | string;
   sale_price?: number | string;
   category?: string | null;
+  image_url?: string | null;
   is_active?: boolean;
 }
 
@@ -211,8 +215,14 @@ export type BillingMode = "weekly" | "per_order";
 export interface CustomerOut {
   customer_id: number;
   organization_id: number;
+  /** Как клиента называет цех («Кофейня "Утро"»); он видит это же название у
+   *  себя в профиле как «название заведения». */
   name: string;
+  /** Юрлицо для счёта («ТОО "Абадан"», «ИП Иванов»). */
+  legal_name: string | null;
   tax_id: string | null;
+  /** Расчётный счёт (IBAN). */
+  bank_account: string | null;
   phone: string | null;
   email: string | null;
   note: string | null;
@@ -227,7 +237,9 @@ export interface CustomerOut {
 
 export interface CustomerCreate {
   name: string;
+  legal_name?: string | null;
   tax_id?: string | null;
+  bank_account?: string | null;
   phone?: string | null;
   email?: string | null;
   note?: string | null;

@@ -99,6 +99,27 @@ export default function MenuItemsTab() {
   const unitName = (id: number) => units.data?.items.find((u) => u.unit_id === id)?.name ?? `#${id}`;
 
   const columns: ColumnsType<MenuItemOut> = [
+    {
+      // Миниатюра, а не галочка «есть фото»: сразу видно и то, что ссылка живая,
+      // и что на картинке именно эта позиция. Битая ссылка покажет прочерк.
+      title: "Фото",
+      dataIndex: "image_url",
+      width: 64,
+      render: (v: string | null, row) =>
+        v ? (
+          <img
+            src={v}
+            alt={row.name}
+            loading="lazy"
+            style={{ width: 40, height: 40, objectFit: "cover", borderRadius: 6 }}
+            onError={(e) => {
+              (e.currentTarget as HTMLImageElement).style.display = "none";
+            }}
+          />
+        ) : (
+          <span style={{ color: "#bfbfbf" }}>—</span>
+        ),
+    },
     { title: "Название", dataIndex: "name", sorter: true },
     { title: "Категория", dataIndex: "category", sorter: true, render: (v: string | null) => v ?? "—" },
     { title: "Продукт", dataIndex: "product_id", render: (v: number) => productName(v) },
@@ -245,6 +266,15 @@ export default function MenuItemsTab() {
           </Form.Item>
           <Form.Item name="category" label="Категория">
             <Input maxLength={256} />
+          </Form.Item>
+          <Form.Item
+            name="image_url"
+            label="Фото (ссылка)"
+            tooltip="Показывается клиентам на сайте заказа. Своего хранилища файлов нет —
+                     нужна прямая ссылка на картинку. Пусто — на сайте будет заглушка."
+            rules={[{ type: "url", message: "Нужна ссылка вида https://…" }]}
+          >
+            <Input maxLength={1024} placeholder="https://…" />
           </Form.Item>
           {editing && (
             <Form.Item name="is_active" label="Активна" valuePropName="checked">

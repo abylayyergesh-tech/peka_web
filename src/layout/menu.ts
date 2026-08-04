@@ -88,6 +88,14 @@ export const NAV_SECTIONS: NavSection[] = [
       { path: "/reports/product-cost", label: "Себестоимость", cap: "report.read" },
       // «Продажи» — так же называется раздел, поэтому здесь уточняем.
       { path: "/reports/sales", label: "Отчёт по продажам", cap: "report.read" },
+      // Тот же период, но по каждому товару: выручка, себестоимость, маржа. Право
+      // финансовое, а не отчётное: у оператора кассы `report.read` есть (сменные
+      // отчёты), а себестоимость и маржа — цифры администрации.
+      { path: "/reports/sales-by-product", label: "Продажи по товарам", cap: "finance.read" },
+      { path: "/reports/abc", label: "ABC-анализ", cap: "finance.read" },
+      // Деньги, а не прибыль: пришло / ушло / осталось. Рядом с P&L, потому что
+      // первый вопрос после «сколько заработали» — «а где эти деньги».
+      { path: "/reports/cash-flow", label: "Движение денег", cap: "finance.read" },
       { path: "/reports/replacements", label: "Замены", cap: "report.read" },
       { path: "/reports/receivables", label: "Дебиторка", cap: "report.read" },
       { path: "/reports/payables", label: "Кредиторка", cap: "report.read" },

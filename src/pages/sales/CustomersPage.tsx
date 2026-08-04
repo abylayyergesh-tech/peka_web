@@ -263,9 +263,19 @@ export default function CustomersPage() {
           <Form.Item
             name="name"
             label="Название"
+            tooltip="Как называем клиента мы: «Кофейня „Утро“». Это же название он
+                     видит у себя в профиле как «название заведения»."
             rules={[{ required: true, message: "Обязательное поле" }]}
           >
             <Input maxLength={256} />
+          </Form.Item>
+          <Form.Item
+            name="legal_name"
+            label="Юридическое название"
+            tooltip="Для счёта: «ТОО „Абадан“», «ИП Иванов». Отдельно от названия —
+                     вывеска и юрлицо совпадают редко."
+          >
+            <Input maxLength={256} placeholder="ТОО, ИП — как в документах" />
           </Form.Item>
           <Form.Item
             name="tax_id"
@@ -274,6 +284,13 @@ export default function CustomersPage() {
                      в его карточке. Пусто — точка самостоятельная."
           >
             <Input maxLength={64} />
+          </Form.Item>
+          <Form.Item
+            name="bank_account"
+            label="Расчётный счёт"
+            tooltip="IBAN. Клиент видит его в своём профиле — по нему сверяют реквизиты."
+          >
+            <Input maxLength={64} placeholder="KZ..." />
           </Form.Item>
           <Form.Item name="phone" label="Телефон">
             <Input maxLength={64} />
