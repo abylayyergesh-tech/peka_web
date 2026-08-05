@@ -6,6 +6,7 @@ import LoansPage from "@/pages/payroll/LoansPage";
 import PayrollRunDetailPage from "@/pages/payroll/PayrollRunDetailPage";
 import PayrollRunsPage from "@/pages/payroll/PayrollRunsPage";
 import PaymentsPage from "@/pages/payroll/PaymentsPage";
+import StaffMealsPage from "@/pages/payroll/StaffMealsPage";
 import TimesheetPage from "@/pages/payroll/TimesheetPage";
 
 export const payrollRoutes: RouteObject[] = [
@@ -15,5 +16,6 @@ export const payrollRoutes: RouteObject[] = [
   // Detail-страница в меню не входит, но роутом быть должна.
   { path: "/payroll/runs/:id", element: <PayrollRunDetailPage /> },
   { path: "/payroll/loans", element: <LoansPage /> },
+  { path: "/payroll/staff-meals", element: <StaffMealsPage /> },
   { path: "/payroll/payments", element: <PaymentsPage /> },
 ];

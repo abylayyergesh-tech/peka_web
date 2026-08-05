@@ -111,6 +111,10 @@ export interface PnLReport {
   opex: string;
   opex_by_category: Record<string, string>;
   inventory_losses: string;
+  /** Себестоимость съеденного сотрудниками — расход периода, не COGS. */
+  staff_meals_cost: string;
+  /** Сумма по ценам меню, которую ведомость удержит из зарплаты. */
+  staff_meals_withheld: string;
   net_profit: string;
   gross_margin_pct: string | null;
   net_margin_pct: string | null;

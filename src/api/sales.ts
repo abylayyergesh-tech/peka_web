@@ -163,6 +163,26 @@ export interface MenuItemUpdate {
   is_active?: boolean;
 }
 
+/** Загрузить фото позиции: файл уходит НА БЭКЕНД, он кладёт его в GCS и
+ *  возвращает позицию с готовой ссылкой. Прямо в бакет из браузера нельзя — там
+ *  запрещён анонимный доступ, и это правильно. */
+export async function uploadMenuItemImage(
+  id: number,
+  file: File,
+): Promise<MenuItemOut> {
+  const form = new FormData();
+  form.append("file", file);
+  // Content-Type с boundary axios подставит сам — задавать его руками нельзя.
+  const { data } = await api.post<MenuItemOut>(`/menu-items/${id}/image`, form);
+  return data;
+}
+
+/** Убрать фото: и ссылку из карточки, и файл из бакета. */
+export async function deleteMenuItemImage(id: number): Promise<MenuItemOut> {
+  const { data } = await api.delete<MenuItemOut>(`/menu-items/${id}/image`);
+  return data;
+}
+
 export interface MenuItemListParams extends PageParams {
   active?: boolean;
   category?: string;

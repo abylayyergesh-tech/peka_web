@@ -3,20 +3,30 @@
  * Цена здесь — цена «Основного меню». Отклонения для остальных прайс-листов живут
  * на вкладке «Прайс-листы» → конкретное меню.
  */
-import { PlusOutlined, SearchOutlined } from "@ant-design/icons";
-import { App, Button, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Switch, Table, Tag } from "antd";
+import {
+  PictureOutlined,
+  PlusOutlined,
+  SearchOutlined,
+  UploadOutlined,
+} from "@ant-design/icons";
+import {
+  App, Button, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Switch,
+  Table, Tag, Upload,
+} from "antd";
 import type { ColumnsType } from "antd/es/table";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { errorMessage } from "@/api/client";
+import { errorMessage, mediaSrc } from "@/api/client";
 import {
   createMenuItem,
   deleteMenuItem,
+  deleteMenuItemImage,
   listMenuItems,
   listProductsLookup,
   listUnitsLookup,
   updateMenuItem,
+  uploadMenuItemImage,
   type MenuItemCreate,
   type MenuItemOut,
 } from "@/api/sales";
@@ -39,6 +49,9 @@ export default function MenuItemsTab() {
   const [modalOpen, setModalOpen] = useState(false);
   /** Позиция, для которой открыт расчёт КБЖУ порции. */
   const [nutritionOf, setNutritionOf] = useState<MenuItemOut | null>(null);
+  /** Фото, выбранное для ЕЩЁ НЕ созданной позиции: загрузка требует id, поэтому
+   *  файл ждёт здесь и уходит сразу после создания. */
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [form] = Form.useForm();
 
   const query = useQuery({
@@ -59,11 +72,47 @@ export default function MenuItemsTab() {
   });
 
   const save = useMutation({
-    mutationFn: (values: MenuItemCreate & { is_active?: boolean }) =>
-      editing ? updateMenuItem(editing.menu_item_id, values) : createMenuItem(values),
+    mutationFn: async (values: MenuItemCreate & { is_active?: boolean }) => {
+      const saved = editing
+        ? await updateMenuItem(editing.menu_item_id, values)
+        : await createMenuItem(values);
+      // Файл, выбранный ДО сохранения новой позиции, уходит сразу после её
+      // создания: загрузка требует id, а заставлять человека сохранить, снова
+      // открыть карточку и только там добавить фото — лишний круг.
+      if (pendingFile) {
+        return await uploadMenuItemImage(saved.menu_item_id, pendingFile);
+      }
+      return saved;
+    },
     onSuccess: () => {
       message.success(editing ? "Сохранено" : "Позиция создана");
+      setPendingFile(null);
       setModalOpen(false);
+      queryClient.invalidateQueries({ queryKey: ["menu-items"] });
+    },
+    onError: (e) => message.error(errorMessage(e)),
+  });
+
+  /** Загрузка фото у существующей позиции — сразу, не дожидаясь «Сохранить»:
+   *  файл уже выбран, и держать его в подвешенном состоянии незачем. */
+  const uploadImage = useMutation({
+    mutationFn: ({ id, file }: { id: number; file: File }) =>
+      uploadMenuItemImage(id, file),
+    onSuccess: (saved) => {
+      message.success("Фото загружено");
+      setEditing(saved);
+      form.setFieldValue("image_url", saved.image_url);
+      queryClient.invalidateQueries({ queryKey: ["menu-items"] });
+    },
+    onError: (e) => message.error(errorMessage(e)),
+  });
+
+  const removeImage = useMutation({
+    mutationFn: (id: number) => deleteMenuItemImage(id),
+    onSuccess: (saved) => {
+      message.success("Фото убрано");
+      setEditing(saved);
+      form.setFieldValue("image_url", null);
       queryClient.invalidateQueries({ queryKey: ["menu-items"] });
     },
     onError: (e) => message.error(errorMessage(e)),
@@ -80,12 +129,14 @@ export default function MenuItemsTab() {
 
   function openCreate() {
     setEditing(null);
+    setPendingFile(null);
     form.resetFields();
     setModalOpen(true);
   }
 
   function openEdit(row: MenuItemOut) {
     setEditing(row);
+    setPendingFile(null);
     form.setFieldsValue({
       ...row,
       portion_qty: Number(row.portion_qty),
@@ -108,7 +159,7 @@ export default function MenuItemsTab() {
       render: (v: string | null, row) =>
         v ? (
           <img
-            src={v}
+            src={mediaSrc(v)}
             alt={row.name}
             loading="lazy"
             style={{ width: 40, height: 40, objectFit: "cover", borderRadius: 6 }}
@@ -268,13 +319,38 @@ export default function MenuItemsTab() {
             <Input maxLength={256} />
           </Form.Item>
           <Form.Item
+            label="Фото"
+            tooltip="Показывается клиентам на сайте заказа. Файл уходит на бэкенд, а он
+                     кладёт его в облачное хранилище — прямой ссылки на бакет нет.
+                     jpeg, png или webp, размер не ограничен. Без фото на сайте
+                     будет заглушка."
+          >
+            <MenuItemPhoto
+              // У новой позиции id ещё нет — файл ждёт до её создания.
+              itemId={editing?.menu_item_id ?? null}
+              url={editing?.image_url ?? null}
+              pendingFile={pendingFile}
+              uploading={uploadImage.isPending}
+              removing={removeImage.isPending}
+              onPick={(file) => {
+                if (editing) uploadImage.mutate({ id: editing.menu_item_id, file });
+                else setPendingFile(file);
+              }}
+              onRemove={() => {
+                if (editing?.image_url) removeImage.mutate(editing.menu_item_id);
+                else setPendingFile(null);
+              }}
+              onError={(text) => message.error(text)}
+            />
+          </Form.Item>
+          {/* Ссылка остаётся полем: у части позиций фото лежит на чужом хостинге,
+              и отбирать эту возможность вместе с появлением загрузки незачем. */}
+          <Form.Item
             name="image_url"
-            label="Фото (ссылка)"
-            tooltip="Показывается клиентам на сайте заказа. Своего хранилища файлов нет —
-                     нужна прямая ссылка на картинку. Пусто — на сайте будет заглушка."
+            label="Или ссылка на фото"
             rules={[{ type: "url", message: "Нужна ссылка вида https://…" }]}
           >
-            <Input maxLength={1024} placeholder="https://…" />
+            <Input maxLength={1024} placeholder="https://…" allowClear />
           </Form.Item>
           {editing && (
             <Form.Item name="is_active" label="Активна" valuePropName="checked">
@@ -290,5 +366,107 @@ export default function MenuItemsTab() {
         onClose={() => setNutritionOf(null)}
       />
     </div>
+  );
+}
+
+/** Что разрешает бэкенд (см. app/media/storage.py). Проверяем и здесь, чтобы не
+ *  гнать на сервер файл, который он всё равно отвергнет. Ограничения на РАЗМЕР
+ *  нет ни там, ни тут: снимок с телефона это спокойно 15–20 МБ. */
+const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
+
+/** Фото позиции: превью, выбор файла, удаление.
+ *
+ * У новой позиции id ещё нет, поэтому файл не отправляется сразу, а показывается
+ * превью из локального blob и ждёт создания карточки. У существующей — уходит
+ * сразу: файл уже выбран, держать его в подвешенном состоянии незачем. */
+function MenuItemPhoto({
+  itemId,
+  url,
+  pendingFile,
+  uploading,
+  removing,
+  onPick,
+  onRemove,
+  onError,
+}: {
+  itemId: number | null;
+  url: string | null;
+  pendingFile: File | null;
+  uploading: boolean;
+  removing: boolean;
+  onPick: (file: File) => void;
+  onRemove: () => void;
+  onError: (text: string) => void;
+}) {
+  // Локальное превью для ещё не отправленного файла; отзываем URL, чтобы не
+  // течь памятью при переборе картинок.
+  const [preview, setPreview] = useState<string | null>(null);
+  useEffect(() => {
+    if (!pendingFile) {
+      setPreview(null);
+      return;
+    }
+    const objectUrl = URL.createObjectURL(pendingFile);
+    setPreview(objectUrl);
+    return () => URL.revokeObjectURL(objectUrl);
+  }, [pendingFile]);
+
+  const src = preview ?? mediaSrc(url);
+
+  function pick(file: File): boolean {
+    if (!ALLOWED_TYPES.includes(file.type)) {
+      onError("Только jpeg, png или webp");
+      return false;
+    }
+    onPick(file);
+    return false; // загрузку делаем сами; antd не должен ничего отправлять
+  }
+
+  return (
+    <Space align="start" size={12}>
+      {src ? (
+        <img
+          src={src}
+          alt="Фото позиции"
+          style={{
+            width: 96, height: 96, objectFit: "cover", borderRadius: 8,
+            border: "1px solid #f0f0f0",
+          }}
+        />
+      ) : (
+        <div
+          style={{
+            width: 96, height: 96, borderRadius: 8, border: "1px dashed #d9d9d9",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            color: "#bfbfbf", fontSize: 24,
+          }}
+        >
+          <PictureOutlined />
+        </div>
+      )}
+      <Space direction="vertical" size={6}>
+        <Upload accept={ALLOWED_TYPES.join(",")} showUploadList={false} beforeUpload={pick}>
+          <Button icon={<UploadOutlined />} loading={uploading}>
+            {src ? "Заменить" : "Загрузить фото"}
+          </Button>
+        </Upload>
+        {(url || pendingFile) && (
+          <Button
+            danger
+            type="text"
+            size="small"
+            loading={removing}
+            onClick={onRemove}
+          >
+            Убрать
+          </Button>
+        )}
+        {itemId == null && pendingFile && (
+          <span style={{ color: "#8c8c8c", fontSize: 12 }}>
+            загрузится после сохранения
+          </span>
+        )}
+      </Space>
+    </Space>
   );
 }

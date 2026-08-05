@@ -123,6 +123,9 @@ export const NAV_SECTIONS: NavSection[] = [
       { path: "/payroll/runs", label: "Ведомости", cap: "payroll.read" },
       { path: "/payroll/compensations", label: "Справочник ставок", cap: "payroll.read" },
       { path: "/payroll/loans", label: "Фин. займы", cap: "payroll.read" },
+      // Бесплатные завтраки с кассы: из них собирается колонка «Питание» в
+      // ведомости, поэтому пункт живёт рядом с зарплатой, а не в продажах.
+      { path: "/payroll/staff-meals", label: "Питание сотрудников", cap: "payroll.read" },
       { path: "/payroll/payments", label: "Реестр выплат", cap: "payroll.read" },
     ],
   },

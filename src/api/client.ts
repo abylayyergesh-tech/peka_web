@@ -44,6 +44,19 @@ export const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || "/api",
 });
 
+/** Ссылка на файл, пригодная для `<img src>`.
+ *
+ * Бэкенд хранит фото ОТНОСИТЕЛЬНОЙ ссылкой («/media/menu/…»): абсолютный домен в
+ * базе означал бы битые картинки после первого переезда API. Достроить её до
+ * адреса своего API — задача каждого фронтенда, здесь это и делается. Внешние
+ * ссылки (их можно вписать руками) отдаются как есть. */
+export function mediaSrc(url: string | null | undefined): string | undefined {
+  if (!url) return undefined;
+  if (/^(https?:|data:|blob:)/i.test(url)) return url;
+  const base = (api.defaults.baseURL || "").replace(/\/$/, "");
+  return `${base}${url.startsWith("/") ? "" : "/"}${url}`;
+}
+
 api.interceptors.request.use((config) => {
   const { token, activeOrgId } = useAuthStore.getState();
   if (token) config.headers.Authorization = `Bearer ${token}`;

@@ -541,6 +541,81 @@ export async function createPayment(body: PaymentCreate): Promise<PaymentOut> {
   return data;
 }
 
+// ---- питание сотрудников ----
+/** Запись журнала питания: чек, пробитый на кассе со скидкой 100 %.
+ *
+ *  `amount` — сумма по ценам меню, она и удерживается в колонке «Питание»;
+ *  `cost` — себестоимость списанного сырья (расход организации). */
+export interface StaffMealLine {
+  menu_item_id: number;
+  name: string;
+  quantity: string;
+  unit_price: string;
+  amount: string;
+}
+
+export interface StaffMealOut {
+  staff_meal_id: number;
+  employee_id: number;
+  employee_name: string | null;
+  check_id: number;
+  check_number: number | null;
+  meal_date: string;
+  kind: "breakfast" | "lunch" | "dinner" | "other";
+  amount: string;
+  cost: string;
+  note: string | null;
+  status: string;
+  created_at: string;
+  lines: StaffMealLine[];
+}
+
+export interface StaffMealsSummaryRow {
+  employee_id: number;
+  employee_name: string;
+  meals: number;
+  amount: string;
+  cost: string;
+}
+
+export interface StaffMealsSummary {
+  date_from: string;
+  date_to: string;
+  rows: StaffMealsSummaryRow[];
+  meals: number;
+  amount: string;
+  cost: string;
+}
+
+export interface StaffMealListParams extends PageParams {
+  employee?: number;
+  from?: string;
+  to?: string;
+  include_voided?: boolean;
+}
+
+export async function listStaffMeals(
+  params: StaffMealListParams,
+): Promise<Page<StaffMealOut>> {
+  const { data } = await api.get<Page<StaffMealOut>>("/staff-meals", { params });
+  return data;
+}
+
+export async function fetchStaffMealsSummary(params: {
+  from: string;
+  to: string;
+  employee?: number;
+}): Promise<StaffMealsSummary> {
+  const { data } = await api.get<StaffMealsSummary>("/staff-meals/summary", { params });
+  return data;
+}
+
+/** Аннулировать запись: удержание снимается, склад НЕ возвращается. */
+export async function voidStaffMeal(id: number): Promise<StaffMealOut> {
+  const { data } = await api.post<StaffMealOut>(`/staff-meals/${id}/void`);
+  return data;
+}
+
 /** Скачать xlsx через axios (нужен Authorization + X-Organization-Id, поэтому
  * прямой <a href> не подходит) и отдать браузеру как файл. */
 export async function downloadPayrollWorkbook(

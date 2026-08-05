@@ -1,4 +1,4 @@
-import { Alert, Card, DatePicker, Descriptions, Segmented, Space, Table, Typography } from "antd";
+import { Alert, Card, DatePicker, Descriptions, Segmented, Space, Table, Tooltip, Typography } from "antd";
 import type { DescriptionsProps } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import type { Dayjs } from "dayjs";
@@ -94,6 +94,19 @@ function PnLView({ report, loading }: { report: PnLReport; loading: boolean }) {
       key: "inventory_losses",
       label: "Потери склада",
       children: <Money value={report.inventory_losses} />,
+    },
+    {
+      key: "staff_meals",
+      label: "Питание сотрудников",
+      children: (
+        <Tooltip
+          title={`Себестоимость съеденного. Из зарплат при этом удержится ${fmtMoney(
+            report.staff_meals_withheld,
+          )} — по ценам меню.`}
+        >
+          <Money value={report.staff_meals_cost} />
+        </Tooltip>
+      ),
     },
     {
       key: "net_profit",
