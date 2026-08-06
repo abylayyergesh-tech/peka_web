@@ -12,6 +12,7 @@ import DashboardPage from "@/pages/DashboardPage";
 import { adminRoutes } from "@/pages/admin/routes";
 import { bankingRoutes } from "@/pages/banking/routes";
 import { catalogRoutes } from "@/pages/catalog/routes";
+import { deliveryRoutes } from "@/pages/delivery/routes";
 import { financeRoutes } from "@/pages/finance/routes";
 import { inventoryRoutes } from "@/pages/inventory/routes";
 import { payrollRoutes } from "@/pages/payroll/routes";
@@ -37,6 +38,7 @@ export const router = createBrowserRouter([
           ...inventoryRoutes,
           ...procurementRoutes,
           ...salesRoutes,
+          ...deliveryRoutes,
           ...financeRoutes,
           ...bankingRoutes,
           ...staffRoutes,

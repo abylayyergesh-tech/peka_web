@@ -1,7 +1,8 @@
-import { PlusOutlined, SearchOutlined } from "@ant-design/icons";
+import { PlusOutlined, SearchOutlined, TagsOutlined } from "@ant-design/icons";
 import {
   Alert,
   App,
+  AutoComplete,
   Button,
   Col,
   Divider,
@@ -36,7 +37,11 @@ import {
   type ProductOut,
 } from "@/api/catalog";
 import { useCan } from "@/auth/store";
+import AssignCategoryModal from "@/components/AssignCategoryModal";
 import NutritionModal from "@/components/NutritionModal";
+import ProductCategoriesModal, {
+  useProductCategories,
+} from "@/components/ProductCategoriesModal";
 import { fmtDate } from "@/components/format";
 import { usePagination } from "@/components/usePagination";
 import {
@@ -65,6 +70,10 @@ interface ProductFormValues {
   unit_weight_kg?: number;
 }
 
+/** Пункт «без категории» в фильтре: сервер ждёт для него пустую строку, а пустая
+ *  строка как значение выпадающего списка неотличима от «ничего не выбрано». */
+const NO_CATEGORY_KEY = "__none__";
+
 /** Пустое поле формы -> null (стереть значение), число -> строка для Decimal. */
 const num = (v: number | undefined) => (v == null ? null : String(v));
 const numOrUndef = (v: string | null | undefined) =>
@@ -85,25 +94,35 @@ export default function ProductsPage() {
   const [nutritionFilter, setNutritionFilter] = useState<"filled" | "missing" | undefined>();
   const [itemType, setItemType] = useState<ItemType | undefined>();
   const [group, setGroup] = useState<string | undefined>();
+  /** Отбор по категории; `NO_CATEGORY_KEY` — «без категории» (сервер ждёт для этого
+   *  пустую строку, но она в выпадающем списке неотличима от «не выбрано»). */
+  const [categoryKey, setCategoryKey] = useState<string | undefined>();
+  const category = categoryKey === NO_CATEGORY_KEY ? "" : categoryKey;
   const [editing, setEditing] = useState<ProductOut | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
+  const [categoriesOpen, setCategoriesOpen] = useState(false);
+  const [assignOpen, setAssignOpen] = useState(false);
+  /** Выделенные товары — их переносят в категорию пачкой. */
+  const [selected, setSelected] = useState<number[]>([]);
   /** Товар, для которого открыт расчёт КБЖУ. */
   const [nutritionOf, setNutritionOf] = useState<ProductOut | null>(null);
   const [form] = Form.useForm<ProductFormValues>();
+
+  const categories = useProductCategories();
 
   const query = useQuery({
     queryKey: [
       "products",
       {
         limit, offset, kind, includeInactive, searchParam, sort,
-        nutritionFilter, itemType, group,
+        nutritionFilter, itemType, group, category,
       },
     ],
     queryFn: () =>
       listProducts({
         limit, offset, kind, include_inactive: includeInactive,
         search: searchParam, sort, nutrition: nutritionFilter,
-        item_type: itemType, group,
+        item_type: itemType, group, category,
       }),
   });
 
@@ -316,11 +335,16 @@ export default function ProductsPage() {
         style={{ marginBottom: 16, justifyContent: "space-between", width: "100%" }}
       >
         <h2 style={{ margin: 0 }}>Продукты</h2>
-        {canManage && (
-          <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-            Добавить
+        <Space>
+          <Button icon={<TagsOutlined />} onClick={() => setCategoriesOpen(true)}>
+            Категории
           </Button>
-        )}
+          {canManage && (
+            <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
+              Добавить
+            </Button>
+          )}
+        </Space>
       </Space>
 
       <Space style={{ marginBottom: 16 }} wrap>
@@ -367,6 +391,29 @@ export default function ProductsPage() {
             reset();
           }}
         />
+        {/* «Без категории» — главный рабочий отбор: из iiko приехали сотни позиций
+            без категории, и раскладывать их надо именно из этого списка. */}
+        <Select
+          allowClear
+          showSearch
+          optionFilterProp="label"
+          placeholder="Категория"
+          style={{ width: 220 }}
+          value={categoryKey}
+          loading={categories.isPending}
+          options={[
+            { value: NO_CATEGORY_KEY, label: "Без категории" },
+            ...(categories.data ?? []).map((c) => ({
+              value: c.name,
+              label: `${c.name} (${c.product_count})`,
+            })),
+          ]}
+          onChange={(v) => {
+            setCategoryKey(v);
+            setSelected([]);
+            reset();
+          }}
+        />
         {/* Главный рабочий фильтр по КБЖУ: «что осталось завести». Считается на
             сервере — список постраничный, и фильтрация в браузере врала бы.
             `missing` возвращает только еду: у прочего заполнять нечего. */}
@@ -396,6 +443,25 @@ export default function ProductsPage() {
         </Space>
       </Space>
 
+      {selected.length > 0 && (
+        <Alert
+          type="info"
+          showIcon
+          style={{ marginBottom: 12 }}
+          message={`Выбрано товаров: ${selected.length}`}
+          action={
+            <Space>
+              <Button size="small" type="primary" onClick={() => setAssignOpen(true)}>
+                Перенести в категорию
+              </Button>
+              <Button size="small" onClick={() => setSelected([])}>
+                Снять
+              </Button>
+            </Space>
+          }
+        />
+      )}
+
       <Table<ProductOut>
         rowKey="product_id"
         size="small"
@@ -404,6 +470,17 @@ export default function ProductsPage() {
         pagination={tablePagination(query.data?.total)}
         columns={columns}
         onChange={onTableChange}
+        rowSelection={
+          canManage
+            ? {
+                selectedRowKeys: selected,
+                onChange: (keys) => setSelected(keys.map((k) => Number(k))),
+                // Список постраничный: без этого выделение на первой странице
+                // терялось бы при переходе на вторую.
+                preserveSelectedRowKeys: true,
+              }
+            : undefined
+        }
       />
 
       <Modal
@@ -460,8 +537,19 @@ export default function ProductsPage() {
           <Form.Item name="sku" label="Артикул">
             <Input maxLength={128} />
           </Form.Item>
+          {/* Подсказываем заведённые категории, но не запрещаем новую: карточка
+              товара — законное место, где категория появляется впервые. Справочник
+              подхватит её при следующем открытии окна категорий. */}
           <Form.Item name="category" label="Категория">
-            <Input maxLength={256} />
+            <AutoComplete
+              allowClear
+              filterOption={(input, option) =>
+                String(option?.value ?? "").toLowerCase().includes(input.toLowerCase())
+              }
+              options={(categories.data ?? []).map((c) => ({ value: c.name }))}
+            >
+              <Input maxLength={256} placeholder="Выберите или введите новую" />
+            </AutoComplete>
           </Form.Item>
 
           <Divider orientation="left" plain style={{ marginTop: 8 }}>
@@ -505,6 +593,17 @@ export default function ProductsPage() {
           </Form.Item>
         </Form>
       </Modal>
+
+      <ProductCategoriesModal
+        open={categoriesOpen}
+        onClose={() => setCategoriesOpen(false)}
+      />
+      <AssignCategoryModal
+        open={assignOpen}
+        productIds={selected}
+        onClose={() => setAssignOpen(false)}
+        onDone={() => setSelected([])}
+      />
 
       <NutritionModal
         target={nutritionOf ? { kind: "product", id: nutritionOf.product_id } : null}

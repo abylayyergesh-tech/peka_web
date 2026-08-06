@@ -109,6 +109,85 @@ export interface ProductUpdate extends NutritionFields {
   base_unit_id?: number | null;
 }
 
+// ----- product categories -----
+
+/** Справочник категорий товара.
+ *
+ *  Принадлежность товара к категории живёт в `products.category` (строка) — как в
+ *  iiko. Отдельная таблица нужна для двух вещей, которых строкой не добиться:
+ *  завести ПУСТУЮ категорию и потом наполнить её, и переименовать категорию
+ *  одним движением, а не правкой каждого товара. */
+export interface ProductCategoryOut {
+  product_category_id: number;
+  organization_id: number;
+  name: string;
+  /** Меньше — выше в списках; при равенстве порядок по имени. */
+  sort_order: number;
+  note: string | null;
+  /** Сколько товаров сейчас в категории — считает сервер. */
+  product_count: number;
+}
+
+export interface ProductCategoryCreate {
+  name: string;
+  sort_order?: number;
+  note?: string | null;
+}
+
+export interface ProductCategoryUpdate {
+  name?: string;
+  sort_order?: number;
+  note?: string | null;
+}
+
+export interface ProductsCategoryAssignResult {
+  updated: number;
+  /** Имя, которое встало у товаров; null — категорию сняли. */
+  category: string | null;
+}
+
+export async function listProductCategories(): Promise<ProductCategoryOut[]> {
+  const { data } = await api.get<ProductCategoryOut[]>("/product-categories");
+  return data;
+}
+
+export async function createProductCategory(
+  body: ProductCategoryCreate,
+): Promise<ProductCategoryOut> {
+  const { data } = await api.post<ProductCategoryOut>("/product-categories", body);
+  return data;
+}
+
+/** Переименование тянет за собой товары категории — одной транзакцией. */
+export async function updateProductCategory(
+  id: number,
+  body: ProductCategoryUpdate,
+): Promise<ProductCategoryOut> {
+  const { data } = await api.patch<ProductCategoryOut>(
+    `/product-categories/${id}`,
+    body,
+  );
+  return data;
+}
+
+/** Удаляет только категорию: её товары остаются, у них снимается категория. */
+export async function deleteProductCategory(id: number): Promise<ProductCategoryOut> {
+  const { data } = await api.delete<ProductCategoryOut>(`/product-categories/${id}`);
+  return data;
+}
+
+/** Перенести товары пачкой. `product_category_id: null` — снять категорию. */
+export async function assignProductsCategory(body: {
+  product_ids: number[];
+  product_category_id: number | null;
+}): Promise<ProductsCategoryAssignResult> {
+  const { data } = await api.post<ProductsCategoryAssignResult>(
+    "/products/category",
+    body,
+  );
+  return data;
+}
+
 export interface ProductListParams extends PageParams {
   kind?: ProductKind;
   include_inactive?: boolean;
@@ -121,6 +200,8 @@ export interface ProductListParams extends PageParams {
   nutrition?: "filled" | "missing";
   item_type?: ItemType;
   group?: string;
+  /** Категория товара; пустая строка — только товары БЕЗ категории. */
+  category?: string;
 }
 
 // ----- unit requests -----

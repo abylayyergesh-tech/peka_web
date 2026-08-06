@@ -200,13 +200,21 @@ export async function fetchSalesByProduct(
 }
 
 // ---- ABC ----
-export type AbcMetric = "revenue" | "profit" | "quantity";
+/** Показатель, по которому строится ABC. Только АДДИТИВНЫЕ величины: класс
+ *  задаётся накопленной долей в итоге, а доля от процента (маржи, фудкоста)
+ *  смысла не имеет — сервер такие значения не примет. */
+export type AbcMetric = "revenue" | "profit" | "quantity" | "cost" | "check_count";
+
+/** Строка на товар или на категорию — см. `AbcReport.group_by`. */
+export type AbcGroupBy = "product" | "category";
 
 export interface AbcRow extends ProductSalesRow {
   abc_class: "A" | "B" | "C";
   metric_value: string;
   share_pct: string;
   cumulative_pct: string;
+  /** Сколько товаров свернулось в строку. Только в разрезе по категориям. */
+  positions: number | null;
 }
 
 export interface AbcClassSummary {
@@ -222,6 +230,9 @@ export interface AbcReport {
   date_from: string;
   date_to: string;
   metric: AbcMetric;
+  group_by: AbcGroupBy;
+  /** Эхо отбора по категории; "" — товары без категории, null — отбора не было. */
+  category: string | null;
   a_pct: string;
   b_pct: string;
   rows: AbcRow[];
@@ -229,9 +240,16 @@ export interface AbcReport {
   metric_total: string;
 }
 
-export async function fetchAbc(
-  params: ReportRangeParams & { metric?: AbcMetric; a_pct?: number; b_pct?: number },
-): Promise<AbcReport> {
+export interface AbcParams extends ReportRangeParams {
+  metric?: AbcMetric;
+  group_by?: AbcGroupBy;
+  /** Одна категория; пустая строка — только товары без категории. */
+  category?: string;
+  a_pct?: number;
+  b_pct?: number;
+}
+
+export async function fetchAbc(params: AbcParams): Promise<AbcReport> {
   const { data } = await api.get<AbcReport>("/reports/abc", { params });
   return data;
 }
