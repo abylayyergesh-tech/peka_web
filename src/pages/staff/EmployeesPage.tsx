@@ -1,8 +1,9 @@
-import { PlusOutlined } from "@ant-design/icons";
+import { PaperClipOutlined, PlusOutlined } from "@ant-design/icons";
 import {
   App,
   Button,
   DatePicker,
+  Drawer,
   Form,
   Input,
   Modal,
@@ -10,6 +11,7 @@ import {
   Select,
   Space,
   Table,
+  Typography,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import dayjs from "dayjs";
@@ -30,6 +32,7 @@ import {
   type Role,
 } from "@/api/staff";
 import { useCan } from "@/auth/store";
+import AttachmentsPanel from "@/components/AttachmentsPanel";
 import { fmtDate } from "@/components/format";
 import { usePagination } from "@/components/usePagination";
 import { EmployeeStatusTag, ROLE_OPTIONS } from "@/pages/staff/shared";
@@ -62,6 +65,8 @@ export default function EmployeesPage() {
 
   const [editing, setEditing] = useState<EmployeeOut | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
+  /** Чьё личное дело открыто. */
+  const [filesFor, setFilesFor] = useState<EmployeeOut | null>(null);
   const [terminationDate, setTerminationDate] = useState<Dayjs | null>(null);
   const [form] = Form.useForm<EmployeeFormValues>();
 
@@ -161,10 +166,15 @@ export default function EmployeesPage() {
     },
     {
       title: "",
-      width: 150,
+      width: 230,
       render: (_, row) =>
         canManage && (
           <Space size="small">
+            {/* Личное дело — там же, где остальные действия по сотруднику:
+                отдельная страница ради списка из трёх сканов не нужна. */}
+            <a onClick={() => setFilesFor(row)}>
+              <PaperClipOutlined /> Личное дело
+            </a>
             <a onClick={() => openEdit(row)}>Изменить</a>
             {row.status === "active" && (
               <Popconfirm
@@ -266,6 +276,33 @@ export default function EmployeesPage() {
         columns={columns}
         scroll={{ x: 900 }}
       />
+
+      {/* Личное дело: сканы договора, удостоверения, заявлений. Файлы отдаёт
+          бэкенд по праву staff.manage — по прямой ссылке их не открыть. */}
+      <Drawer
+        open={filesFor != null}
+        onClose={() => setFilesFor(null)}
+        width={560}
+        title={
+          <Space direction="vertical" size={0}>
+            <span>Личное дело</span>
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              {filesFor?.full_name}
+              {filesFor?.position ? ` · ${filesFor.position}` : ""}
+            </Typography.Text>
+          </Space>
+        }
+        destroyOnClose
+      >
+        {filesFor && (
+          <AttachmentsPanel
+            owner={{ kind: "personnel", employeeId: filesFor.employee_id }}
+            canManage={canManage}
+            emptyText="В деле пока нет документов"
+            uploadHint="Договор, удостоверение, заявление — pdf, фото или документ Office"
+          />
+        )}
+      </Drawer>
 
       <Modal
         title={editing ? "Изменить сотрудника" : "Новый сотрудник"}

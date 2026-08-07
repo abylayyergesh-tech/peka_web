@@ -112,19 +112,25 @@ export default function ProductCategoriesModal({
 
   function openCreate() {
     setEditing(null);
-    form.resetFields();
-    form.setFieldsValue({ name: "", sort_order: 0 });
     setFormOpen(true);
   }
   function openEdit(row: ProductCategoryOut) {
     setEditing(row);
-    form.setFieldsValue({
-      name: row.name,
-      sort_order: row.sort_order,
-      note: row.note ?? undefined,
-    });
     setFormOpen(true);
   }
+
+  /** Значения задаются `initialValues`, а не `setFieldsValue` до открытия окна:
+   *  с `destroyOnHidden` форма создаётся заново на каждое открытие, и до него её
+   *  ещё нет (antd на это и жалуется: «useForm is not connected to any Form
+   *  element»). Состояние `editing` выставляется раньше, поэтому здесь уже видно,
+   *  правим мы категорию или создаём новую. */
+  const initialValues = editing
+    ? {
+        name: editing.name,
+        sort_order: editing.sort_order,
+        note: editing.note ?? undefined,
+      }
+    : { name: "", sort_order: 0, note: undefined };
 
   const columns: ColumnsType<ProductCategoryOut> = [
     { title: "Категория", dataIndex: "name" },
@@ -206,9 +212,14 @@ export default function ProductCategoriesModal({
         okText="Сохранить"
         cancelText="Отмена"
         confirmLoading={save.isPending}
-        destroyOnClose
+        destroyOnHidden
       >
-        <Form form={form} layout="vertical" onFinish={(v) => save.mutate(v)}>
+        <Form
+          form={form}
+          layout="vertical"
+          initialValues={initialValues}
+          onFinish={(v) => save.mutate(v)}
+        >
           <Form.Item
             name="name"
             label="Название"

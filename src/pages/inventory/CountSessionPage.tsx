@@ -89,12 +89,20 @@ export default function CountSessionPage() {
   const save = useMutation({
     mutationFn: (batch: SessionLineIn[]) => saveCountLines(sessionId, batch),
     onSuccess: (fresh) => {
-      // Сервер вернул лист целиком с пересчитанными расхождениями — заменяем
-      // данные, а не сшиваем их по кускам.
-      queryClient.setQueryData(["count-session", sessionId], (prev: unknown) =>
-        prev && typeof prev === "object"
-          ? { ...(prev as object), lines: fresh }
-          : prev,
+      // Сервер возвращает ТОЛЬКО сохранённые строки, уже с пересчитанным
+      // расхождением — вливаем их в лист по ключу «склад-товар». Тянуть весь лист
+      // (шестьсот позиций) после каждой цифры незачем; новая строка, которой в
+      // листе не было, добавляется в конец.
+      queryClient.setQueryData(
+        ["count-session", sessionId],
+        (prev: { session: unknown; lines: SessionLineOut[] } | undefined) => {
+          if (!prev) return prev;
+          const byKey = new Map(fresh.map((line) => [keyOf(line), line]));
+          const merged = prev.lines.map((line) => byKey.get(keyOf(line)) ?? line);
+          const known = new Set(prev.lines.map(keyOf));
+          const added = fresh.filter((line) => !known.has(keyOf(line)));
+          return { ...prev, lines: [...merged, ...added] };
+        },
       );
       queryClient.invalidateQueries({ queryKey: ["count-sessions"] });
     },

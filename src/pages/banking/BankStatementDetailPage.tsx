@@ -4,7 +4,9 @@
  * клиента (дебиторка). Контрагент, найденный по БИН, подставлен заранее, но платёж
  * всё равно создаёт человек: цена ошибки — оплата не тому.
  */
-import { CheckOutlined, StopOutlined, UndoOutlined, WarningOutlined } from "@ant-design/icons";
+import {
+  CheckOutlined, PaperClipOutlined, StopOutlined, UndoOutlined, WarningOutlined,
+} from "@ant-design/icons";
 import {
   Alert, App, Button, Card, Col, Popconfirm, Row, Segmented, Select, Space,
   Statistic, Table, Tag, Tooltip, Typography,
@@ -22,6 +24,7 @@ import {
 } from "@/api/banking";
 import { listAllCustomers } from "@/api/sales";
 import { useCan } from "@/auth/store";
+import AttachmentsPanel from "@/components/AttachmentsPanel";
 import { Money, fmtDate, fmtDateTime } from "@/components/format";
 import { usePagination } from "@/components/usePagination";
 import { useSupplierRefs } from "@/pages/procurement/refData";
@@ -346,6 +349,27 @@ export default function BankStatementDetailPage() {
         columns={columns}
         locale={{ emptyText: "Операций в этой группе нет" }}
       />
+
+      {/* Исходный файл выписки бэкенд сохраняет сам при импорте — здесь его
+          можно скачать и доложить рядом pdf из клиент-банка. Разбор это
+          интерпретация, а спорную строку сверяют с тем, что прислал банк. */}
+      <Card
+        size="small"
+        title={
+          <Space>
+            <PaperClipOutlined />
+            Файлы выписки
+          </Space>
+        }
+        style={{ marginTop: 16 }}
+      >
+        <AttachmentsPanel
+          owner={{ kind: "statement", statementId }}
+          canManage={canManage}
+          emptyText="Файлов нет — выписка загружена до того, как их начали хранить"
+          uploadHint="xlsx из банка, pdf или скан"
+        />
+      </Card>
     </div>
   );
 }

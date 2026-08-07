@@ -83,16 +83,18 @@ export default function CountSessionsPage() {
     onError: (e) => message.error(errorMessage(e)),
   });
 
-  function openCreate() {
-    form.resetFields();
-    form.setFieldsValue({
-      name: `Инвентаризация ${dayjs().format("DD.MM.YYYY")}`,
-      count_date: dayjs(),
-      warehouse_ids: [],
-      prefill: true,
-    });
-    setModalOpen(true);
-  }
+  /** Значения формы задаются `initialValues`, а НЕ `setFieldsValue` до открытия.
+   *
+   *  Окно с `destroyOnHidden` создаёт форму заново на каждое открытие, поэтому до
+   *  него формы ещё нет — antd на это и жалуется («useForm is not connected to any
+   *  Form element»), а подставленные значения могут не доехать. `initialValues`
+   *  применяются ровно в момент появления формы. */
+  const initialValues = {
+    name: `Инвентаризация ${dayjs().format("DD.MM.YYYY")}`,
+    count_date: dayjs(),
+    warehouse_ids: [] as number[],
+    prefill: true,
+  };
 
   const columns: ColumnsType<CountSessionOut> = [
     {
@@ -194,7 +196,7 @@ export default function CountSessionsPage() {
       >
         <h2 style={{ margin: 0 }}>Инвентаризация</h2>
         {canCount && (
-          <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => setModalOpen(true)}>
             Открыть сессию
           </Button>
         )}
@@ -252,9 +254,14 @@ export default function CountSessionsPage() {
         okText="Открыть"
         cancelText="Отмена"
         confirmLoading={create.isPending}
-        destroyOnClose
+        destroyOnHidden
       >
-        <Form form={form} layout="vertical" onFinish={(v) => create.mutate(v)}>
+        <Form
+          form={form}
+          layout="vertical"
+          initialValues={initialValues}
+          onFinish={(v) => create.mutate(v)}
+        >
           <Form.Item
             name="name"
             label="Название"

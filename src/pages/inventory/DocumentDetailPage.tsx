@@ -1,16 +1,19 @@
 /** /documents/:id — карточка документа: шапка, строки, действия
  *  (провести / редактировать черновик / удалить). */
-import { ArrowLeftOutlined } from "@ant-design/icons";
+import { ArrowLeftOutlined, PaperClipOutlined } from "@ant-design/icons";
 import {
   Alert,
   App,
   Button,
+  Card,
   Descriptions,
+  Modal,
   Popconfirm,
   Result,
   Space,
   Spin,
   Table,
+  Typography,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useState } from "react";
@@ -25,6 +28,7 @@ import {
   type DocumentLineOut,
 } from "@/api/inventory";
 import { useCan } from "@/auth/store";
+import AttachmentsPanel from "@/components/AttachmentsPanel";
 import { fmtDate, fmtDateTime, fmtMoney, fmtQty } from "@/components/format";
 import DocumentEditModal from "@/pages/inventory/DocumentEditModal";
 import {
@@ -45,6 +49,8 @@ export default function DocumentDetailPage() {
   const canManage = useCan("inventory.manage");
   const canPostReceipt = useCan("receipt.post");
   const [editOpen, setEditOpen] = useState(false);
+  /** Окно проведения: там же предлагается приложить фото накладной. */
+  const [postOpen, setPostOpen] = useState(false);
 
   const products = useProductsLookup();
   const warehouses = useWarehousesLookup();
@@ -175,17 +181,9 @@ export default function DocumentDetailPage() {
               <Button onClick={() => setEditOpen(true)}>Редактировать</Button>
             )}
             {canPost && (
-              <Popconfirm
-                title="Провести документ?"
-                description="После проведения документ нельзя изменить."
-                okText="Провести"
-                cancelText="Отмена"
-                onConfirm={() => post.mutate()}
-              >
-                <Button type="primary" loading={post.isPending}>
-                  Провести
-                </Button>
-              </Popconfirm>
+              <Button type="primary" loading={post.isPending} onClick={() => setPostOpen(true)}>
+                Провести
+              </Button>
             )}
             {canManage && (
               <Popconfirm
@@ -260,6 +258,59 @@ export default function DocumentDetailPage() {
           ) : null
         }
       />
+
+      {/* Фото бумажной накладной. Живёт рядом с документом всегда, а не только
+          у прихода: сфотографировать бумагу могут и к списанию, и к перемещению.
+          Файлы отдаёт бэкенд по авторизованной ручке. */}
+      <Card
+        size="small"
+        title={
+          <Space>
+            <PaperClipOutlined />
+            Фото накладной
+          </Space>
+        }
+        style={{ marginTop: 16 }}
+      >
+        <AttachmentsPanel
+          owner={{ kind: "invoice", documentId: docId }}
+          canManage={canPost || canManage}
+          emptyText="Фото накладной не приложены"
+          uploadHint="Фото бумажной накладной или её pdf"
+        />
+      </Card>
+
+      {/* Проведение: перед необратимым действием предлагаем приложить фото —
+          после проведения к бумаге возвращаются уже за сверкой, и если её не
+          сняли сейчас, не снимут никогда. */}
+      <Modal
+        open={postOpen}
+        title="Провести документ"
+        okText="Провести"
+        cancelText="Отмена"
+        confirmLoading={post.isPending}
+        onCancel={() => setPostOpen(false)}
+        onOk={() => post.mutate(undefined, { onSuccess: () => setPostOpen(false) })}
+        width={560}
+      >
+        <Alert
+          type="warning"
+          showIcon
+          style={{ marginBottom: 12 }}
+          message="После проведения документ нельзя изменить"
+          description="Остатки и себестоимость пересчитаются по строкам документа."
+        />
+        <Typography.Text strong>Фото накладной</Typography.Text>
+        <Typography.Paragraph type="secondary" style={{ fontSize: 12, marginBottom: 8 }}>
+          Необязательно, но лучше сейчас: файл сохраняется сразу, отдельной кнопки
+          «сохранить» у него нет.
+        </Typography.Paragraph>
+        <AttachmentsPanel
+          owner={{ kind: "invoice", documentId: docId }}
+          uploadHint="Снимок бумажной накладной или pdf"
+          emptyText="Пока ничего не приложено"
+        />
+      </Modal>
 
       {editableType && (
         <DocumentEditModal
