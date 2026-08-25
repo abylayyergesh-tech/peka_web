@@ -8,6 +8,7 @@ export type RequestType =
   | "advance"
   | "schedule"
   | "vacation"
+  | "sick_leave"
   | "resignation"
   | "timesheet_correction"
   | "loan"
@@ -32,6 +33,14 @@ export interface VacationRequestCreate {
   /** Сумма отпускных: только для оплачиваемого отпуска — именно она
    * регистрируется переводом на финальной стадии. */
   amount?: string | null;
+  comment?: string | null;
+}
+
+export interface SickLeaveRequestCreate {
+  type: "sick_leave";
+  start_date: string;
+  end_date: string;
+  /** Суммы у больничного нет: его считают по среднему, а не заявлением. */
   comment?: string | null;
 }
 
@@ -85,6 +94,7 @@ export interface HiringRequestCreate {
 export type RequestCreate =
   | AdvanceRequestCreate
   | VacationRequestCreate
+  | SickLeaveRequestCreate
   | ResignationRequestCreate
   | ScheduleRequestCreate
   | LoanRequestCreate

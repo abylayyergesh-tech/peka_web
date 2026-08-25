@@ -9,6 +9,7 @@ import type {
   PaymentKind,
   RunKind,
   RunStatus,
+  TimesheetDayKind,
   TimesheetDaySource,
   TimesheetStatus,
 } from "@/api/payroll";
@@ -120,19 +121,44 @@ export function fmtShare(value: string | null | undefined): string {
 }
 
 const SOURCE_META: Record<TimesheetDaySource, { color: string; title: string }> = {
-  attendance: { color: "#1677ff", title: "Автосбор из отметок" },
+  attendance: { color: "#1677ff", title: "Автосбор из отметок смен" },
   manual: { color: "#d48806", title: "Правка вручную" },
   correction: { color: "#c41d7f", title: "Согласованный перерасчёт" },
+  leave: { color: "#389e0d", title: "Из истории отпусков и больничных" },
 };
 
-/** Клетка табеля: цвет говорит, откуда взялось значение. */
+/** Отметки отсутствий — буквами, как в бумажном табеле: их узнают без легенды. */
+export const ABSENCE_META: Record<
+  Exclude<TimesheetDayKind, "work">,
+  { mark: string; label: string; color: string }
+> = {
+  dayoff: { mark: "В", label: "Выходной", color: "#8c8c8c" },
+  sick: { mark: "Б", label: "Больничный", color: "#c41d7f" },
+  vacation: { mark: "О", label: "Отпуск (оплачиваемый)", color: "#389e0d" },
+  vacation_unpaid: { mark: "БС", label: "Отпуск без содержания", color: "#d46b08" },
+};
+
+/** Клетка табеля: смены числом, отсутствие буквой; цвет говорит об источнике. */
 export function ShiftCell({
   value,
   source,
+  kind = "work",
 }: {
   value: string | undefined;
   source: TimesheetDaySource | undefined;
+  kind?: TimesheetDayKind;
 }) {
+  if (kind !== "work") {
+    const absence = ABSENCE_META[kind];
+    const meta = source ? SOURCE_META[source] : undefined;
+    return (
+      <Tooltip
+        title={absence.label + (meta ? ` · ${meta.title}` : "")}
+      >
+        <span style={{ color: absence.color, fontWeight: 600 }}>{absence.mark}</span>
+      </Tooltip>
+    );
+  }
   if (value == null || Number(value) === 0) {
     return <span style={{ color: "#bfbfbf" }}>·</span>;
   }

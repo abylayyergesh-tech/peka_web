@@ -244,12 +244,24 @@ export default function DocumentDetailPage() {
         size="small"
         dataSource={doc.lines}
         columns={columns}
-        pagination={false}
+        // Накладная из оцифровки или из iiko — это сотни строк, и без страниц
+        // карточка превращалась в бесконечную прокрутку. Строки приходят вместе
+        // с документом, поэтому страницы считаются на клиенте: доливать с
+        // сервера нечего.
+        pagination={{
+          pageSize: 50,
+          showSizeChanger: true,
+          pageSizeOptions: [50, 100, 200],
+          showTotal: (t) => `Строк: ${t}`,
+        }}
         summary={() =>
           receiptTotal != null ? (
             <Table.Summary.Row>
               <Table.Summary.Cell index={0} colSpan={columns.length - 1} align="right">
-                <b>Итого</b>
+                {/* «по документу», а не просто «Итого»: сумма считается по всем
+                    строкам, а под ней на второй странице видно только часть —
+                    без уточнения итог читался бы как сумма страницы. */}
+                <b>Итого по документу</b>
               </Table.Summary.Cell>
               <Table.Summary.Cell index={1} align="right">
                 <b>{fmtMoney(receiptTotal)}</b>

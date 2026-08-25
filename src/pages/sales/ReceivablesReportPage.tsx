@@ -5,17 +5,22 @@
  * мгновенно, а лишний round-trip на каждую букву ничего не улучшил бы.
  */
 import { SearchOutlined } from "@ant-design/icons";
-import { DatePicker, Input, Result, Space, Table } from "antd";
+import { DatePicker, Input, Result, Select, Space, Table, Tooltip } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import type { Dayjs } from "dayjs";
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 
 import { errorMessage } from "@/api/client";
 import { reportReceivables, type CustomerBalanceOut } from "@/api/sales";
 import { useCan } from "@/auth/store";
 import { Money } from "@/components/format";
+import {
+  EntityTag,
+  entityFilterOptions,
+  useCompanyEntities,
+} from "@/pages/finance/companyEntities";
 
 /** Регистр и «ё» не должны мешать поиску: «пекарня» находит «Пекарню», а
  *  «елка» — «Ёлку». */
@@ -38,10 +43,17 @@ export default function ReceivablesReportPage() {
   const [asOf, setAsOf] = useState<Dayjs | null>(null);
   const [search, setSearch] = useState("");
   const asOfStr = asOf?.format("YYYY-MM-DD");
+  // Юрлицо живёт в адресе, а не в состоянии: на этот экран проваливаются ссылкой
+  // из «Денег по юр. лицам», и такую ссылку должно быть можно переслать или
+  // положить в закладки.
+  const [params, setParams] = useSearchParams();
+  const entityFilter = params.get("company_entity") ?? undefined;
+  const entities = useCompanyEntities(true);
 
   const query = useQuery({
-    queryKey: ["receivables-report", { asOf: asOfStr }],
-    queryFn: () => reportReceivables({ as_of: asOfStr }),
+    queryKey: ["receivables-report", { asOf: asOfStr, entityFilter }],
+    queryFn: () =>
+      reportReceivables({ as_of: asOfStr, company_entity: entityFilter }),
     enabled: canRead,
   });
 
@@ -67,6 +79,30 @@ export default function ReceivablesReportPage() {
       title: "Клиент",
       dataIndex: "customer_name",
       render: (v: string, row) => <Link to={`/customers/${row.customer_id}`}>{v}</Link>,
+    },
+    {
+      title: "Юр. лицо",
+      dataIndex: "company_entity_id",
+      width: 190,
+      render: (id: number | null) => (
+        <EntityTag entities={entities.data} id={id} />
+      ),
+    },
+    {
+      title: "Начислено",
+      dataIndex: "total_charged",
+      align: "right",
+      width: 150,
+      sorter: (a, b) => Number(a.total_charged) - Number(b.total_charged),
+      render: (v: string) => <Money value={v} />,
+    },
+    {
+      title: "Оплачено",
+      dataIndex: "total_paid",
+      align: "right",
+      width: 150,
+      sorter: (a, b) => Number(a.total_paid) - Number(b.total_paid),
+      render: (v: string) => <Money value={v} />,
     },
     {
       title: "Долг",
@@ -103,6 +139,22 @@ export default function ReceivablesReportPage() {
             prefix={<SearchOutlined />}
             style={{ width: 260 }}
           />
+          <Tooltip title="Чья дебиторка: у каждого нашего юр. лица свои долги">
+            <Select
+              allowClear
+              placeholder="Все юр. лица"
+              style={{ width: 210 }}
+              value={entityFilter}
+              loading={entities.isPending}
+              options={entityFilterOptions(entities.data)}
+              onChange={(v) => {
+                const next = new URLSearchParams(params);
+                if (v) next.set("company_entity", v);
+                else next.delete("company_entity");
+                setParams(next, { replace: true });
+              }}
+            />
+          </Tooltip>
           <DatePicker
             placeholder="На дату"
             allowClear
@@ -125,10 +177,10 @@ export default function ReceivablesReportPage() {
         summary={() =>
           rows.length > 0 ? (
             <Table.Summary.Row>
-              <Table.Summary.Cell index={0}>
+              <Table.Summary.Cell index={0} colSpan={4}>
                 <strong>{search ? "Итого по найденным" : "Итого"}</strong>
               </Table.Summary.Cell>
-              <Table.Summary.Cell index={1} align="right">
+              <Table.Summary.Cell index={4} align="right">
                 <strong style={{ color: total > 0 ? "#cf1322" : undefined }}>
                   <Money value={total} />
                 </strong>

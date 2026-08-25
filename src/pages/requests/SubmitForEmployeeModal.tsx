@@ -129,6 +129,13 @@ export default function SubmitForEmployeeModal({
           amount: v.is_paid && v.amount != null ? String(v.amount) : null,
           comment,
         };
+      case "sick_leave":
+        return {
+          type: "sick_leave",
+          start_date: v.period![0].format("YYYY-MM-DD"),
+          end_date: v.period![1].format("YYYY-MM-DD"),
+          comment,
+        };
       case "resignation":
         return {
           type: "resignation",
@@ -284,6 +291,17 @@ export default function SubmitForEmployeeModal({
         {selectedType === "advance" && (
           <Form.Item name="amount" label="Сумма аванса" rules={[{ required: true }]}>
             <InputNumber min={1} step={10000} style={{ width: "100%" }} />
+          </Form.Item>
+        )}
+
+        {selectedType === "sick_leave" && (
+          <Form.Item
+            name="period"
+            label="Период больничного"
+            rules={[{ required: true }]}
+            extra="Дни отметятся в табеле буквой Б — вручную их дублировать не нужно"
+          >
+            <DatePicker.RangePicker format="DD.MM.YYYY" style={{ width: "100%" }} />
           </Form.Item>
         )}
 

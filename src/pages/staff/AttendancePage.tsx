@@ -1,8 +1,9 @@
-import { App, DatePicker, Form, Modal, Select, Space, Table, Tag } from "antd";
+import { App, DatePicker, Form, Modal, Select, Space, Table, Tag, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import dayjs from "dayjs";
 import type { Dayjs } from "dayjs";
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { errorMessage } from "@/api/client";
@@ -166,7 +167,19 @@ export default function AttendancePage() {
 
   return (
     <div>
-      <h2 style={{ marginTop: 0 }}>Табель</h2>
+      {/* Раньше заголовок был «Табель» — тот же, что у месячной сетки в зарплате,
+          и два разных экрана назывались одинаково. Здесь — журнал отметок:
+          отдельные смены со временем и геопозицией. Месячная сетка (смены и
+          отсутствия по дням) живёт в «Табеле», ссылка ниже. */}
+      <Space style={{ justifyContent: "space-between", width: "100%" }} align="baseline">
+        <h2 style={{ marginTop: 0 }}>Отметки смен</h2>
+        <Link to="/payroll/timesheet">Табель за месяц →</Link>
+      </Space>
+      <Typography.Paragraph type="secondary">
+        Здесь отдельные смены: когда пришёл, когда ушёл, где отметился. Сетка
+        месяца со сменами и отсутствиями (больничный, отпуск, БС) — в{" "}
+        <Link to="/payroll/timesheet">табеле</Link>, туда эти отметки и собираются.
+      </Typography.Paragraph>
 
       <Space style={{ marginBottom: 16 }} wrap>
         <Select

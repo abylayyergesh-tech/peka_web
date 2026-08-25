@@ -250,6 +250,9 @@ export interface CustomerOut {
   /** Прайс-лист клиента; null — платит по базовым ценам («Основное меню»). */
   menu_id: number | null;
   billing_mode: BillingMode;
+  /** К какому НАШЕМУ юр. лицу отнесён клиент: от его имени с ним работают, и в
+   *  его дебиторку попадает долг. null — ни к какому. */
+  company_entity_id: number | null;
   is_active: boolean;
   created_at: string;
   updated_at: string | null;
@@ -267,6 +270,8 @@ export interface CustomerCreate {
   menu_id?: number | null;
   /** Не задан — бэкенд заводит клиента на оплату по каждому заказу. */
   billing_mode?: BillingMode;
+  /** Наше юр. лицо, к которому относится клиент. */
+  company_entity_id?: number | null;
 }
 
 export type CustomerUpdate = Partial<CustomerCreate>;
@@ -319,10 +324,14 @@ export interface CustomerPaymentCreate {
   amount: number | string;
   method?: string | null;
   note?: string | null;
+  /** На какое наше юр. лицо пришли деньги. Пусто — то, к которому отнесён клиент. */
+  company_entity_id?: number | null;
 }
 
 export interface CustomerPaymentOut {
   customer_payment_id: number;
+  /** На какое наше юр. лицо пришли деньги. */
+  company_entity_id: number | null;
   customer_id: number;
   payment_date: string;
   amount: string;
@@ -384,12 +393,20 @@ export async function customerLedger(
 export interface CustomerBalanceOut {
   customer_id: number;
   customer_name: string;
+  /** К какому нашему юр. лицу отнесён клиент; null — ни к какому. */
+  company_entity_id: number | null;
+  /** Начислено в долг за всё время. */
+  total_charged: string;
+  /** Оплачено (отменённый платёж из суммы уходит). */
+  total_paid: string;
   balance: string;
 }
 
 export async function reportReceivables(params: {
   as_of?: string;
   customer?: number;
+  /** id нашего юр. лица или "none" — только записи без юр. лица. */
+  company_entity?: string;
 }): Promise<CustomerBalanceOut[]> {
   const { data } = await api.get<CustomerBalanceOut[]>("/reports/receivables", { params });
   return data;
@@ -410,8 +427,9 @@ export interface SalesReport {
 }
 
 export async function reportSales(params: {
-  date_from?: string;
-  date_to?: string;
+  /** Границы периода. Имена канонические (`from`/`to`) — те же во всём API. */
+  from?: string;
+  to?: string;
   shift_id?: number;
 }): Promise<SalesReport> {
   const { data } = await api.get<SalesReport>("/reports/sales", { params });
@@ -455,8 +473,9 @@ export interface ShiftReport {
 export interface ShiftListParams extends PageParams {
   status?: string;
   warehouse?: number;
-  date_from?: string;
-  date_to?: string;
+  /** Границы периода. Имена канонические (`from`/`to`) — те же во всём API. */
+  from?: string;
+  to?: string;
 }
 
 export async function openShift(body: ShiftOpen): Promise<ShiftOut> {
@@ -655,8 +674,9 @@ export interface ReplacementsSummary {
 
 export interface ReplacementListParams extends PageParams {
   customer?: number;
-  date_from?: string;
-  date_to?: string;
+  /** Границы периода. Имена канонические (`from`/`to`) — те же во всём API. */
+  from?: string;
+  to?: string;
 }
 
 export async function listReplacements(
@@ -709,8 +729,9 @@ export interface CheckCloseResult {
 export interface CheckListParams extends PageParams {
   shift?: number;
   status?: string;
-  date_from?: string;
-  date_to?: string;
+  /** Границы периода. Имена канонические (`from`/`to`) — те же во всём API. */
+  from?: string;
+  to?: string;
 }
 
 export async function createCheck(body: CheckCreate): Promise<CheckOut> {

@@ -1,14 +1,24 @@
-/** /reports/payables — supplier balances report (cap report.read). */
-import { Alert, DatePicker, Select, Space, Table } from "antd";
+/** /reports/payables — кредиторка по поставщикам (право report.read).
+ *
+ *  Фильтр «юр. лицо» отвечает на вопрос «чей это долг»: у бизнеса два ИП, и за
+ *  долг перед поставщиком отвечает конкретное из них. Значение живёт в адресе, а
+ *  не в состоянии: на этот экран проваливаются ссылкой из «Денег по юр. лицам»,
+ *  и такую ссылку должно быть можно переслать или сохранить в закладки. */
+import { Alert, DatePicker, Select, Space, Table, Tooltip } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import type { Dayjs } from "dayjs";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
 import { errorMessage } from "@/api/client";
 import { reportPayables, type SupplierBalanceOut } from "@/api/procurement";
 import { Money } from "@/components/format";
+import {
+  entityFilterOptions,
+  entityName,
+  useCompanyEntities,
+} from "@/pages/finance/companyEntities";
 import { useSupplierRefs } from "@/pages/procurement/refData";
 
 export default function PayablesReportPage() {
@@ -16,10 +26,17 @@ export default function PayablesReportPage() {
   const [supplier, setSupplier] = useState<number | undefined>(undefined);
   const suppliers = useSupplierRefs();
   const asOfStr = asOf ? asOf.format("YYYY-MM-DD") : undefined;
+  const [params, setParams] = useSearchParams();
+  const entityFilter = params.get("company_entity") ?? undefined;
+  const entities = useCompanyEntities(true);
 
   const query = useQuery({
-    queryKey: ["payables", { as_of: asOfStr ?? null, supplier: supplier ?? null }],
-    queryFn: () => reportPayables({ as_of: asOfStr, supplier }),
+    queryKey: ["payables", {
+      as_of: asOfStr ?? null, supplier: supplier ?? null,
+      entity: entityFilter ?? null,
+    }],
+    queryFn: () =>
+      reportPayables({ as_of: asOfStr, supplier, company_entity: entityFilter }),
   });
 
   const columns: ColumnsType<SupplierBalanceOut> = [
@@ -85,7 +102,38 @@ export default function PayablesReportPage() {
           options={suppliers.options}
           loading={suppliers.isPending}
         />
+        <Tooltip title="Чей это долг: у каждого нашего юр. лица своя кредиторка">
+          <Select
+            allowClear
+            placeholder="Все юр. лица"
+            style={{ width: 210 }}
+            value={entityFilter}
+            loading={entities.isPending}
+            options={entityFilterOptions(entities.data)}
+            onChange={(v) => {
+              const next = new URLSearchParams(params);
+              if (v) next.set("company_entity", v);
+              else next.delete("company_entity");
+              setParams(next, { replace: true });
+            }}
+          />
+        </Tooltip>
       </Space>
+      {entityFilter && (
+        <Alert
+          type="info"
+          showIcon
+          style={{ marginBottom: 16 }}
+          message={
+            entityFilter === "none"
+              ? "Показаны долги без юр. лица — записи, заведённые до разделения"
+              : `Показаны долги за «${entityName(
+                  entities.data,
+                  Number(entityFilter),
+                )}»`
+          }
+        />
+      )}
       {query.isError && (
         <Alert
           type="error"

@@ -18,6 +18,10 @@ import {
   type BillingMode, type CustomerPaymentOut, type ReceivableEntryOut,
 } from "@/api/sales";
 import { useCan } from "@/auth/store";
+import {
+  EntityTag,
+  useCompanyEntities,
+} from "@/pages/finance/companyEntities";
 import { Money, fmtDate } from "@/components/format";
 import CustomerOutletsTab from "@/pages/sales/CustomerOutletsTab";
 import {
@@ -37,6 +41,8 @@ const PAYMENT_METHOD_OPTIONS = [
 ];
 
 interface PaymentFormValues {
+  /** На какое наше юр. лицо пришли деньги. Пусто — юрлицо самого клиента. */
+  company_entity_id?: number;
   payment_date: Dayjs;
   amount: number;
   method?: string;
@@ -54,6 +60,8 @@ export default function CustomerDetailPage() {
   const canManageCustomer = useCan("customer.manage");
   const [payModalOpen, setPayModalOpen] = useState(false);
   const [payForm] = Form.useForm();
+
+  const entities = useCompanyEntities(true);
 
   const customer = useQuery({
     queryKey: ["customer", customerId],
@@ -107,6 +115,7 @@ export default function CustomerDetailPage() {
   const registerPayment = useMutation({
     mutationFn: (v: PaymentFormValues) =>
       recordCustomerPayment(customerId, {
+        company_entity_id: v.company_entity_id,
         payment_date: v.payment_date.format("YYYY-MM-DD"),
         amount: v.amount,
         method: v.method ?? null,
@@ -142,6 +151,12 @@ export default function CustomerDetailPage() {
 
   const paymentColumns: ColumnsType<CustomerPaymentOut> = [
     { title: "Дата", dataIndex: "payment_date", width: 120, render: (v: string) => fmtDate(v) },
+    {
+      title: "Юр. лицо",
+      dataIndex: "company_entity_id",
+      width: 180,
+      render: (id: number | null) => <EntityTag entities={entities.data} id={id} />,
+    },
     {
       title: "Сумма",
       dataIndex: "amount",
@@ -384,6 +399,25 @@ export default function CustomerDetailPage() {
             rules={[{ required: true, message: "Обязательное поле" }]}
           >
             <InputNumber min={0.01} style={{ width: "100%" }} />
+          </Form.Item>
+          {/* Деньги приходят на счёт конкретного нашего юрлица, и его дебиторка
+              уменьшается. Пусто — то юрлицо, к которому отнесён клиент: долг
+              гасится там же, где возник. */}
+          <Form.Item
+            name="company_entity_id"
+            label="На наше юр. лицо"
+            tooltip="Уменьшится дебиторка этого юр. лица. Пусто — юр. лицо клиента"
+          >
+            <Select
+              allowClear
+              showSearch
+              optionFilterProp="label"
+              placeholder="Юр. лицо клиента"
+              loading={entities.isPending}
+              options={(entities.data ?? [])
+                .filter((e) => e.is_active)
+                .map((e) => ({ value: e.company_entity_id, label: e.name }))}
+            />
           </Form.Item>
           <Form.Item name="method" label="Способ">
             <Select allowClear options={PAYMENT_METHOD_OPTIONS} />

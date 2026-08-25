@@ -1,11 +1,12 @@
 /** /customers — customer list + CRUD modal (cap customer.manage). */
 import { PlusOutlined } from "@ant-design/icons";
 import {
-  App, Button, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Table, Tag, Tooltip,
+  Alert, App, Button, Form, Input, InputNumber, Modal, Popconfirm, Select, Space,
+  Table, Tag, Tooltip,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import { useState } from "react";
-import { Link } from "react-router-dom";
+import { useMemo, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { errorMessage } from "@/api/client";
@@ -14,6 +15,13 @@ import {
   type BillingMode, type CustomerCreate, type CustomerOut,
 } from "@/api/sales";
 import { useCan } from "@/auth/store";
+import {
+  EntityTag,
+  NO_ENTITY_FILTER,
+  entityFilterOptions,
+  useCompanyEntities,
+} from "@/pages/finance/companyEntities";
+import { assignCustomersEntity } from "@/api/companies";
 import { Money } from "@/components/format";
 import { usePagination } from "@/components/usePagination";
 import {
@@ -37,6 +45,15 @@ export default function CustomersPage() {
   const billing_mode = modeFilter === "all" ? undefined : modeFilter;
   const [editing, setEditing] = useState<CustomerOut | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
+  // Фильтр по нашему юр. лицу — в адресе: на страницу проваливаются ссылкой из
+  // «Денег по юр. лицам» («у этого юрлица 24 клиента»).
+  const [urlParams, setUrlParams] = useSearchParams();
+  const entityFilter = urlParams.get("company_entity") ?? undefined;
+  const entities = useCompanyEntities(true);
+  // Выделенные клиенты — их относят к юрлицу пачкой: клиентов сотни, а юрлиц два.
+  const [selected, setSelected] = useState<number[]>([]);
+  const [assignOpen, setAssignOpen] = useState(false);
+  const [assignTarget, setAssignTarget] = useState<string | undefined>();
   const [form] = Form.useForm();
 
   const query = useQuery({
@@ -105,6 +122,41 @@ export default function CustomersPage() {
     setModalOpen(true);
   }
 
+  /** Клиенты выбранного юрлица. Фильтр применяется в браузере, потому что список
+   *  и так приходит страницами по 50: отдельный серверный фильтр здесь дал бы
+   *  тот же результат за лишнюю ручку. Ссылка из сводки ведёт именно сюда. */
+  const rows = useMemo(() => {
+    const all = query.data?.items ?? [];
+    if (!entityFilter) return all;
+    if (entityFilter === NO_ENTITY_FILTER) {
+      return all.filter((c) => c.company_entity_id == null);
+    }
+    return all.filter((c) => String(c.company_entity_id) === entityFilter);
+  }, [query.data?.items, entityFilter]);
+
+  const assign = useMutation({
+    mutationFn: () =>
+      assignCustomersEntity({
+        customer_ids: selected,
+        company_entity_id:
+          assignTarget && assignTarget !== NO_ENTITY_FILTER
+            ? Number(assignTarget)
+            : null,
+      }),
+    onSuccess: (res) => {
+      message.success(
+        res.company_entity_name
+          ? `Отнесено клиентов: ${res.updated} → «${res.company_entity_name}»`
+          : `Привязка снята у ${res.updated} клиентов`,
+      );
+      setAssignOpen(false);
+      setSelected([]);
+      queryClient.invalidateQueries({ queryKey: ["customers"] });
+      queryClient.invalidateQueries({ queryKey: ["company-money"] });
+    },
+    onError: (e) => message.error(errorMessage(e)),
+  });
+
   const columns: ColumnsType<CustomerOut> = [
     {
       title: "Название",
@@ -119,6 +171,14 @@ export default function CustomersPage() {
       width: 150,
       render: (v: string | null) =>
         v ?? <span style={{ color: "#999" }}>самост. точка</span>,
+    },
+    {
+      // НАШЕ юрлицо, а не клиентское: от его имени с клиентом работают, и в его
+      // дебиторку попадает долг. БИН клиента — колонка выше, это другое.
+      title: "Наше юр. лицо",
+      dataIndex: "company_entity_id",
+      width: 190,
+      render: (id: number | null) => <EntityTag entities={entities.data} id={id} />,
     },
     {
       title: "Прайс-лист",
@@ -220,6 +280,21 @@ export default function CustomersPage() {
             ]}
           />
           <Select
+            allowClear
+            placeholder="Все юр. лица"
+            style={{ width: 200 }}
+            value={entityFilter}
+            loading={entities.isPending}
+            options={entityFilterOptions(entities.data)}
+            onChange={(v) => {
+              const next = new URLSearchParams(urlParams);
+              if (v) next.set("company_entity", v);
+              else next.delete("company_entity");
+              setUrlParams(next, { replace: true });
+              setSelected([]);
+            }}
+          />
+          <Select
             style={{ width: 210 }}
             value={modeFilter}
             onChange={(v) => {
@@ -241,13 +316,49 @@ export default function CustomersPage() {
           </Button>
         )}
       </Space>
+      {selected.length > 0 && (
+        <Alert
+          type="info"
+          showIcon
+          style={{ marginBottom: 12 }}
+          message={`Выбрано клиентов: ${selected.length}`}
+          action={
+            <Space>
+              <Button
+                size="small"
+                type="primary"
+                onClick={() => {
+                  setAssignTarget(undefined);
+                  setAssignOpen(true);
+                }}
+              >
+                Отнести к юр. лицу
+              </Button>
+              <Button size="small" onClick={() => setSelected([])}>
+                Снять
+              </Button>
+            </Space>
+          }
+        />
+      )}
       <Table
         rowKey="customer_id"
         size="small"
         loading={query.isPending}
-        dataSource={query.data?.items}
+        dataSource={rows}
         pagination={tablePagination(query.data?.total)}
         columns={columns}
+        rowSelection={
+          canManage
+            ? {
+                selectedRowKeys: selected,
+                onChange: (keys) => setSelected(keys.map((k) => Number(k))),
+                // Список постраничный: без этого выделение на первой странице
+                // терялось бы при переходе на вторую.
+                preserveSelectedRowKeys: true,
+              }
+            : undefined
+        }
       />
       <Modal
         title={editing ? "Изменить клиента" : "Новый клиент"}
@@ -323,6 +434,25 @@ export default function CustomersPage() {
           >
             <Select options={BILLING_MODE_OPTIONS} />
           </Form.Item>
+          <Form.Item
+            name="company_entity_id"
+            label="Наше юр. лицо"
+            tooltip="От его имени работают с этим клиентом, и в его дебиторку попадёт долг. Пусто — клиент ни к кому не отнесён."
+          >
+            <Select
+              allowClear
+              showSearch
+              optionFilterProp="label"
+              placeholder="Не отнесён"
+              loading={entities.isPending}
+              options={(entities.data ?? [])
+                .filter((e) => e.is_active)
+                .map((e) => ({
+                  value: e.company_entity_id,
+                  label: `${e.name} · БИН ${e.tax_id}`,
+                }))}
+            />
+          </Form.Item>
           <Form.Item name="credit_limit" label="Кредитный лимит">
             <InputNumber min={0} style={{ width: "100%" }} />
           </Form.Item>
@@ -330,6 +460,36 @@ export default function CustomersPage() {
             <Input.TextArea rows={2} />
           </Form.Item>
         </Form>
+      </Modal>
+
+      <Modal
+        title={`Отнести к юр. лицу: ${selected.length} клиентов`}
+        open={assignOpen}
+        onCancel={() => setAssignOpen(false)}
+        onOk={() => assign.mutate()}
+        okText="Отнести"
+        cancelText="Отмена"
+        confirmLoading={assign.isPending}
+        okButtonProps={{ disabled: !assignTarget }}
+        destroyOnHidden
+      >
+        <Space direction="vertical" size={12} style={{ width: "100%" }}>
+          <Select
+            style={{ width: "100%" }}
+            placeholder="Выберите юр. лицо"
+            value={assignTarget}
+            options={entityFilterOptions(
+              (entities.data ?? []).filter((e) => e.is_active),
+            )}
+            onChange={setAssignTarget}
+          />
+          <Alert
+            type="info"
+            showIcon
+            message="На что это влияет"
+            description="Долг за новые продажи в кредит пойдёт в дебиторку этого юр. лица. Уже проведённые записи не меняются: переписывать историю задним числом нельзя."
+          />
+        </Space>
       </Modal>
     </div>
   );

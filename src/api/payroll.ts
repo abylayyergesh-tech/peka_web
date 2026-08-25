@@ -11,7 +11,18 @@ export type RunKind = "advance" | "salary";
 export type RunStatus = "draft" | "approved" | "paid";
 export type PayoutMethod = "card" | "cash" | "ip";
 export type TimesheetStatus = "draft" | "closed";
-export type TimesheetDaySource = "attendance" | "manual" | "correction";
+/** Откуда взялась клетка табеля. `leave` — подтянуто из истории отпусков и
+ *  больничных: такие клетки система пересобирает сама. */
+export type TimesheetDaySource = "attendance" | "manual" | "correction" | "leave";
+
+/** Что стоит в клетке: смены или отсутствие.
+ *  `dayoff` — В (выходной), `sick` — Б, `vacation` — О, `vacation_unpaid` — БС. */
+export type TimesheetDayKind =
+  | "work"
+  | "dayoff"
+  | "sick"
+  | "vacation"
+  | "vacation_unpaid";
 export type LoanStatus = "active" | "closed";
 export type PaymentKind = "advance" | "salary" | "loan_issue" | "vacation" | "other";
 
@@ -149,10 +160,12 @@ export interface TimesheetRowOut {
   pay_type: PayType;
   rate_amount: string;
   legal_entity_name: string | null;
-  /** день (1..31) -> смены; дни без смен отсутствуют */
+  /** день (1..31) -> смены; дни без отметки отсутствуют */
   days: Record<string, string>;
-  /** день -> откуда значение (автосбор / правка / перерасчёт) */
+  /** день -> откуда значение (автосбор / правка / перерасчёт / история отпусков) */
   sources: Record<string, TimesheetDaySource>;
+  /** день -> что стоит в клетке: смены или отсутствие */
+  kinds: Record<string, TimesheetDayKind>;
   shifts_advance: string;
   shifts_month: string;
 }
@@ -161,12 +174,17 @@ export interface TimesheetGridOut {
   timesheet: TimesheetOut;
   days_in_month: number;
   rows: TimesheetRowOut[];
+  /** Отдел, по которому отфильтрован табель (null — вся организация). */
+  department_id: number | null;
+  department_name: string | null;
 }
 
 export interface TimesheetDayIn {
   employee_id: number;
   day: number;
-  shifts: string;
+  /** У отсутствия смен нет — только `kind`. */
+  shifts?: string;
+  kind?: TimesheetDayKind;
 }
 
 export interface TimesheetRebuildOut {
@@ -174,6 +192,10 @@ export interface TimesheetRebuildOut {
   employees_touched: number;
   days_written: number;
   days_skipped_manual: number;
+  /** Клеток отпуска/больничного, подтянутых из истории заявлений. */
+  absence_days_written: number;
+  /** Дней, где отпуск наложился на отметку смены — там оставлена смена. */
+  absence_conflicts: number;
 }
 
 export async function listTimesheets(params: PageParams): Promise<Page<TimesheetOut>> {
@@ -186,8 +208,13 @@ export async function createTimesheet(body: TimesheetCreate): Promise<TimesheetO
   return data;
 }
 
-export async function getTimesheetGrid(id: number): Promise<TimesheetGridOut> {
-  const { data } = await api.get<TimesheetGridOut>(`/payroll/timesheets/${id}`);
+export async function getTimesheetGrid(
+  id: number,
+  departmentId?: number,
+): Promise<TimesheetGridOut> {
+  const { data } = await api.get<TimesheetGridOut>(`/payroll/timesheets/${id}`, {
+    params: departmentId != null ? { department_id: departmentId } : undefined,
+  });
   return data;
 }
 
@@ -202,8 +229,13 @@ export async function updateTimesheet(
 export async function setTimesheetDays(
   id: number,
   days: TimesheetDayIn[],
+  departmentId?: number,
 ): Promise<TimesheetGridOut> {
-  const { data } = await api.put<TimesheetGridOut>(`/payroll/timesheets/${id}/days`, { days });
+  const { data } = await api.put<TimesheetGridOut>(
+    `/payroll/timesheets/${id}/days`,
+    { days },
+    { params: departmentId != null ? { department_id: departmentId } : undefined },
+  );
   return data;
 }
 
@@ -230,6 +262,33 @@ export async function reopenTimesheet(id: number): Promise<TimesheetOut> {
 /** Ссылка на выгрузку книги за период (тот же набор листов, что в шаблоне). */
 export function timesheetExportUrl(id: number): string {
   return `/payroll/timesheets/${id}/export.xlsx`;
+}
+
+/** Подтянуть отпуска и больничные из истории заявлений, не пересобирая смены. */
+export async function syncTimesheetAbsences(id: number): Promise<TimesheetRebuildOut> {
+  const { data } = await api.post<TimesheetRebuildOut>(
+    `/payroll/timesheets/${id}/sync-absences`);
+  return data;
+}
+
+/** Выгрузить табель отдела одним листом (то, что подписывает начальник цеха). */
+export async function downloadDepartmentTimesheet(
+  id: number,
+  departmentId: number | undefined,
+  filename: string,
+): Promise<void> {
+  const { data } = await api.get<Blob>(`/payroll/timesheets/${id}/timesheet.xlsx`, {
+    params: departmentId != null ? { department_id: departmentId } : undefined,
+    responseType: "blob",
+  });
+  const url = URL.createObjectURL(data);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }
 
 // ==== ведомости ====
@@ -562,10 +621,14 @@ export interface StaffMealOut {
   check_number: number | null;
   meal_date: string;
   kind: "breakfast" | "lunch" | "dinner" | "other";
+  /** Сумма по ценам меню — её удерживает зарплатная ведомость. */
   amount: string;
   cost: string;
   note: string | null;
   status: string;
+  /** Ведомость, которая эту запись удержала. null — ещё не удержано и попадёт
+   *  в ближайшую зарплатную ведомость. */
+  deducted_payroll_run_id: number | null;
   created_at: string;
   lines: StaffMealLine[];
 }

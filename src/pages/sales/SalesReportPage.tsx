@@ -39,7 +39,7 @@ export default function SalesReportPage() {
 
   const query = useQuery({
     queryKey: ["sales-report", { dateFrom, dateTo }],
-    queryFn: () => reportSales({ date_from: dateFrom, date_to: dateTo }),
+    queryFn: () => reportSales({ from: dateFrom, to: dateTo }),
     enabled: canRead,
   });
 

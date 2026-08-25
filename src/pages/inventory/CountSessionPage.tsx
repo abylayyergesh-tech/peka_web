@@ -43,6 +43,7 @@ import { useCan } from "@/auth/store";
 import { Money, fmtDate, fmtQty } from "@/components/format";
 import { RowStatusTag, SessionStatusTag, signed } from "@/pages/inventory/countShared";
 import { useProductsLookup } from "@/pages/inventory/shared";
+import { useUnsavedChanges } from "@/components/useUnsavedChanges";
 
 type Filter = "all" | "todo" | "diff";
 
@@ -84,6 +85,8 @@ export default function CountSessionPage() {
    *  уезжает в следующую пачку — то есть иногда никуда. */
   const pending = useRef<Map<string, SessionLineIn>>(new Map());
   const [dirty, setDirty] = useState(0);
+  useUnsavedChanges(dirty > 0,
+                    `Не сохранено позиций: ${dirty}. Пересчёт придётся вводить заново.`);
   const timer = useRef<number | null>(null);
 
   const save = useMutation({

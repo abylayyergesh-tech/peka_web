@@ -20,6 +20,7 @@ import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { changePassword, createOrganization, logoutApi } from "@/api/auth";
 import { errorMessage } from "@/api/client";
 import { useAuthStore } from "@/auth/store";
+import ErrorBoundary from "@/components/ErrorBoundary";
 import { visibleSections } from "@/layout/menu";
 import { BRAND } from "@/theme";
 import { useQueryClient } from "@tanstack/react-query";
@@ -239,7 +240,11 @@ export default function AppLayout() {
         </Layout.Header>
         <Layout.Content style={{ padding: 24 }}>
           {hasAnyModule ? (
-            <Outlet />
+            // Ключ по адресу: сломавшаяся страница не должна оставаться
+            // сломанной после перехода в другой раздел — граница пересоздаётся.
+            <ErrorBoundary key={location.pathname}>
+              <Outlet />
+            </ErrorBoundary>
           ) : (
             <Result
               status="info"

@@ -108,6 +108,13 @@ export const NAV_SECTIONS: NavSection[] = [
       { path: "/reports/replacements", label: "Замены", cap: "report.read" },
       { path: "/reports/receivables", label: "Дебиторка", cap: "report.read" },
       { path: "/reports/payables", label: "Кредиторка", cap: "report.read" },
+      // Кредиторка и дебиторка в разрезе наших юр. лиц: у бизнеса два ИП, и за
+      // долги отвечает конкретное. Отсюда проваливаются в два отчёта выше.
+      { path: "/reports/company-entities", label: "Деньги по юр. лицам",
+        cap: "report.read" },
+      // Реквизиты самих компаний (БИН, банк, счёт). Правит финансовая роль, но
+      // видеть список нужно всем, кто заводит накладные и платежи.
+      { path: "/company-entities", label: "Наши юр. лица", cap: "report.read" },
       { path: "/reports/pnl", label: "P&L", cap: "finance.read" },
       { path: "/reports/financial-summary", label: "Финансовая сводка", cap: "finance.read" },
     ],
@@ -128,7 +135,7 @@ export const NAV_SECTIONS: NavSection[] = [
     key: "payroll",
     label: "Зарплата",
     items: [
-      { path: "/payroll/timesheet", label: "Табель смен", cap: "payroll.read" },
+      { path: "/payroll/timesheet", label: "Табель", cap: "payroll.read" },
       { path: "/payroll/runs", label: "Ведомости", cap: "payroll.read" },
       { path: "/payroll/compensations", label: "Справочник ставок", cap: "payroll.read" },
       { path: "/payroll/loans", label: "Фин. займы", cap: "payroll.read" },

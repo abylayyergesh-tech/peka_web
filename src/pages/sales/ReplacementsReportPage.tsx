@@ -39,7 +39,7 @@ export default function ReplacementsReportPage() {
 
   const dateFrom = range?.[0]?.format("YYYY-MM-DD");
   const dateTo = range?.[1]?.format("YYYY-MM-DD");
-  const filters = { customer, date_from: dateFrom, date_to: dateTo };
+  const filters = { customer, from: dateFrom, to: dateTo };
 
   const query = useQuery({
     queryKey: ["replacements", { ...filters, limit, offset }],

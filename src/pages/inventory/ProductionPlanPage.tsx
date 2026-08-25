@@ -31,6 +31,7 @@ import {
 import { useTabParam } from "@/components/useTabParam";
 import { fmtQty } from "@/components/format";
 import { useProductsLookup } from "@/pages/inventory/shared";
+import { useUnsavedChanges } from "@/components/useUnsavedChanges";
 
 const TABS = ["day", "period"] as const;
 
@@ -164,6 +165,7 @@ function DayTab() {
 
   const dirty =
     Object.keys(drafts).length > 0 || added.length > 0 || removed.length > 0;
+  useUnsavedChanges(dirty, "Правки плана не сохранены — они потеряются.");
 
   /** Правка ложится поверх ТЕКУЩИХ значений строки: `row` уже собран с учётом
    *  предыдущих правок. */

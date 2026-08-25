@@ -38,11 +38,10 @@ import {
 } from "@/api/catalog";
 import { useCan } from "@/auth/store";
 import AssignCategoryModal from "@/components/AssignCategoryModal";
-import NutritionModal from "@/components/NutritionModal";
 import ProductCategoriesModal, {
   useProductCategories,
 } from "@/components/ProductCategoriesModal";
-import { fmtDate } from "@/components/format";
+import { Money, fmtDate, fmtQty } from "@/components/format";
 import { usePagination } from "@/components/usePagination";
 import {
   ITEM_TYPE_COLORS,
@@ -53,6 +52,7 @@ import {
   PRODUCT_KIND_LABELS,
   PRODUCT_KIND_OPTIONS,
 } from "@/pages/catalog/labels";
+import ProductCardDrawer from "@/pages/catalog/ProductCardDrawer";
 import { useUnitOptions } from "@/pages/catalog/useCatalogOptions";
 
 interface ProductFormValues {
@@ -104,8 +104,9 @@ export default function ProductsPage() {
   const [assignOpen, setAssignOpen] = useState(false);
   /** Выделенные товары — их переносят в категорию пачкой. */
   const [selected, setSelected] = useState<number[]>([]);
-  /** Товар, для которого открыт расчёт КБЖУ. */
-  const [nutritionOf, setNutritionOf] = useState<ProductOut | null>(null);
+  /** Товар, чья карточка открыта. Подробности живут в ней, а не в колонках:
+   *  реквизитов, себестоимости, состава, КБЖУ и остатков в таблицу не влезает. */
+  const [cardId, setCardId] = useState<number | null>(null);
   const [form] = Form.useForm<ProductFormValues>();
 
   const categories = useProductCategories();
@@ -123,6 +124,9 @@ export default function ProductsPage() {
         limit, offset, kind, include_inactive: includeInactive,
         search: searchParam, sort, nutrition: nutritionFilter,
         item_type: itemType, group, category,
+        // Единственное место, где себестоимость нужна в списке; справочникам
+        // она ни к чему, и по умолчанию сервер её не считает.
+        with_cost: true,
       }),
   });
 
@@ -214,50 +218,160 @@ export default function ProductsPage() {
     setModalOpen(true);
   }
 
+  /** Себестоимость строки: что показать и чем это подписать.
+   *
+   *  Три источника, и подменять один другим молча нельзя — они отвечают на
+   *  разное:
+   *
+   *  1. средняя по остатку — факт: столько заплачено за то, что лежит. Живёт,
+   *     только пока остаток положителен;
+   *  2. себестоимость по тех-карте — для блюд и полуфабрикатов: своей цены у них
+   *     нет, они стоят столько, сколько состав. Считается сервером на всю
+   *     страницу разом, а не по строке: обход дерева рецептов на каждую строку
+   *     превратил бы список в минуту ожидания;
+   *  3. цена последнего прихода — остаётся, когда сырьё кончилось. Без неё
+   *     закончившийся товар выглядел бы бесплатным.
+   *
+   *  Порядок именно такой: средняя первой, потому что по ней списывают в
+   *  себестоимость, — это цифра учёта, а не оценка. */
+  function costCell(row: ProductOut) {
+    const unit = units.nameOf(row.base_unit_id);
+    const avg = row.avg_cost != null ? Number(row.avg_cost) : null;
+    const recipe = row.recipe_cost != null ? Number(row.recipe_cost) : null;
+    const last = row.last_cost_price != null ? Number(row.last_cost_price) : null;
+
+    if (avg != null && avg > 0) {
+      return (
+        <Tooltip title={`Средняя по остатку, за 1 ${unit}`}>
+          <span>
+            <Money value={row.avg_cost} />
+          </span>
+        </Tooltip>
+      );
+    }
+    if (recipe != null) {
+      return (
+        <Tooltip
+          title={
+            (row.recipe_cost_missing
+              ? "У части компонентов нет цены — итог занижен. "
+              : "") + `По тех-карте, за 1 ${unit}`
+          }
+        >
+          <Space size={4}>
+            <Money value={row.recipe_cost} />
+            <Tag
+              color={row.recipe_cost_missing ? "warning" : undefined}
+              style={{ marginInlineEnd: 0 }}
+            >
+              {row.recipe_cost_missing ? "неполная" : "тех-карта"}
+            </Tag>
+          </Space>
+        </Tooltip>
+      );
+    }
+    if (last != null && last > 0) {
+      return (
+        <Tooltip
+          title={
+            "Средней нет (остатка нет), это цена последнего прихода" +
+            (row.last_cost_at ? ` от ${fmtDate(row.last_cost_at)}` : "")
+          }
+        >
+          <Space size={4}>
+            <Money value={row.last_cost_price} />
+            <Tag style={{ marginInlineEnd: 0 }}>приход</Tag>
+          </Space>
+        </Tooltip>
+      );
+    }
+    if (row.kind !== "ingredient") {
+      return (
+        <Tooltip title="Нет действующей тех-карты — считать себестоимость не по чему">
+          <Tag color="warning" style={{ marginInlineEnd: 0 }}>
+            нет тех-карты
+          </Tag>
+        </Tooltip>
+      );
+    }
+    return (
+      <Tooltip title="Ни остатка, ни цены прихода: товар ещё не покупали">
+        <span style={{ color: "#bfbfbf" }}>—</span>
+      </Tooltip>
+    );
+  }
+
   const columns: ColumnsType<ProductOut> = [
-    { title: "Название", dataIndex: "name", sorter: true },
     {
+      // Название ведёт в карточку: там реквизиты, себестоимость, состав, КБЖУ и
+      // остатки. Артикул и категория — второй строкой: они нужны для узнавания,
+      // но отдельных колонок не заслуживают.
+      title: "Товар",
+      dataIndex: "name",
+      sorter: true,
+      render: (v: string, row) => (
+        <Space direction="vertical" size={0}>
+          <a onClick={() => setCardId(row.product_id)} style={{ fontWeight: 500 }}>
+            {v}
+          </a>
+          {(row.sku || row.category) && (
+            <span style={{ color: "#8c8c8c", fontSize: 12 }}>
+              {[row.sku, row.category].filter(Boolean).join(" · ")}
+            </span>
+          )}
+        </Space>
+      ),
+    },
+    {
+      // Две оси в одной колонке: `kind` — как товар появляется, `item_type` — что
+      // это по сути. Порознь они занимали две колонки и ничего не добавляли.
       title: "Тип",
       dataIndex: "kind",
-      width: 140,
+      width: 190,
       sorter: true,
-      render: (k: ProductKind) => (
-        <Tag color={PRODUCT_KIND_COLORS[k]}>{PRODUCT_KIND_LABELS[k]}</Tag>
+      render: (k: ProductKind, row) => (
+        <Space size={4} wrap>
+          <Tag color={PRODUCT_KIND_COLORS[k]} style={{ marginInlineEnd: 0 }}>
+            {PRODUCT_KIND_LABELS[k]}
+          </Tag>
+          <Tooltip title={ITEM_TYPE_HINTS[row.item_type]}>
+            <Tag color={ITEM_TYPE_COLORS[row.item_type]} style={{ marginInlineEnd: 0 }}>
+              {ITEM_TYPE_LABELS[row.item_type]}
+            </Tag>
+          </Tooltip>
+        </Space>
       ),
     },
     {
-      // Вторая ось к типу: `kind` — как появляется, `item_type` — что это.
-      title: "Вид",
-      dataIndex: "item_type",
-      width: 130,
-      render: (t: ItemType) => (
-        <Tooltip title={ITEM_TYPE_HINTS[t]}>
-          <Tag color={ITEM_TYPE_COLORS[t]}>{ITEM_TYPE_LABELS[t]}</Tag>
-        </Tooltip>
-      ),
-    },
-    {
-      title: "Группа",
-      dataIndex: "group_name",
+      title: "Себестоимость",
+      key: "cost",
       width: 170,
-      render: (v: string | null) => v || "—",
-    },
-    { title: "Артикул", dataIndex: "sku", sorter: true, render: (v: string | null) => v || "—" },
-    {
-      title: "Категория",
-      dataIndex: "category",
-      sorter: true,
-      render: (v: string | null) => v || "—",
+      align: "right",
+      render: (_, row) => costCell(row),
     },
     {
-      title: "Базовая ед.",
-      dataIndex: "base_unit_id",
-      width: 130,
-      render: (id: number) => units.nameOf(id),
+      title: "Остаток",
+      key: "stock",
+      width: 150,
+      align: "right",
+      render: (_, row) => {
+        const qty = row.stock_quantity != null ? Number(row.stock_quantity) : null;
+        if (qty == null) return <span style={{ color: "#bfbfbf" }}>—</span>;
+        return (
+          <Space size={4}>
+            <span style={{ color: qty < 0 ? "#cf1322" : undefined }}>
+              {fmtQty(row.stock_quantity)}
+            </span>
+            <span style={{ color: "#8c8c8c", fontSize: 12 }}>
+              {units.nameOf(row.base_unit_id)}
+            </span>
+          </Space>
+        );
+      },
     },
     {
       // Столбец показывает СВОЁ значение карточки. У блюд его обычно нет — и это
-      // норма: их КБЖУ считается по тех-карте, кнопка «КБЖУ» покажет результат.
+      // норма: их КБЖУ считается по тех-карте, карточка покажет результат.
       title: "КБЖУ",
       key: "nutrition",
       width: 150,
@@ -292,40 +406,25 @@ export default function ProductsPage() {
         ),
     },
     {
-      title: "Статус",
-      dataIndex: "is_active",
-      width: 110,
-      render: (active: boolean) =>
-        active ? <Tag color="green">Активен</Tag> : <Tag>Неактивен</Tag>,
-    },
-    {
-      title: "Создан",
-      dataIndex: "created_at",
-      width: 120,
-      sorter: true,
-      render: (v: string) => fmtDate(v),
-    },
-    {
       title: "",
-      width: 210,
-      render: (_, row) =>
-        canManage && (
-          <Space size="middle">
-            <a onClick={() => setNutritionOf(row)}>КБЖУ</a>
-            <a onClick={() => openEdit(row)}>Изменить</a>
-            {row.is_active && (
-              <Popconfirm
-                title="Деактивировать продукт?"
-                description="Он будет скрыт из списка (мягкое удаление)."
-                okText="Да"
-                cancelText="Нет"
-                onConfirm={() => remove.mutate(row.product_id)}
-              >
-                <a>Удалить</a>
-              </Popconfirm>
-            )}
-          </Space>
-        ),
+      width: 150,
+      render: (_, row) => (
+        <Space size="middle">
+          <a onClick={() => setCardId(row.product_id)}>Подробнее</a>
+          {canManage && row.is_active && (
+            <Popconfirm
+              title="Деактивировать продукт?"
+              description="Он будет скрыт из списка (мягкое удаление)."
+              okText="Да"
+              cancelText="Нет"
+              onConfirm={() => remove.mutate(row.product_id)}
+            >
+              <a>Удалить</a>
+            </Popconfirm>
+          )}
+          {!row.is_active && <Tag>неактивен</Tag>}
+        </Space>
+      ),
     },
   ];
 
@@ -470,6 +569,17 @@ export default function ProductsPage() {
         pagination={tablePagination(query.data?.total)}
         columns={columns}
         onChange={onTableChange}
+        // Строка открывает карточку целиком: попадать в ссылку названия мышью
+        // приходится точнее, чем нужно. Выделение и ссылки внутри строки клик не
+        // перехватывают — antd отдаёт им событие первыми.
+        //
+        // `row-product`, а не общий `row-clickable`: под курсором жёлтая заливка
+        // (см. index.css) — она отбивает строку товара от соседних, а в списке
+        // на страницу позиций это главное, чего не хватало.
+        rowClassName={() => "row-product"}
+        onRow={(row) => ({
+          onClick: () => setCardId(row.product_id),
+        })}
         rowSelection={
           canManage
             ? {
@@ -594,6 +704,16 @@ export default function ProductsPage() {
         </Form>
       </Modal>
 
+      <ProductCardDrawer
+        productId={cardId}
+        unitName={(id) => units.nameOf(id)}
+        onClose={() => setCardId(null)}
+        onEdit={(product) => {
+          setCardId(null);
+          openEdit(product);
+        }}
+      />
+
       <ProductCategoriesModal
         open={categoriesOpen}
         onClose={() => setCategoriesOpen(false)}
@@ -605,12 +725,6 @@ export default function ProductsPage() {
         onDone={() => setSelected([])}
       />
 
-      <NutritionModal
-        target={nutritionOf ? { kind: "product", id: nutritionOf.product_id } : null}
-        title={nutritionOf?.name ?? ""}
-        unitName={nutritionOf ? units.nameOf(nutritionOf.base_unit_id) : undefined}
-        onClose={() => setNutritionOf(null)}
-      />
     </div>
   );
 }

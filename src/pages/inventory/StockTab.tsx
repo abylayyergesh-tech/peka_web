@@ -30,6 +30,13 @@ export default function StockTab() {
   const [productId, setProductId] = useState<number | undefined>();
   const [search, setSearch] = useState("");
   const [hideZero, setHideZero] = useState(true);
+  /** Страница и её размер. Держим у себя, а не отдаём таблице: список
+   *  фильтруется на клиенте, и при сужении отбора antd оставил бы открытой
+   *  страницу, которой больше нет, — вместо результата была бы пустая таблица.
+   *  Поэтому каждый фильтр возвращает на первую (`resetPage`). */
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
+  const resetPage = () => setPage(1);
 
   const units = useQuery({
     queryKey: ["lookup", "units", "all"],
@@ -173,7 +180,10 @@ export default function StockTab() {
               <Tag
                 key={id}
                 style={{ cursor: "pointer", padding: "4px 10px", fontSize: 13 }}
-                onClick={() => setWarehouseId(id)}
+                onClick={() => {
+                  setWarehouseId(id);
+                  resetPage();
+                }}
               >
                 {nameOf(warehouses.byId, id)}: <b>{fmtMoney(agg.value)}</b>{" "}
                 <span style={{ color: "#8c8c8c" }}>({agg.positions})</span>
@@ -192,7 +202,10 @@ export default function StockTab() {
           style={{ width: 240 }}
           options={warehouses.options}
           value={warehouseId}
-          onChange={(v) => setWarehouseId(v)}
+          onChange={(v) => {
+            setWarehouseId(v);
+            resetPage();
+          }}
         />
         <Select
           allowClear
@@ -203,7 +216,10 @@ export default function StockTab() {
           loading={products.isPending}
           options={products.options}
           value={productId}
-          onChange={(v) => setProductId(v)}
+          onChange={(v) => {
+            setProductId(v);
+            resetPage();
+          }}
         />
         <Input
           allowClear
@@ -211,10 +227,19 @@ export default function StockTab() {
           placeholder="Поиск по названию"
           style={{ width: 220 }}
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            resetPage();
+          }}
         />
         <Space size={6}>
-          <Switch checked={hideZero} onChange={setHideZero} />
+          <Switch
+            checked={hideZero}
+            onChange={(v) => {
+              setHideZero(v);
+              resetPage();
+            }}
+          />
           <span>Скрыть нулевые</span>
         </Space>
       </Space>
@@ -225,7 +250,18 @@ export default function StockTab() {
         loading={query.isPending || products.isPending}
         dataSource={rows}
         columns={columns}
-        pagination={{ pageSize: 50, showSizeChanger: true, hideOnSinglePage: true }}
+        pagination={{
+          current: page,
+          pageSize,
+          total: rows.length,
+          showSizeChanger: true,
+          pageSizeOptions: [50, 100, 200],
+          showTotal: (t) => `Позиций: ${t}`,
+          onChange: (p, ps) => {
+            setPage(p);
+            setPageSize(ps);
+          },
+        }}
       />
     </div>
   );

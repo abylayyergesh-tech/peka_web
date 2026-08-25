@@ -51,7 +51,9 @@ export interface DeliveryStopOut {
 export interface DeliveryRouteOut {
   delivery_route_id: number;
   route_date: string;
-  courier_employee_id: number;
+  /** null — маршрут собран, но курьер ещё не привязан (см. кабинет сотрудника:
+   *  цепочку адресов там собирают отдельно от того, кто её повезёт). */
+  courier_employee_id: number | null;
   courier_name: string | null;
   name: string | null;
   status: RouteStatus;

@@ -50,8 +50,8 @@ export default function ChecksTab() {
         offset,
         shift: shiftFilter,
         status: statusFilter,
-        date_from: dateFrom,
-        date_to: dateTo,
+        from: dateFrom,
+        to: dateTo,
       }),
     enabled: canOperate,
   });

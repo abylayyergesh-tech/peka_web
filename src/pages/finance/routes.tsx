@@ -3,6 +3,8 @@ import type { RouteObject } from "react-router-dom";
 
 import AbcReportPage from "@/pages/finance/AbcReportPage";
 import CashFlowPage from "@/pages/finance/CashFlowPage";
+import CompanyEntitiesPage from "@/pages/finance/CompanyEntitiesPage";
+import CompanyMoneyPage from "@/pages/finance/CompanyMoneyPage";
 import ExpenseCategoriesPage from "@/pages/finance/ExpenseCategoriesPage";
 import ExpensesPage from "@/pages/finance/ExpensesPage";
 import FinancialSummaryPage from "@/pages/finance/FinancialSummaryPage";
@@ -10,6 +12,9 @@ import PnLReportPage from "@/pages/finance/PnLReportPage";
 import SalesByProductPage from "@/pages/finance/SalesByProductPage";
 
 export const financeRoutes: RouteObject[] = [
+  // Наши юр. лица: реквизиты компаний и деньги по каждой из них.
+  { path: "/company-entities", element: <CompanyEntitiesPage /> },
+  { path: "/reports/company-entities", element: <CompanyMoneyPage /> },
   { path: "/expenses", element: <ExpensesPage /> },
   { path: "/expense-categories", element: <ExpenseCategoriesPage /> },
   { path: "/reports/sales-by-product", element: <SalesByProductPage /> },

@@ -71,6 +71,10 @@ export interface ReceiptDocumentCreate {
   doc_date: string;
   warehouse_id: number;
   counterparty?: string | null;
+  /** От чьего НАШЕГО юр. лица документ. Пусто — бэкенд подставит компанию
+   *  «по умолчанию»: у приходной накладной от этого зависит, в чью
+   *  кредиторку попадёт долг. */
+  company_entity_id?: number | null;
   supplier_id?: number | null;
   purchase_order_id?: number | null;
   internal: boolean;
@@ -81,6 +85,10 @@ interface _BaseConsumptionCreate {
   doc_date: string;
   warehouse_id: number;
   counterparty?: string | null;
+  /** От чьего НАШЕГО юр. лица документ. Пусто — бэкенд подставит компанию
+   *  «по умолчанию»: у приходной накладной от этого зависит, в чью
+   *  кредиторку попадёт долг. */
+  company_entity_id?: number | null;
   lines: ConsumptionLineIn[];
 }
 
@@ -106,6 +114,10 @@ export interface InventoryCountDocumentCreate {
   doc_date: string;
   warehouse_id: number;
   counterparty?: string | null;
+  /** От чьего НАШЕГО юр. лица документ. Пусто — бэкенд подставит компанию
+   *  «по умолчанию»: у приходной накладной от этого зависит, в чью
+   *  кредиторку попадёт долг. */
+  company_entity_id?: number | null;
   lines: InventoryCountLineIn[];
 }
 
@@ -136,6 +148,8 @@ export interface DocumentOut {
   warehouse_id: number;
   target_warehouse_id: number | null;
   counterparty: string | null;
+  /** От чьего нашего юр. лица документ; null — до разделения на юр. лица. */
+  company_entity_id: number | null;
   recipe_id: number | null;
   posted_at: string | null;
   created_at: string;

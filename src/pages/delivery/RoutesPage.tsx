@@ -367,7 +367,12 @@ function RouteCard({
       title={
         <Space wrap>
           <CarOutlined />
-          <b>{route.courier_name ?? `Сотрудник #${route.courier_employee_id}`}</b>
+          <b>
+            {route.courier_name ??
+              (route.courier_employee_id == null
+                ? "Курьер не назначен"
+                : `Сотрудник #${route.courier_employee_id}`)}
+          </b>
           {route.name && <Typography.Text type="secondary">{route.name}</Typography.Text>}
           <Tag color={status.color}>{status.label}</Tag>
           <Typography.Text type="secondary">

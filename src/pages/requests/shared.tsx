@@ -19,6 +19,7 @@ import { fmtDate, fmtDateTime, fmtMoney } from "@/components/format";
 export const REQUEST_TYPE_LABELS: Record<RequestType, string> = {
   advance: "Аванс",
   vacation: "Отпуск",
+  sick_leave: "Больничный",
   resignation: "Увольнение",
   schedule: "График",
   timesheet_correction: "Перерасчёт табеля",
@@ -35,6 +36,7 @@ export const REQUEST_TYPE_OPTIONS = (
 export const SELF_SERVICE_TYPES: RequestType[] = [
   "advance",
   "vacation",
+  "sick_leave",
   "resignation",
   "schedule",
   "loan",
@@ -85,6 +87,8 @@ export function describeRequest(req: RequestOut): string {
       return `${fmtDate(req.start_date)} — ${fmtDate(req.end_date)}${
         req.is_paid ? ", оплачиваемый" : ", без сохранения оплаты"
       }`;
+    case "sick_leave":
+      return `${fmtDate(req.start_date)} — ${fmtDate(req.end_date)}`;
     case "resignation":
       return `Последний рабочий день: ${fmtDate(req.last_working_day)}`;
     case "schedule":

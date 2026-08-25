@@ -38,6 +38,9 @@ export interface DocumentFormValues {
   counterparty?: string;
   internal?: boolean;
   supplier_id?: number;
+  /** От чьего НАШЕГО юр. лица документ. Пусто — бэкенд подставит то, что по
+   *  умолчанию: у приходной накладной от этого зависит, в чью кредиторку уйдёт долг. */
+  company_entity_id?: number;
   lines: {
     product_id: number;
     quantity: string;
@@ -61,6 +64,7 @@ export function buildDocumentPayload(
   const doc_date = values.doc_date.format("YYYY-MM-DD");
   const warehouse_id = values.warehouse_id;
   const counterparty = values.counterparty?.trim() || undefined;
+  const company_entity_id = values.company_entity_id;
 
   const unitOf = (productId: number): number => {
     const p = productsById.get(productId);
@@ -85,6 +89,7 @@ export function buildDocumentPayload(
       doc_date,
       warehouse_id,
       counterparty,
+      company_entity_id,
       internal,
       supplier_id: internal ? undefined : values.supplier_id,
       lines,
@@ -107,6 +112,7 @@ export function buildDocumentPayload(
       doc_date,
       warehouse_id,
       counterparty,
+      company_entity_id,
       lines,
     };
   }
@@ -123,6 +129,7 @@ export function buildDocumentPayload(
       doc_date,
       warehouse_id,
       counterparty,
+      company_entity_id,
       target_warehouse_id: values.target_warehouse_id as number,
       lines,
     };
@@ -130,11 +137,14 @@ export function buildDocumentPayload(
   // write_off | production | sale — identical bare-consumption shape.
   switch (values.type) {
     case "write_off":
-      return { type: "write_off", doc_date, warehouse_id, counterparty, lines };
+      return { type: "write_off", doc_date, warehouse_id, counterparty,
+               company_entity_id, lines };
     case "production":
-      return { type: "production", doc_date, warehouse_id, counterparty, lines };
+      return { type: "production", doc_date, warehouse_id, counterparty,
+               company_entity_id, lines };
     case "sale":
-      return { type: "sale", doc_date, warehouse_id, counterparty, lines };
+      return { type: "sale", doc_date, warehouse_id, counterparty,
+               company_entity_id, lines };
     default:
       throw new Error(`Неизвестный тип документа: ${values.type}`);
   }
@@ -146,6 +156,9 @@ interface FieldsProps {
   productOptions: Option[];
   warehouseOptions: Option[];
   supplierOptions: Option[];
+  /** Наши юр. лица. Пустой список — справочник не заведён, и поле просто пустое:
+   *  бэкенд в этом случае оставит документ без юрлица, и это видно в отчётах. */
+  companyEntityOptions?: Option[];
 }
 
 export function DocumentFormFields({
@@ -154,6 +167,7 @@ export function DocumentFormFields({
   productOptions,
   warehouseOptions,
   supplierOptions,
+  companyEntityOptions = [],
 }: FieldsProps) {
   const type = Form.useWatch("type", form);
   const internal = Form.useWatch("internal", form);
@@ -280,6 +294,23 @@ export function DocumentFormFields({
         </Row>
       )}
 
+      {/* Наше юр. лицо: от кого документ. Для приходной накладной это и решает,
+          в чью кредиторку попадёт долг перед поставщиком. Пусто — бэкенд
+          подставит компанию «по умолчанию», чтобы разрез был у каждой накладной,
+          а не только у тех, где выбор не забыли. */}
+      <Form.Item
+        name="company_entity_id"
+        label="Наше юр. лицо"
+        tooltip="От чьего имени документ. Пусто — компания по умолчанию"
+      >
+        <Select
+          allowClear
+          showSearch
+          optionFilterProp="label"
+          placeholder="По умолчанию"
+          options={companyEntityOptions}
+        />
+      </Form.Item>
       <Form.Item name="counterparty" label="Контрагент / комментарий">
         <Input maxLength={256} placeholder="Необязательно" />
       </Form.Item>

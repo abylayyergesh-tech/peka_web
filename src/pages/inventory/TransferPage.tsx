@@ -41,6 +41,7 @@ import { getStock, type StockRow } from "@/api/reports";
 import { useCan } from "@/auth/store";
 import { fmtQty } from "@/components/format";
 import { nameOf, useProductsLookup, useWarehousesLookup } from "@/pages/inventory/shared";
+import { useUnsavedChanges } from "@/components/useUnsavedChanges";
 
 /** Введённое по строке: сколько увезти. null — строку не трогали. */
 type Moving = Record<number, number | null>;
@@ -64,6 +65,9 @@ export default function TransferPage() {
   const [search, setSearch] = useState("");
   const [onlyPicked, setOnlyPicked] = useState(false);
   const [moving, setMoving] = useState<Moving>({});
+  // Набранный лист перемещения — тоже несохранённая работа.
+  useUnsavedChanges(Object.keys(moving).length > 0,
+                    "Набранные строки перемещения потеряются.");
   const [result, setResult] = useState<
     { id: number; number: number | null; rows: MovedRow[] } | null
   >(null);

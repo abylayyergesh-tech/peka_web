@@ -7,6 +7,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { RouterProvider } from "react-router-dom";
 
+import ErrorBoundary from "@/components/ErrorBoundary";
 import { router } from "@/routes";
 import { theme } from "@/theme";
 import "antd/dist/reset.css";
@@ -28,9 +29,13 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <ConfigProvider locale={ruRU} theme={theme}>
       <AntApp>
-        <QueryClientProvider client={queryClient}>
-          <RouterProvider router={router} />
-        </QueryClientProvider>
+        {/* Внешняя граница: ловит то, что выше layout — провайдеры и сам
+            маршрутизатор. Внутренняя (в AppLayout) сохраняет меню. */}
+        <ErrorBoundary>
+          <QueryClientProvider client={queryClient}>
+            <RouterProvider router={router} />
+          </QueryClientProvider>
+        </ErrorBoundary>
       </AntApp>
     </ConfigProvider>
   </React.StrictMode>,

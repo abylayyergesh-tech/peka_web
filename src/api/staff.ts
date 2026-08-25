@@ -46,7 +46,10 @@ export interface EmployeeOut {
 }
 
 export interface EmployeeCreate {
-  email: string;
+  /** Не обязателен: без него сервер создаёт технический логин (цеху вход не
+   *  нужен, а карточка в табеле нужна). С адресом, которого ещё нет, аккаунт
+   *  создаётся со случайным паролем — доступ выдаётся отдельно, паролем. */
+  email?: string | null;
   full_name: string;
   role: Role;
   position?: string | null;

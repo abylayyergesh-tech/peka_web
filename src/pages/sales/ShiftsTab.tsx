@@ -53,8 +53,8 @@ export default function ShiftsTab() {
         offset,
         status: statusFilter,
         warehouse: warehouseFilter,
-        date_from: dateFrom,
-        date_to: dateTo,
+        from: dateFrom,
+        to: dateTo,
       }),
   });
 

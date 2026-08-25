@@ -222,9 +222,13 @@ export interface PaymentCreate {
   amount: string | number;
   method?: string | null;
   note?: string | null;
+  /** С какого нашего юр. лица платим. Пусто — компания «по умолчанию». */
+  company_entity_id?: number | null;
 }
 
 export interface PaymentOut {
+  /** С какого нашего юр. лица заплатили. */
+  company_entity_id: number | null;
   supplier_payment_id: number;
   supplier_id: number;
   payment_date: string;
@@ -270,6 +274,8 @@ export interface SupplierBalanceOut {
 export interface PayablesReportParams {
   as_of?: string;
   supplier?: number;
+  /** id нашего юр. лица или "none" — только записи без юр. лица. */
+  company_entity?: string;
 }
 
 export async function reportPayables(
@@ -284,6 +290,8 @@ export type PayableSourceType = "receipt" | "payment" | "payment_void";
 export interface PayableEntryOut {
   payable_entry_id: number;
   supplier_id: number;
+  /** От чьего имени возникла запись; null — до разделения на юр. лица. */
+  company_entity_id: number | null;
   amount_delta: string;
   balance_after: string;
   source_type: PayableSourceType;

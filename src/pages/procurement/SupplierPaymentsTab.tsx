@@ -1,15 +1,7 @@
 /** Supplier payments tab: list + record payment + void (cap payment.manage). */
 import { PlusOutlined } from "@ant-design/icons";
 import {
-  App,
-  Button,
-  DatePicker,
-  Form,
-  Input,
-  InputNumber,
-  Modal,
-  Popconfirm,
-  Table,
+  App, Button, DatePicker, Form, Input, InputNumber, Modal, Popconfirm, Select, Table,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import dayjs, { type Dayjs } from "dayjs";
@@ -19,6 +11,10 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { errorMessage } from "@/api/client";
 import { listPayments, recordPayment, voidPayment, type PaymentOut } from "@/api/procurement";
 import { useCan } from "@/auth/store";
+import {
+  EntityTag,
+  useCompanyEntities,
+} from "@/pages/finance/companyEntities";
 import { fmtDate, fmtDateTime, Money } from "@/components/format";
 import { nullIfEmpty } from "@/pages/procurement/refData";
 import { PaymentStatusTag } from "@/pages/procurement/statuses";
@@ -28,6 +24,8 @@ interface PaymentFormValues {
   amount: string;
   method?: string;
   note?: string;
+  /** С какого нашего юр. лица платим: его кредиторка и уменьшится. */
+  company_entity_id?: number;
 }
 
 export default function SupplierPaymentsTab({ supplierId }: { supplierId: number }) {
@@ -36,6 +34,7 @@ export default function SupplierPaymentsTab({ supplierId }: { supplierId: number
   const canManage = useCan("payment.manage");
   const [modalOpen, setModalOpen] = useState(false);
   const [form] = Form.useForm<PaymentFormValues>();
+  const entities = useCompanyEntities();
 
   const query = useQuery({
     queryKey: ["supplier-payments", supplierId],
@@ -46,6 +45,7 @@ export default function SupplierPaymentsTab({ supplierId }: { supplierId: number
     queryClient.invalidateQueries({ queryKey: ["supplier-payments", supplierId] });
     queryClient.invalidateQueries({ queryKey: ["supplier-ledger", supplierId] });
     queryClient.invalidateQueries({ queryKey: ["payables"] });
+    queryClient.invalidateQueries({ queryKey: ["company-money"] });
   }
 
   const save = useMutation({
@@ -55,6 +55,7 @@ export default function SupplierPaymentsTab({ supplierId }: { supplierId: number
         amount: v.amount,
         method: nullIfEmpty(v.method),
         note: nullIfEmpty(v.note),
+        company_entity_id: v.company_entity_id,
       }),
     onSuccess: () => {
       message.success("Платёж зарегистрирован");
@@ -75,6 +76,12 @@ export default function SupplierPaymentsTab({ supplierId }: { supplierId: number
 
   const columns: ColumnsType<PaymentOut> = [
     { title: "Дата", dataIndex: "payment_date", width: 110, render: (v) => fmtDate(v) },
+    {
+      title: "Юр. лицо",
+      dataIndex: "company_entity_id",
+      width: 180,
+      render: (id: number | null) => <EntityTag entities={entities.data} id={id} />,
+    },
     {
       title: "Сумма",
       dataIndex: "amount",
@@ -161,6 +168,25 @@ export default function SupplierPaymentsTab({ supplierId }: { supplierId: number
             rules={[{ required: true, message: "Обязательное поле" }]}
           >
             <InputNumber<string> stringMode min="0.0001" style={{ width: "100%" }} />
+          </Form.Item>
+          {/* Платит конкретное наше юрлицо, и его кредиторка уменьшается. Пусто —
+              бэкенд возьмёт компанию «по умолчанию»: иначе разрез появлялся бы
+              только у платежей, где выбор не забыли. */}
+          <Form.Item
+            name="company_entity_id"
+            label="Платим с юр. лица"
+            tooltip="Уменьшится кредиторка именно этого юр. лица. Пусто — компания по умолчанию"
+          >
+            <Select
+              allowClear
+              showSearch
+              optionFilterProp="label"
+              placeholder="По умолчанию"
+              loading={entities.isPending}
+              options={(entities.data ?? [])
+                .filter((e) => e.is_active)
+                .map((e) => ({ value: e.company_entity_id, label: e.name }))}
+            />
           </Form.Item>
           <Form.Item name="method" label="Способ оплаты">
             <Input maxLength={32} placeholder="наличные / перевод / карта" />

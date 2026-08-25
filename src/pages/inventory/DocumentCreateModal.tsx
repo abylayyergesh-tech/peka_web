@@ -15,6 +15,7 @@ import {
   useSuppliersLookup,
   useWarehousesLookup,
 } from "@/pages/inventory/shared";
+import { useCompanyEntities } from "@/pages/finance/companyEntities";
 
 interface Props {
   open: boolean;
@@ -30,6 +31,7 @@ export default function DocumentCreateModal({ open, onClose, onCreated }: Props)
   const products = useProductsLookup();
   const warehouses = useWarehousesLookup();
   const suppliers = useSuppliersLookup();
+  const entities = useCompanyEntities();
 
   const create = useMutation({
     mutationFn: (values: DocumentFormValues) =>
@@ -62,6 +64,9 @@ export default function DocumentCreateModal({ open, onClose, onCreated }: Props)
         onFinish={(v) => create.mutate(v)}
       >
         <DocumentFormFields
+          companyEntityOptions={(entities.data ?? [])
+            .filter((e) => e.is_active)
+            .map((e) => ({ value: e.company_entity_id, label: e.name }))}
           form={form}
           mode="create"
           productOptions={products.options}
