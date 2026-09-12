@@ -1,6 +1,6 @@
 /** /documents — складские документы: список с фильтрами (тип, статус, период)
  *  и создание. NB: бэкенд GET /documents НЕ поддерживает фильтр по складу. */
-import { PlusOutlined } from "@ant-design/icons";
+import { CameraOutlined, PlusOutlined } from "@ant-design/icons";
 import { Button, DatePicker, Select, Space, Table } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import type { Dayjs } from "dayjs";
@@ -110,14 +110,22 @@ export default function DocumentsPage() {
       <Space
         style={{ marginBottom: 16, justifyContent: "space-between", width: "100%" }}
       >
-        <h2 style={{ margin: 0 }}>Складские документы</h2>
-        <Button
-          type="primary"
-          icon={<PlusOutlined />}
-          onClick={() => setCreateOpen(true)}
-        >
-          Создать
-        </Button>
+        <h2 style={{ margin: 0 }}>Накладные</h2>
+        <Space>
+          <Button
+            icon={<CameraOutlined />}
+            onClick={() => navigate("/documents/digitize")}
+          >
+            С фото
+          </Button>
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => setCreateOpen(true)}
+          >
+            Создать
+          </Button>
+        </Space>
       </Space>
 
       <Space wrap style={{ marginBottom: 16 }}>
@@ -160,9 +168,14 @@ export default function DocumentsPage() {
         dataSource={query.data?.items}
         pagination={tablePagination(query.data?.total)}
         columns={columns}
+        rowClassName={() => "row-clickable"}
         onRow={(row) => ({
-          onClick: () => navigate(`/documents/${row.document_id}`),
-          style: { cursor: "pointer" },
+          onClick: () =>
+            navigate(
+              row.type === "write_off"
+                ? `/write-offs/${row.document_id}`
+                : `/documents/${row.document_id}`,
+            ),
         })}
       />
 
@@ -171,7 +184,7 @@ export default function DocumentsPage() {
         onClose={() => setCreateOpen(false)}
         onCreated={(id) => {
           setCreateOpen(false);
-          navigate(`/documents/${id}`);
+          navigate(`/documents/${id}`); // списание само уйдёт на /write-offs/:id
         }}
       />
     </div>

@@ -140,6 +140,12 @@ export interface MenuItemOut {
   /** Фото для витрины клиентского сайта — ссылкой; null — там будет заглушка. */
   image_url: string | null;
   is_active: boolean;
+  /** Временно снята с продажи (стоп-лист), но из меню не вычеркнута. */
+  is_stopped: boolean;
+  /** Себестоимость порции по тех-карте. Есть только при with_cost=true. */
+  portion_cost?: string | null;
+  /** У части компонентов нет цены — portion_cost занижена. */
+  portion_cost_missing?: boolean;
 }
 
 export interface MenuItemCreate {
@@ -161,6 +167,7 @@ export interface MenuItemUpdate {
   category?: string | null;
   image_url?: string | null;
   is_active?: boolean;
+  is_stopped?: boolean;
 }
 
 /** Загрузить фото позиции: файл уходит НА БЭКЕНД, он кладёт его в GCS и
@@ -185,11 +192,15 @@ export async function deleteMenuItemImage(id: number): Promise<MenuItemOut> {
 
 export interface MenuItemListParams extends PageParams {
   active?: boolean;
+  /** true — только на стопе; false — без стоп-листа. */
+  stopped?: boolean;
   category?: string;
   /** Подстрока в названии (регистр не важен). */
   search?: string;
   /** `name|sale_price|category|created_at`, с «-» — по убыванию. */
   sort?: string;
+  /** Дописать себестоимость порции по тех-карте. */
+  with_cost?: boolean;
 }
 
 export async function listMenuItems(params: MenuItemListParams): Promise<Page<MenuItemOut>> {
@@ -253,6 +264,8 @@ export interface CustomerOut {
   /** К какому НАШЕМУ юр. лицу отнесён клиент: от его имени с ним работают, и в
    *  его дебиторку попадает долг. null — ни к какому. */
   company_entity_id: number | null;
+  /** Тип клиента из словаря. null — без категории. */
+  customer_category_id: number | null;
   is_active: boolean;
   created_at: string;
   updated_at: string | null;
@@ -272,6 +285,8 @@ export interface CustomerCreate {
   billing_mode?: BillingMode;
   /** Наше юр. лицо, к которому относится клиент. */
   company_entity_id?: number | null;
+  /** Тип клиента из словаря. */
+  customer_category_id?: number | null;
 }
 
 export type CustomerUpdate = Partial<CustomerCreate>;
@@ -279,6 +294,10 @@ export type CustomerUpdate = Partial<CustomerCreate>;
 export interface CustomerListParams extends PageParams {
   active?: boolean;
   billing_mode?: BillingMode;
+  /** Клиенты с этим прайс-листом. */
+  menu_id?: number;
+  /** Id категории; 0 — без категории. */
+  category?: number;
 }
 
 export async function listCustomers(params: CustomerListParams): Promise<Page<CustomerOut>> {
@@ -314,6 +333,68 @@ export async function updateCustomer(id: number, body: CustomerUpdate): Promise<
 /** Backend DELETE deactivates (is_active=false) and returns the customer. */
 export async function deleteCustomer(id: number): Promise<CustomerOut> {
   const { data } = await api.delete<CustomerOut>(`/customers/${id}`);
+  return data;
+}
+
+// ---- категории клиентов ----
+export interface CustomerCategoryOut {
+  customer_category_id: number;
+  organization_id: number;
+  name: string;
+  is_active: boolean;
+  customers_count: number;
+}
+
+export interface CustomersCategoryAssignResult {
+  updated: number;
+  customer_category_id: number | null;
+  customer_category_name: string | null;
+}
+
+export async function listCustomerCategories(
+  active?: boolean,
+): Promise<CustomerCategoryOut[]> {
+  const { data } = await api.get<CustomerCategoryOut[]>("/customer-categories", {
+    params: active == null ? {} : { active },
+  });
+  return data;
+}
+
+export async function createCustomerCategory(body: {
+  name: string;
+}): Promise<CustomerCategoryOut> {
+  const { data } = await api.post<CustomerCategoryOut>("/customer-categories", body);
+  return data;
+}
+
+export async function updateCustomerCategory(
+  id: number,
+  body: { name?: string; is_active?: boolean },
+): Promise<CustomerCategoryOut> {
+  const { data } = await api.patch<CustomerCategoryOut>(
+    `/customer-categories/${id}`,
+    body,
+  );
+  return data;
+}
+
+export async function deactivateCustomerCategory(
+  id: number,
+): Promise<CustomerCategoryOut> {
+  const { data } = await api.delete<CustomerCategoryOut>(
+    `/customer-categories/${id}`,
+  );
+  return data;
+}
+
+export async function assignCustomersCategory(body: {
+  customer_ids: number[];
+  customer_category_id: number | null;
+}): Promise<CustomersCategoryAssignResult> {
+  const { data } = await api.post<CustomersCategoryAssignResult>(
+    "/customers/category",
+    body,
+  );
   return data;
 }
 
@@ -400,6 +481,10 @@ export interface CustomerBalanceOut {
   /** Оплачено (отменённый платёж из суммы уходит). */
   total_paid: string;
   balance: string;
+  /** Дата последнего платежа в том же окне, что и обороты; null — не было. */
+  last_payment_date: string | null;
+  /** Сумма последнего платежа (отмена после среза его не вычёркивает). */
+  last_payment_amount: string | null;
 }
 
 export async function reportReceivables(params: {
@@ -741,6 +826,34 @@ export async function createCheck(body: CheckCreate): Promise<CheckOut> {
 
 export async function listChecks(params: CheckListParams): Promise<Page<CheckOut>> {
   const { data } = await api.get<Page<CheckOut>>("/checks", { params });
+  return data;
+}
+
+export type RegisterKind = "check" | "write_off";
+
+export interface RegisterEntryOut {
+  kind: RegisterKind;
+  entry_id: number;
+  number: number | null;
+  shift_id: number;
+  shift_number: number | null;
+  occurred_at: string;
+  status: string;
+  amount: string | null;
+  label: string | null;
+}
+
+export interface RegisterJournalParams extends PageParams {
+  shift?: number;
+  kind?: RegisterKind;
+  from?: string;
+  to?: string;
+}
+
+export async function listRegisterJournal(
+  params: RegisterJournalParams,
+): Promise<Page<RegisterEntryOut>> {
+  const { data } = await api.get<Page<RegisterEntryOut>>("/register-journal", { params });
   return data;
 }
 

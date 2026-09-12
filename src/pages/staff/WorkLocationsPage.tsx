@@ -3,10 +3,10 @@ import {
   App,
   Button,
   Checkbox,
+  Descriptions,
   Form,
   Input,
   InputNumber,
-  Modal,
   Popconfirm,
   Space,
   Switch,
@@ -27,6 +27,7 @@ import {
   type WorkLocationUpdate,
 } from "@/api/attendance";
 import { useCan } from "@/auth/store";
+import EntityCardDrawer from "@/components/EntityCardDrawer";
 import { usePagination } from "@/components/usePagination";
 import { ActiveTag } from "@/pages/staff/shared";
 
@@ -45,8 +46,9 @@ export default function WorkLocationsPage() {
   const { limit, offset, tablePagination, reset } = usePagination();
 
   const [includeInactive, setIncludeInactive] = useState(false);
-  const [editing, setEditing] = useState<WorkLocationOut | null>(null);
-  const [modalOpen, setModalOpen] = useState(false);
+  const [card, setCard] = useState<WorkLocationOut | null>(null);
+  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
   const [form] = Form.useForm<WorkLocationFormValues>();
 
   const query = useQuery({
@@ -54,15 +56,19 @@ export default function WorkLocationsPage() {
     queryFn: () => listWorkLocations({ limit, offset, include_inactive: includeInactive }),
   });
 
+  const fresh =
+    query.data?.items.find((r) => r.work_location_id === card?.work_location_id) ?? card;
+
   const save = useMutation({
     mutationFn: (body: WorkLocationCreate | WorkLocationUpdate) =>
-      editing
-        ? updateWorkLocation(editing.work_location_id, body)
+      card
+        ? updateWorkLocation(card.work_location_id, body)
         : createWorkLocation(body as WorkLocationCreate),
-    onSuccess: () => {
-      message.success(editing ? "Сохранено" : "Локация создана");
-      setModalOpen(false);
+    onSuccess: (row) => {
+      message.success(card ? "Сохранено" : "Локация создана");
       queryClient.invalidateQueries({ queryKey: ["work-locations"] });
+      setCard(row);
+      setEditing(false);
     },
     onError: (e) => message.error(errorMessage(e)),
   });
@@ -76,14 +82,7 @@ export default function WorkLocationsPage() {
     onError: (e) => message.error(errorMessage(e)),
   });
 
-  function openCreate() {
-    setEditing(null);
-    form.resetFields();
-    setModalOpen(true);
-  }
-
-  function openEdit(row: WorkLocationOut) {
-    setEditing(row);
+  function fillForm(row: WorkLocationOut) {
     form.setFieldsValue({
       name: row.name,
       latitude: Number(row.latitude),
@@ -91,11 +90,31 @@ export default function WorkLocationsPage() {
       radius_m: row.radius_m,
       is_active: row.is_active,
     });
-    setModalOpen(true);
+  }
+
+  function openCard(row: WorkLocationOut) {
+    setCard(row);
+    fillForm(row);
+    setEditing(false);
+    setOpen(true);
+  }
+
+  function openCreate() {
+    setCard(null);
+    form.resetFields();
+    form.setFieldsValue({ radius_m: 3000 });
+    setEditing(true);
+    setOpen(true);
+  }
+
+  function closeCard() {
+    setOpen(false);
+    setEditing(false);
+    setCard(null);
   }
 
   function onFinish(values: WorkLocationFormValues) {
-    if (editing) {
+    if (card) {
       save.mutate({
         name: values.name,
         latitude: values.latitude,
@@ -123,27 +142,6 @@ export default function WorkLocationsPage() {
       dataIndex: "is_active",
       width: 120,
       render: (v: boolean) => <ActiveTag active={v} />,
-    },
-    {
-      title: "",
-      width: 180,
-      render: (_, row) =>
-        canManage && (
-          <Space size="small">
-            <a onClick={() => openEdit(row)}>Изменить</a>
-            {row.is_active && (
-              <Popconfirm
-                title="Деактивировать локацию?"
-                okText="Деактивировать"
-                cancelText="Отмена"
-                okButtonProps={{ danger: true, loading: deactivate.isPending }}
-                onConfirm={() => deactivate.mutate(row.work_location_id)}
-              >
-                <a style={{ color: "#cf1322" }}>Деактивировать</a>
-              </Popconfirm>
-            )}
-          </Space>
-        ),
     },
   ];
 
@@ -177,59 +175,99 @@ export default function WorkLocationsPage() {
         dataSource={query.data?.items}
         pagination={tablePagination(query.data?.total)}
         columns={columns}
+        rowClassName={() => "row-clickable"}
+        onRow={(row) => ({ onClick: () => openCard(row) })}
       />
 
-      <Modal
-        title={editing ? "Изменить локацию" : "Новая локация"}
-        open={modalOpen}
-        onCancel={() => setModalOpen(false)}
-        onOk={() => form.submit()}
-        okText="Сохранить"
-        cancelText="Отмена"
-        confirmLoading={save.isPending}
-        destroyOnClose
-      >
-        <Form
-          form={form}
-          layout="vertical"
-          onFinish={onFinish}
-          initialValues={{ radius_m: 3000 }}
-        >
-          <Form.Item
-            name="name"
-            label="Название"
-            rules={[{ required: true, message: "Обязательное поле" }]}
+      <EntityCardDrawer
+        open={open}
+        onClose={closeCard}
+        title={fresh?.name ?? "Новая локация"}
+        canEdit={canManage && fresh != null}
+        editing={editing}
+        onStartEdit={() => {
+          if (fresh) fillForm(fresh);
+          setEditing(true);
+        }}
+        onCancelEdit={() => {
+          if (fresh) {
+            fillForm(fresh);
+            setEditing(false);
+          } else {
+            closeCard();
+          }
+        }}
+        onSave={() => form.submit()}
+        savePending={save.isPending}
+        extra={
+          fresh?.is_active && canManage ? (
+            <Popconfirm
+              title="Деактивировать локацию?"
+              okText="Деактивировать"
+              cancelText="Отмена"
+              okButtonProps={{ danger: true, loading: deactivate.isPending }}
+              onConfirm={() => deactivate.mutate(fresh.work_location_id)}
+            >
+              <Button danger>Деактивировать</Button>
+            </Popconfirm>
+          ) : undefined
+        }
+        view={
+          fresh ? (
+            <Descriptions column={1} bordered size="small">
+              <Descriptions.Item label="Название">{fresh.name}</Descriptions.Item>
+              <Descriptions.Item label="Широта">{fresh.latitude}</Descriptions.Item>
+              <Descriptions.Item label="Долгота">{fresh.longitude}</Descriptions.Item>
+              <Descriptions.Item label="Радиус">{fresh.radius_m} м</Descriptions.Item>
+              <Descriptions.Item label="Статус">
+                <ActiveTag active={fresh.is_active} />
+              </Descriptions.Item>
+            </Descriptions>
+          ) : null
+        }
+        form={
+          <Form
+            form={form}
+            layout="vertical"
+            onFinish={onFinish}
+            initialValues={{ radius_m: 3000 }}
           >
-            <Input />
-          </Form.Item>
-          <Form.Item
-            name="latitude"
-            label="Широта"
-            rules={[{ required: true, message: "Обязательное поле" }]}
-          >
-            <InputNumber min={-90} max={90} step={0.000001} style={{ width: "100%" }} />
-          </Form.Item>
-          <Form.Item
-            name="longitude"
-            label="Долгота"
-            rules={[{ required: true, message: "Обязательное поле" }]}
-          >
-            <InputNumber min={-180} max={180} step={0.000001} style={{ width: "100%" }} />
-          </Form.Item>
-          <Form.Item
-            name="radius_m"
-            label="Радиус (м)"
-            rules={[{ required: true, message: "Обязательное поле" }]}
-          >
-            <InputNumber min={1} max={1000000} style={{ width: "100%" }} />
-          </Form.Item>
-          {editing && (
-            <Form.Item name="is_active" label="Активна" valuePropName="checked">
-              <Switch />
+            <Form.Item
+              name="name"
+              label="Название"
+              rules={[{ required: true, message: "Обязательное поле" }]}
+            >
+              <Input />
             </Form.Item>
-          )}
-        </Form>
-      </Modal>
+            <Form.Item
+              name="latitude"
+              label="Широта"
+              rules={[{ required: true, message: "Обязательное поле" }]}
+            >
+              <InputNumber min={-90} max={90} step={0.000001} style={{ width: "100%" }} />
+            </Form.Item>
+            <Form.Item
+              name="longitude"
+              label="Долгота"
+              rules={[{ required: true, message: "Обязательное поле" }]}
+            >
+              <InputNumber min={-180} max={180} step={0.000001} style={{ width: "100%" }} />
+            </Form.Item>
+            <Form.Item
+              name="radius_m"
+              label="Радиус (м)"
+              rules={[{ required: true, message: "Обязательное поле" }]}
+            >
+              <InputNumber min={1} max={1000000} style={{ width: "100%" }} />
+            </Form.Item>
+            {card && (
+              <Form.Item name="is_active" label="Активна" valuePropName="checked">
+                <Switch />
+              </Form.Item>
+            )}
+          </Form>
+        }
+      />
     </div>
   );
 }

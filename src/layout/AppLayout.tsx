@@ -1,13 +1,10 @@
 import {
-  AppstoreOutlined,
-  BankOutlined,
   DashboardOutlined,
-  FileTextOutlined,
+  InboxOutlined,
   LockOutlined,
   LogoutOutlined,
   PlusOutlined,
   ShopOutlined,
-  ShoppingCartOutlined,
   TeamOutlined,
   UserOutlined,
   WalletOutlined,
@@ -29,14 +26,10 @@ import { useQueryClient } from "@tanstack/react-query";
 const STAFF_URL = import.meta.env.VITE_STAFF_URL as string | undefined;
 
 const SECTION_ICONS: Record<string, React.ReactNode> = {
-  catalog: <AppstoreOutlined />,
-  inventory: <ShoppingCartOutlined />,
-  sales: <ShopOutlined />,
+  menu: <ShopOutlined />,
+  inventory: <InboxOutlined />,
   finance: <WalletOutlined />,
-  staff: <TeamOutlined />,
-  payroll: <BankOutlined />,
-  my: <UserOutlined />,
-  requests: <FileTextOutlined />,
+  hr: <TeamOutlined />,
   admin: <LockOutlined />,
 };
 
@@ -154,7 +147,13 @@ export default function AppLayout() {
     <Layout style={{ minHeight: "100vh" }}>
       {/* Шире прежних 230: при базовом кегле 16 длинные пункты («Взаиморасчёты»,
           «Прайс-листы поставщиков») переносились на вторую строку. */}
-      <Layout.Sider collapsible collapsed={collapsed} onCollapse={setCollapsed} width={252}>
+      <Layout.Sider
+        collapsible
+        collapsed={collapsed}
+        onCollapse={setCollapsed}
+        width={300}
+        style={{ overflow: "auto", height: "100vh", position: "sticky", top: 0 }}
+      >
         <div
           style={{
             height: 48,

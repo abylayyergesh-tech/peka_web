@@ -6,16 +6,17 @@
  */
 import { PlusOutlined } from "@ant-design/icons";
 import {
-  App, Button, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Switch,
+  App, Button, Card, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Switch,
   Table, Tag, Tooltip,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
-  createAnnouncement, deleteAnnouncement, listAnnouncements, updateAnnouncement,
-  type AnnouncementCreate, type AnnouncementOut,
+  createAnnouncement, deleteAnnouncement, getExtraOrderTerms, listAnnouncements,
+  updateAnnouncement, updateExtraOrderTerms,
+  type AnnouncementCreate, type AnnouncementOut, type ExtraOrderTerms,
 } from "@/api/announcements";
 import { errorMessage } from "@/api/client";
 import { listAllMenuItems } from "@/api/sales";
@@ -33,6 +34,7 @@ export default function AnnouncementsPage() {
   const [editing, setEditing] = useState<AnnouncementOut | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [form] = Form.useForm();
+  const [extraForm] = Form.useForm<ExtraOrderTerms>();
 
   const query = useQuery({
     queryKey: ["announcements", { limit, offset, active }],
@@ -50,6 +52,27 @@ export default function AnnouncementsPage() {
     id == null
       ? null
       : menuItems.data?.find((m) => m.menu_item_id === id)?.name ?? `#${id}`;
+
+  const extraTerms = useQuery({
+    queryKey: ["extra-order-terms"],
+    queryFn: getExtraOrderTerms,
+  });
+  useEffect(() => {
+    if (!extraTerms.data) return;
+    extraForm.setFieldsValue({
+      ...extraTerms.data,
+      body: extraTerms.data.body ?? "",
+    });
+  }, [extraTerms.data, extraForm]);
+
+  const saveExtra = useMutation({
+    mutationFn: (values: ExtraOrderTerms) => updateExtraOrderTerms(values),
+    onSuccess: () => {
+      message.success("Условия доп. заказа сохранены");
+      queryClient.invalidateQueries({ queryKey: ["extra-order-terms"] });
+    },
+    onError: (e) => message.error(errorMessage(e)),
+  });
 
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: ["announcements"] });
@@ -163,6 +186,7 @@ export default function AnnouncementsPage() {
           <Switch
             checked={v}
             loading={toggleActive.isPending}
+            onClick={(_, e) => e.stopPropagation()}
             onChange={() => toggleActive.mutate(row)}
           />
         ) : v ? (
@@ -173,28 +197,84 @@ export default function AnnouncementsPage() {
     },
     {
       title: "",
-      width: 170,
+      width: 90,
       render: (_, row) =>
-        canManage && (
-          <Space>
-            <a onClick={() => openEdit(row)}>Изменить</a>
-            <Popconfirm
-              title="Удалить объявление?"
-              description="Текст будет потерян. Чтобы просто убрать его из ленты, выключите «Видно клиентам»."
-              okText="Удалить"
-              cancelText="Отмена"
-              okButtonProps={{ danger: true }}
-              onConfirm={() => remove.mutate(row.announcement_id)}
-            >
-              <a style={{ color: "#cf1322" }}>Удалить</a>
-            </Popconfirm>
-          </Space>
-        ),
+        canManage ? (
+          <Popconfirm
+            title="Удалить объявление?"
+            description="Текст будет потерян. Чтобы просто убрать его из ленты, выключите «Видно клиентам»."
+            okText="Удалить"
+            cancelText="Отмена"
+            okButtonProps={{ danger: true }}
+            onConfirm={() => remove.mutate(row.announcement_id)}
+          >
+            <a style={{ color: "#cf1322" }} onClick={(e) => e.stopPropagation()}>
+              Удалить
+            </a>
+          </Popconfirm>
+        ) : null,
     },
   ];
 
   return (
     <div>
+      <Card
+        size="small"
+        title="Доп заказ на клиентском сайте"
+        style={{ marginBottom: 16 }}
+        extra={
+          canManage && (
+            <Button
+              type="primary"
+              loading={saveExtra.isPending}
+              disabled={extraTerms.isPending}
+              onClick={() => extraForm.submit()}
+            >
+              Сохранить условия
+            </Button>
+          )
+        }
+      >
+        <Form
+          form={extraForm}
+          layout="vertical"
+          disabled={!canManage}
+          onFinish={(v) =>
+            saveExtra.mutate({
+              is_enabled: Boolean(v.is_enabled),
+              title: v.title,
+              body: (v.body ?? "").trim() || null,
+            })
+          }
+        >
+          <Form.Item
+            name="is_enabled"
+            label="Показывать клиентам"
+            valuePropName="checked"
+            extra="Выключено — галочки на сайте нет, клиент не сможет пометить заказ как доп. Оператор кассы ставит метку всегда."
+          >
+            <Switch />
+          </Form.Item>
+          <Form.Item
+            name="title"
+            label="Заголовок"
+            rules={[{ required: true, message: "Обязательное поле" }]}
+          >
+            <Input maxLength={255} placeholder="Доп заказ" />
+          </Form.Item>
+          <Form.Item
+            name="body"
+            label="Условия"
+            extra="Этот текст увидит клиент рядом с галочкой, когда собирает заказ."
+          >
+            <Input.TextArea
+              rows={4}
+              placeholder="Например: доп. заказ принимаем до 14:00, без минимальной суммы, привезём вместе с основным."
+            />
+          </Form.Item>
+        </Form>
+      </Card>
+
       <Space style={{ marginBottom: 16, justifyContent: "space-between", width: "100%" }}>
         <Space>
           <h2 style={{ margin: 0 }}>Объявления</h2>
@@ -226,6 +306,8 @@ export default function AnnouncementsPage() {
         dataSource={query.data?.items}
         pagination={tablePagination(query.data?.total)}
         columns={columns}
+        rowClassName={() => "row-clickable"}
+        onRow={(row) => ({ onClick: () => canManage && openEdit(row) })}
       />
 
       <Modal

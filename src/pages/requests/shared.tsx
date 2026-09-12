@@ -21,7 +21,7 @@ export const REQUEST_TYPE_LABELS: Record<RequestType, string> = {
   vacation: "Отпуск",
   sick_leave: "Больничный",
   resignation: "Увольнение",
-  schedule: "График",
+  schedule: "Обмен смены",
   timesheet_correction: "Перерасчёт табеля",
   loan: "Займ",
   hiring: "Приём в штат",
@@ -92,7 +92,10 @@ export function describeRequest(req: RequestOut): string {
     case "resignation":
       return `Последний рабочий день: ${fmtDate(req.last_working_day)}`;
     case "schedule":
-      return `Действует с: ${fmtDate(req.effective_date)}`;
+      return `${fmtDate(req.effective_date)} → ${
+        req.counterpart_employee_name ??
+        (req.counterpart_employee_id != null ? `сотрудник #${req.counterpart_employee_id}` : "—")
+      }`;
     case "loan":
       return `${fmtMoney(req.amount)} на ${req.term_months ?? "—"} мес`;
     case "timesheet_correction":
@@ -115,7 +118,12 @@ export function RequestDetails({ req, showEmployee }: { req: RequestOut; showEmp
   if (showEmployee) {
     items.push({
       key: "employee",
-      label: req.type === "hiring" ? "Заявитель" : "Сотрудник",
+      label:
+        req.type === "hiring"
+          ? "Заявитель"
+          : req.type === "schedule"
+            ? "Отдаёт смену"
+            : "Сотрудник",
       children: req.employee_name ?? `Сотрудник #${req.employee_id}`,
     });
   }
@@ -139,7 +147,25 @@ export function RequestDetails({ req, showEmployee }: { req: RequestOut; showEmp
     });
   }
   if (req.type === "schedule") {
-    items.push({ key: "effective_date", label: "Действует с", children: fmtDate(req.effective_date) });
+    if (!showEmployee) {
+      items.push({
+        key: "giver",
+        label: "Отдаёт смену",
+        children: req.employee_name ?? `Сотрудник #${req.employee_id}`,
+      });
+    }
+    items.push(
+      { key: "effective_date", label: "Дата смены", children: fmtDate(req.effective_date) },
+      {
+        key: "counterpart",
+        label: "Принимает смену",
+        children:
+          req.counterpart_employee_name ??
+          (req.counterpart_employee_id != null
+            ? `Сотрудник #${req.counterpart_employee_id}`
+            : "—"),
+      },
+    );
   }
   if (req.type === "loan") {
     items.push(

@@ -10,10 +10,12 @@
 import { PlusOutlined } from "@ant-design/icons";
 import { App, Button, Form, Input, Modal, Popconfirm, Space, Switch, Table, Tag } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import { useState } from "react";
+import dayjs from "dayjs";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { errorMessage } from "@/api/client";
+import { listAssignments } from "@/api/delivery";
 import {
   createCustomerAddress,
   deleteCustomerAddress,
@@ -37,6 +39,19 @@ export default function CustomerOutletsTab({ customerId }: { customerId: number 
     queryFn: () => listCustomerAddresses(customerId),
     enabled: Number.isFinite(customerId),
   });
+  const assignments = useQuery({
+    queryKey: ["delivery-assignments", "tomorrow"],
+    queryFn: () => listAssignments(dayjs().add(1, "day").format("YYYY-MM-DD")),
+  });
+  const courierByAddress = useMemo(() => {
+    const map = new Map<number, string>();
+    for (const row of assignments.data ?? []) {
+      if (row.customer_address_id != null && row.courier_name) {
+        map.set(row.customer_address_id, row.courier_name);
+      }
+    }
+    return map;
+  }, [assignments.data]);
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["customer-addresses", customerId] });
@@ -93,6 +108,19 @@ export default function CustomerOutletsTab({ customerId }: { customerId: number 
     },
     { title: "Адрес", dataIndex: "address_line" },
     {
+      title: "Способ входа",
+      dataIndex: "comment",
+      render: (v: string | null) => v || "—",
+    },
+    {
+      title: "Курьер (завтра)",
+      width: 180,
+      render: (_, row) => {
+        const name = courierByAddress.get(row.customer_address_id);
+        return name ? <Tag color="blue">{name}</Tag> : <span style={{ color: "#999" }}>—</span>;
+      },
+    },
+    {
       title: "Контакт",
       key: "contact",
       width: 220,
@@ -117,9 +145,13 @@ export default function CustomerOutletsTab({ customerId }: { customerId: number 
       render: (_, row) =>
         canManage && (
           <Space>
-            <a onClick={() => openEdit(row)}>Изменить</a>
             {row.is_active && !row.is_default && (
-              <a onClick={() => makeDefault.mutate(row.customer_address_id)}>
+              <a
+                onClick={(e) => {
+                  e.stopPropagation();
+                  makeDefault.mutate(row.customer_address_id);
+                }}
+              >
                 Сделать основной
               </a>
             )}
@@ -131,7 +163,7 @@ export default function CustomerOutletsTab({ customerId }: { customerId: number 
                 cancelText="Нет"
                 onConfirm={() => remove.mutate(row.customer_address_id)}
               >
-                <a>Закрыть</a>
+                <a onClick={(e) => e.stopPropagation()}>Закрыть</a>
               </Popconfirm>
             )}
           </Space>
@@ -159,6 +191,8 @@ export default function CustomerOutletsTab({ customerId }: { customerId: number 
         pagination={false}
         columns={columns}
         locale={{ emptyText: "Точек нет — добавьте адрес, иначе курьеру некуда везти" }}
+        rowClassName={() => "row-clickable"}
+        onRow={(row) => ({ onClick: () => canManage && openEdit(row) })}
       />
       <Modal
         title={editing ? "Изменить точку" : "Новая точка"}
@@ -191,8 +225,12 @@ export default function CustomerOutletsTab({ customerId }: { customerId: number 
           <Form.Item name="contact_phone" label="Телефон точки">
             <Input maxLength={64} />
           </Form.Item>
-          <Form.Item name="comment" label="Комментарий для курьера">
-            <Input.TextArea rows={2} />
+          <Form.Item
+            name="comment"
+            label="Способ входа"
+            tooltip="Код домофона, вход со двора, когда звонить. Курьер видит это в маршруте."
+          >
+            <Input.TextArea rows={2} placeholder="Вход со двора, домофон 12" />
           </Form.Item>
           <Form.Item name="is_default" label="Основная точка" valuePropName="checked">
             <Switch />

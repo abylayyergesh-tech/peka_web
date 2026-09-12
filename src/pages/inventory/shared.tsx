@@ -15,7 +15,18 @@ import {
   type ProductOut,
   type SupplierOut,
   type WarehouseOut,
+  type WarehousePurpose,
 } from "@/api/inventory";
+
+export const WAREHOUSE_PURPOSE_LABELS: Record<WarehousePurpose, string> = {
+  raw: "Сырьё",
+  finished: "Готовая продукция",
+};
+
+export function warehouseLabel(w: Pick<WarehouseOut, "name" | "purpose">): string {
+  const suffix = w.purpose === "finished" ? "ГП" : "сырьё";
+  return `${w.name} (${suffix})`;
+}
 
 export const DOC_TYPE_LABELS: Record<DocumentType, string> = {
   receipt: "Приход",
@@ -52,6 +63,16 @@ const DOC_STATUS_COLORS: Record<DocumentStatus, string> = {
 export const DOC_STATUS_OPTIONS = (
   Object.keys(DOC_STATUS_LABELS) as DocumentStatus[]
 ).map((s) => ({ value: s, label: DOC_STATUS_LABELS[s] }));
+
+/** Списание открывается своей карточкой, остальные — общей формой документа. */
+export function documentPath(
+  type: DocumentType | string | null | undefined,
+  documentId: number,
+): string {
+  return type === "write_off"
+    ? `/write-offs/${documentId}`
+    : `/documents/${documentId}`;
+}
 
 export function DocTypeTag({ type }: { type: DocumentType }) {
   return <Tag color={DOC_TYPE_COLORS[type]}>{DOC_TYPE_LABELS[type] ?? type}</Tag>;
@@ -116,7 +137,7 @@ export function useWarehousesLookup(): Lookup<WarehouseOut> {
       () =>
         items
           .filter((w) => w.is_active)
-          .map((w) => ({ value: w.warehouse_id, label: w.name })),
+          .map((w) => ({ value: w.warehouse_id, label: warehouseLabel(w) })),
       [items],
     ),
     isPending: q.isPending,
@@ -149,4 +170,21 @@ export function nameOf<T extends { name: string }>(
 ): string {
   if (id == null) return "—";
   return byId.get(id)?.name ?? `#${id}`;
+}
+
+/** Склад, который в цехе называют основным. Тот же порядок, что у кассы:
+ *  точное «Основной склад», затем «Основной …», затем вхождение, затем первый.
+ *  Свободный поиск «основн» нельзя: есть «Основное средство». */
+export function pickMainWarehouse<T extends { name: string }>(
+  list: T[],
+): T | null {
+  const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
+  const target = "основной склад";
+  return (
+    list.find((w) => norm(w.name) === target) ??
+    list.find((w) => /^основной\b/i.test(norm(w.name))) ??
+    list.find((w) => norm(w.name).includes(target)) ??
+    list[0] ??
+    null
+  );
 }

@@ -269,6 +269,9 @@ export interface SupplierBalanceOut {
   /** Кредит: сумма оплат ему; отменённый платёж из суммы вычитается. */
   total_paid: string;
   balance: string;
+  /** Одно наше юр. лицо; null — нет привязки или долг на нескольких сразу. */
+  company_entity_id: number | null;
+  company_entities_mixed: boolean;
 }
 
 export interface PayablesReportParams {
@@ -310,6 +313,52 @@ export async function supplierLedger(
   params: { after_seq?: number; limit?: number } = {},
 ): Promise<PayableLedgerPage> {
   const { data } = await api.get<PayableLedgerPage>(`/suppliers/${supplierId}/ledger`, { params });
+  return data;
+}
+
+/** Строка акта сверки. Дебет/кредит — с нашей стороны (счёт 60). */
+export interface ReconciliationLine {
+  entry_date: string;
+  source_type: PayableSourceType;
+  source_id: number;
+  document_number: number | null;
+  document_date: string;
+  payment_method: string | null;
+  debit: string;
+  credit: string;
+}
+
+export interface ReconciliationOut {
+  supplier_id: number;
+  supplier_name: string;
+  supplier_tax_id: string | null;
+  our_name: string;
+  our_tax_id: string | null;
+  company_entity_id: number | null;
+  date_from: string;
+  date_to: string;
+  compiled_on: string;
+  opening_balance: string;
+  opening_debit: string;
+  opening_credit: string;
+  lines: ReconciliationLine[];
+  truncated: boolean;
+  limit: number;
+  turnover_debit: string;
+  turnover_credit: string;
+  closing_balance: string;
+  closing_debit: string;
+  closing_credit: string;
+}
+
+export async function getSupplierReconciliation(
+  supplierId: number,
+  params: { from: string; to: string; company_entity?: string },
+): Promise<ReconciliationOut> {
+  const { data } = await api.get<ReconciliationOut>(
+    `/suppliers/${supplierId}/reconciliation`,
+    { params },
+  );
   return data;
 }
 

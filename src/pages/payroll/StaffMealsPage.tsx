@@ -61,17 +61,24 @@ export default function StaffMealsPage() {
     { title: "Сотрудник", dataIndex: "employee_name" },
     { title: "Приёмов", dataIndex: "meals", width: 100, align: "right" },
     {
-      title: "По ценам меню",
+      title: "В кредит",
       dataIndex: "amount",
-      width: 160,
+      width: 140,
       align: "right",
       render: (v: string) => (
-        <Tooltip title="Эта сумма попадёт в ведомость, в колонку «Питание»">
+        <Tooltip title="Удержится из зарплаты — колонка «Питание»">
           <b>
             <Money value={v} />
           </b>
         </Tooltip>
       ),
+    },
+    {
+      title: "Оплачено",
+      dataIndex: "paid_amount",
+      width: 140,
+      align: "right",
+      render: (v: string) => <Money value={v} />,
     },
     {
       title: "Себестоимость",
@@ -98,6 +105,17 @@ export default function StaffMealsPage() {
       dataIndex: "kind",
       width: 110,
       render: (v: string) => KIND_LABELS[v] ?? v,
+    },
+    {
+      title: "Расчёт",
+      dataIndex: "settlement",
+      width: 120,
+      render: (v: StaffMealOut["settlement"]) =>
+        v === "paid" ? (
+          <Tag color="green">оплачено</Tag>
+        ) : (
+          <Tag color="gold">в кредит</Tag>
+        ),
     },
     {
       title: "Чек",
@@ -149,7 +167,7 @@ export default function StaffMealsPage() {
         ) : (
           <Popconfirm
             title="Аннулировать запись?"
-            description="Удержание снимется. Склад НЕ вернётся: еда уже съедена."
+            description="Запись снимется с журнала и из удержания, если оно ещё не прошло. Склад НЕ вернётся."
             okText="Аннулировать"
             cancelText="Отмена"
             onConfirm={() => cancel.mutate(row.staff_meal_id)}
@@ -205,6 +223,9 @@ export default function StaffMealsPage() {
                   <b>{fmtMoney(summary.data.amount)}</b>
                 </Table.Summary.Cell>
                 <Table.Summary.Cell index={3} align="right">
+                  <b>{fmtMoney(summary.data.paid_amount)}</b>
+                </Table.Summary.Cell>
+                <Table.Summary.Cell index={4} align="right">
                   <b>{fmtMoney(summary.data.cost)}</b>
                 </Table.Summary.Cell>
               </Table.Summary.Row>

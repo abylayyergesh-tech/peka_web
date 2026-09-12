@@ -17,7 +17,7 @@ import {
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Navigate, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { errorMessage } from "@/api/client";
@@ -101,6 +101,9 @@ export default function DocumentDetailPage() {
   }
 
   const doc = query.data;
+  if (doc.type === "write_off") {
+    return <Navigate to={`/write-offs/${doc.document_id}`} replace />;
+  }
   const isDraft = doc.status === "draft";
   const isReceipt = doc.type === "receipt";
   const isCount = doc.type === "inventory_count";

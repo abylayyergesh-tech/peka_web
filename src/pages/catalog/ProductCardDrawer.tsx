@@ -13,11 +13,7 @@
  *  Тяжёлые расчёты грузятся ТОЛЬКО когда карточка открыта и только для нужного
  *  товара: и себестоимость по тех-карте, и КБЖУ рекурсивны, и в списке из
  *  пятидесяти строк это было бы пятьдесят обходов дерева рецептов. */
-import {
-  ArrowLeftOutlined,
-  EditOutlined,
-  WarningOutlined,
-} from "@ant-design/icons";
+import { EditOutlined, WarningOutlined } from "@ant-design/icons";
 import {
   Alert,
   Button,
@@ -26,16 +22,16 @@ import {
   Empty,
   Space,
   Spin,
-  Statistic,
   Table,
   Tag,
   Tooltip,
-  Typography,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 
+import { useCan } from "@/auth/store";
 import { errorMessage } from "@/api/client";
 import { getProduct, getProductNutrition, type ProductOut } from "@/api/catalog";
 import { getStock, getTechCard, type TechCardRow } from "@/api/reports";
@@ -46,6 +42,9 @@ import {
   PRODUCT_KIND_COLORS,
   PRODUCT_KIND_LABELS,
 } from "@/pages/catalog/labels";
+import { useWarehousesLookup, warehouseLabel } from "@/pages/inventory/shared";
+
+type TrailStop = { id: number; name: string };
 
 /** Откуда взялась цена компонента. Формулировки те же, что на экране тех-карты. */
 const COST_SOURCE_LABELS: Record<string, string> = {
@@ -74,12 +73,15 @@ export default function ProductCardDrawer({
   onEdit?: (product: ProductOut) => void;
 }) {
   /** Путь спуска по составу. Последний элемент — то, что показано сейчас. */
-  const [trail, setTrail] = useState<number[]>([]);
-  const current = trail.length ? trail[trail.length - 1] : productId;
+  const [trail, setTrail] = useState<TrailStop[]>([]);
+  const navigate = useNavigate();
+  const warehouses = useWarehousesLookup();
+  const canReport = useCan("report.read");
+  const current = trail.length ? trail[trail.length - 1].id : productId;
 
   // Панель открыли на другом товаре — путь начинается заново.
   useEffect(() => {
-    setTrail(productId == null ? [] : [productId]);
+    setTrail(productId == null ? [] : [{ id: productId, name: "" }]);
   }, [productId]);
 
   const open = productId != null;
@@ -131,7 +133,7 @@ export default function ProductCardDrawer({
           <a
             onClick={(e) => {
               e.stopPropagation();
-              setTrail((t) => [...t, row.product_id]);
+              setTrail((t) => [...t, { id: row.product_id, name: row.name }]);
             }}
           >
             {v}
@@ -192,39 +194,76 @@ export default function ProductCardDrawer({
     <Drawer
       open={open}
       onClose={onClose}
-      width={720}
+      width={760}
       destroyOnHidden
+      className="dossier-drawer"
       title={
-        <Space size={8} wrap>
+        <div>
           {canGoBack && (
-            <Button
-              size="small"
-              icon={<ArrowLeftOutlined />}
-              onClick={() => setTrail((t) => t.slice(0, -1))}
-            >
-              Назад
-            </Button>
+            <div className="dossier-crumbs">
+              {trail.map((stop, i) => {
+                const last = i === trail.length - 1;
+                const label = last
+                  ? (card?.name ?? (stop.name || "…"))
+                  : (stop.name || "…");
+                return (
+                  <span key={`${stop.id}-${i}`}>
+                    {i > 0 && <span className="dossier-crumb-now"> · </span>}
+                    {last ? (
+                      <span className="dossier-crumb-now">{label}</span>
+                    ) : (
+                      <button
+                        type="button"
+                        className="dossier-crumb"
+                        onClick={() => setTrail((t) => t.slice(0, i + 1))}
+                      >
+                        {label}
+                      </button>
+                    )}
+                  </span>
+                );
+              })}
+            </div>
           )}
-          <span>{card?.name ?? "Карточка товара"}</span>
+          <p className="page-kicker" style={{ marginBottom: 4 }}>
+            Личное дело
+          </p>
+          <h2 className="dossier-name">{card?.name ?? "…"}</h2>
           {card && (
-            <>
-              <Tag color={PRODUCT_KIND_COLORS[card.kind]}>
+            <Space size={6} wrap style={{ marginTop: 8 }}>
+              <Tag color={PRODUCT_KIND_COLORS[card.kind]} style={{ marginInlineEnd: 0 }}>
                 {PRODUCT_KIND_LABELS[card.kind]}
               </Tag>
-              <Tag color={ITEM_TYPE_COLORS[card.item_type]}>
+              <Tag color={ITEM_TYPE_COLORS[card.item_type]} style={{ marginInlineEnd: 0 }}>
                 {ITEM_TYPE_LABELS[card.item_type]}
               </Tag>
-              {!card.is_active && <Tag>неактивен</Tag>}
-            </>
+              {!card.is_active && <Tag style={{ marginInlineEnd: 0 }}>неактивен</Tag>}
+            </Space>
           )}
-        </Space>
+        </div>
       }
       extra={
-        card && onEdit ? (
-          <Button icon={<EditOutlined />} onClick={() => onEdit(card)}>
-            Изменить
-          </Button>
-        ) : null
+        <Space>
+          {canReport && current != null && (
+            <Button
+              onClick={() =>
+                navigate(`/reports/product-movements?product_id=${current}`)
+              }
+            >
+              Движение
+            </Button>
+          )}
+          {isComposite && techCard.data?.recipe_id && (
+            <Button onClick={() => navigate(`/recipes/${techCard.data.recipe_id}`)}>
+              Тех-карта
+            </Button>
+          )}
+          {card && onEdit ? (
+            <Button type="primary" icon={<EditOutlined />} onClick={() => onEdit(card)}>
+              Редактировать
+            </Button>
+          ) : null}
+        </Space>
       }
     >
       {product.isPending && <Spin />}
@@ -233,67 +272,61 @@ export default function ProductCardDrawer({
       )}
 
       {card && (
-        <Space direction="vertical" size={16} style={{ width: "100%" }}>
-          {/* ---- себестоимость ---- */}
-          <div>
-            <Typography.Title level={5}>Себестоимость</Typography.Title>
-            <Space size={32} wrap>
-              <Statistic
-                title="Средняя по остатку"
-                valueRender={() => <Money value={card.avg_cost ?? "0"} />}
-                value={0}
-              />
-              <Statistic
-                title="Цена последнего прихода"
-                valueRender={() => (
+        <Space direction="vertical" size={12} style={{ width: "100%" }}>
+          <section className="dossier-block">
+            <h3 className="dossier-block-title">Себестоимость</h3>
+            <div className="dossier-stat-grid">
+              <div className="dossier-stat">
+                <span className="dossier-stat-label">Средняя по остатку</span>
+                <div className="dossier-stat-value">
+                  <Money value={card.avg_cost ?? "0"} />
+                </div>
+              </div>
+              <div className="dossier-stat">
+                <span className="dossier-stat-label">Последний приход</span>
+                <div className="dossier-stat-value">
                   <Money value={card.last_cost_price ?? null} />
-                )}
-                value={0}
-              />
+                </div>
+              </div>
               {isComposite && (
                 <>
-                  {/* Два РАЗНЫХ числа, и подписаны они намеренно по-разному: одно
-                      за единицу, другое за всю партию по выходу тех-карты. Под
-                      общей подписью «по тех-карте» их путали бы. */}
-                  <Statistic
-                    title={`По тех-карте за 1 ${unitName(card.base_unit_id)}`}
-                    valueRender={() =>
-                      card.recipe_cost != null ? (
+                  <div className="dossier-stat">
+                    <span className="dossier-stat-label">
+                      Тех-карта / 1 {unitName(card.base_unit_id)}
+                    </span>
+                    <div className="dossier-stat-value">
+                      {card.recipe_cost != null ? (
                         <Money value={card.recipe_cost} />
                       ) : (
                         <span style={{ color: "#bfbfbf" }}>—</span>
-                      )
-                    }
-                    value={0}
-                  />
-                  <Statistic
-                    title={
-                      techCard.data
+                      )}
+                    </div>
+                  </div>
+                  <div className="dossier-stat">
+                    <span className="dossier-stat-label">
+                      {techCard.data
                         ? `Партия ${fmtQty(techCard.data.output_quantity)} ${techCard.data.output_unit_name}`
-                        : "Партия"
-                    }
-                    valueRender={() =>
-                      techCard.isPending ? (
+                        : "Партия"}
+                    </span>
+                    <div className="dossier-stat-value">
+                      {techCard.isPending ? (
                         <Spin size="small" />
                       ) : techCard.data?.totals.cost != null ? (
                         <Money value={techCard.data.totals.cost} />
                       ) : (
                         <span style={{ color: "#bfbfbf" }}>—</span>
-                      )
-                    }
-                    value={0}
-                  />
+                      )}
+                    </div>
+                  </div>
                 </>
               )}
-            </Space>
-            <div style={{ color: "#8c8c8c", fontSize: 13, marginTop: 8 }}>
-              {/* Две цены рядом — не дубль: средняя живёт только пока есть
-                  остаток, а сырьё кончается. */}
-              Средняя — за одну {unitName(card.base_unit_id)}, по ней списывают в
-              себестоимость. Цена последнего прихода
-              {card.last_cost_at ? ` от ${fmtDate(card.last_cost_at)}` : ""} остаётся
-              и когда остаток кончился.
             </div>
+            <p className="dossier-note">
+              Средняя — за одну {unitName(card.base_unit_id)}, по ней списывают.
+              Цена последнего прихода
+              {card.last_cost_at ? ` от ${fmtDate(card.last_cost_at)}` : ""} остаётся,
+              когда остаток кончился.
+            </p>
             {isComposite && (card.recipe_cost_missing
               || techCard.data?.totals.missing_cost) && (
               <Alert
@@ -314,19 +347,15 @@ export default function ProductCardDrawer({
                 description="У этого блюда нет активной тех-карты, поэтому себестоимость по составу не считается."
               />
             )}
-          </div>
+          </section>
 
           {/* ---- состав ---- */}
           {isComposite && techCard.data && (
-            <div>
-              <Typography.Title level={5}>
-                Состав{" "}
-                <Typography.Text type="secondary" style={{ fontSize: 14 }}>
-                  ({countRows(techCard.data.rows)} компонентов, выход{" "}
-                  {fmtQty(techCard.data.output_quantity)}{" "}
-                  {techCard.data.output_unit_name})
-                </Typography.Text>
-              </Typography.Title>
+            <section className="dossier-block">
+              <h3 className="dossier-block-title">
+                Состав · {countRows(techCard.data.rows)} комп. · выход{" "}
+                {fmtQty(techCard.data.output_quantity)} {techCard.data.output_unit_name}
+              </h3>
               <Table<TechCardRow>
                 rowKey="product_id"
                 size="small"
@@ -335,22 +364,20 @@ export default function ProductCardDrawer({
                 columns={composition}
                 expandable={{ childrenColumnName: "children" }}
                 locale={{ emptyText: "Состав пуст" }}
-                // Подсветка обещает клик, значит щёлкать должно всю строку, а не
-                // только ссылку в названии: иначе наведение врёт.
                 rowClassName={() => "row-product"}
                 onRow={(row) => ({
-                  onClick: () => setTrail((t) => [...t, row.product_id]),
+                  onClick: () =>
+                    setTrail((t) => [...t, { id: row.product_id, name: row.name }]),
                 })}
               />
-              <div style={{ color: "#8c8c8c", fontSize: 13, marginTop: 6 }}>
-                Нажмите на компонент, чтобы открыть его карточку.
-              </div>
-            </div>
+              <p className="dossier-note">
+                Наведите на компонент — строка загорится. Нажмите — его личное дело.
+              </p>
+            </section>
           )}
 
-          {/* ---- остатки ---- */}
-          <div>
-            <Typography.Title level={5}>Где лежит</Typography.Title>
+          <section className="dossier-block">
+            <h3 className="dossier-block-title">Где лежит</h3>
             {stock.isPending ? (
               <Spin size="small" />
             ) : onStock.length === 0 ? (
@@ -359,32 +386,33 @@ export default function ProductCardDrawer({
                 description="На складах нет"
               />
             ) : (
-              <Space direction="vertical" size={4} style={{ width: "100%" }}>
-                {onStock.map((row) => (
-                  <Space
-                    key={row.warehouse_id}
-                    style={{ width: "100%", justifyContent: "space-between" }}
-                  >
-                    <span>Склад #{row.warehouse_id}</span>
+              onStock.map((row) => {
+                const wh = warehouses.byId.get(row.warehouse_id);
+                return (
+                  <div key={row.warehouse_id} className="dossier-stock">
+                    <span className="row-card-title">
+                      {wh ? warehouseLabel(wh) : `Склад #${row.warehouse_id}`}
+                    </span>
                     <Space size={16}>
                       <span
                         style={{
                           color: Number(row.quantity) < 0 ? "#cf1322" : undefined,
+                          fontVariantNumeric: "tabular-nums",
+                          fontWeight: 700,
                         }}
                       >
                         {fmtQty(row.quantity)} {unitName(card.base_unit_id)}
                       </span>
                       <Money value={row.cost_balance} />
                     </Space>
-                  </Space>
-                ))}
-              </Space>
+                  </div>
+                );
+              })
             )}
-          </div>
+          </section>
 
-          {/* ---- пищевая ценность ---- */}
-          <div>
-            <Typography.Title level={5}>Пищевая ценность</Typography.Title>
+          <section className="dossier-block">
+            <h3 className="dossier-block-title">Пищевая ценность</h3>
             {nutrition.isPending ? (
               <Spin size="small" />
             ) : nutrition.isError ? (
@@ -396,26 +424,54 @@ export default function ProductCardDrawer({
               />
             ) : nutrition.data ? (
               <>
-                <Descriptions size="small" bordered column={2}>
-                  <Descriptions.Item label="На 100 г">
-                    {nutrition.data.per_100g
-                      ? `${fmtQty(nutrition.data.per_100g.energy_kcal)} ккал · Б ${fmtQty(
-                          nutrition.data.per_100g.protein,
-                        )} · Ж ${fmtQty(nutrition.data.per_100g.fat)} · У ${fmtQty(
-                          nutrition.data.per_100g.carbs,
-                        )}`
-                      : "неизвестен вес единицы"}
-                  </Descriptions.Item>
-                  <Descriptions.Item
-                    label={`На 1 ${unitName(card.base_unit_id)}`}
-                  >
-                    {`${fmtQty(nutrition.data.per_unit.energy_kcal)} ккал · Б ${fmtQty(
-                      nutrition.data.per_unit.protein,
-                    )} · Ж ${fmtQty(nutrition.data.per_unit.fat)} · У ${fmtQty(
-                      nutrition.data.per_unit.carbs,
-                    )}`}
-                  </Descriptions.Item>
-                </Descriptions>
+                {nutrition.data.per_100g ? (
+                  <>
+                    <p className="dossier-note" style={{ marginTop: 0 }}>
+                      На 100 г
+                    </p>
+                    <div className="nutri-grid">
+                      <div className="nutri-cell">
+                        <strong>{fmtQty(nutrition.data.per_100g.energy_kcal)}</strong>
+                        <span>ккал</span>
+                      </div>
+                      <div className="nutri-cell">
+                        <strong>{fmtQty(nutrition.data.per_100g.protein)}</strong>
+                        <span>белки</span>
+                      </div>
+                      <div className="nutri-cell">
+                        <strong>{fmtQty(nutrition.data.per_100g.fat)}</strong>
+                        <span>жиры</span>
+                      </div>
+                      <div className="nutri-cell">
+                        <strong>{fmtQty(nutrition.data.per_100g.carbs)}</strong>
+                        <span>углеводы</span>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <p className="dossier-note" style={{ marginTop: 0 }}>
+                    На 100 г неизвестно: нет веса единицы
+                  </p>
+                )}
+                <p className="dossier-note">На 1 {unitName(card.base_unit_id)}</p>
+                <div className="nutri-grid">
+                  <div className="nutri-cell">
+                    <strong>{fmtQty(nutrition.data.per_unit.energy_kcal)}</strong>
+                    <span>ккал</span>
+                  </div>
+                  <div className="nutri-cell">
+                    <strong>{fmtQty(nutrition.data.per_unit.protein)}</strong>
+                    <span>белки</span>
+                  </div>
+                  <div className="nutri-cell">
+                    <strong>{fmtQty(nutrition.data.per_unit.fat)}</strong>
+                    <span>жиры</span>
+                  </div>
+                  <div className="nutri-cell">
+                    <strong>{fmtQty(nutrition.data.per_unit.carbs)}</strong>
+                    <span>углеводы</span>
+                  </div>
+                </div>
                 {!nutrition.data.complete && (
                   <Alert
                     type="warning"
@@ -431,11 +487,10 @@ export default function ProductCardDrawer({
                 )}
               </>
             ) : null}
-          </div>
+          </section>
 
-          {/* ---- реквизиты ---- */}
-          <div>
-            <Typography.Title level={5}>Основное</Typography.Title>
+          <section className="dossier-block">
+            <h3 className="dossier-block-title">Основное</h3>
             <Descriptions size="small" bordered column={1}>
               <Descriptions.Item label="Артикул">
                 {card.sku || "—"}
@@ -456,7 +511,7 @@ export default function ProductCardDrawer({
                 {fmtDate(card.created_at)}
               </Descriptions.Item>
             </Descriptions>
-          </div>
+          </section>
         </Space>
       )}
     </Drawer>

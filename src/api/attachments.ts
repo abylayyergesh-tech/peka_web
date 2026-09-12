@@ -12,7 +12,13 @@
  */
 import { api } from "@/api/client";
 
-export type AttachmentKind = "personnel" | "invoice" | "statement";
+export type AttachmentKind =
+  | "personnel"
+  | "invoice"
+  | "statement"
+  | "recipe"
+  | "medical_book"
+  | "request_template";
 
 export interface AttachmentOut {
   attachment_id: number;
@@ -34,7 +40,9 @@ export interface AttachmentOut {
 export type AttachmentOwner =
   | { kind: "personnel"; employeeId: number }
   | { kind: "invoice"; documentId: number }
-  | { kind: "statement"; statementId: number };
+  | { kind: "statement"; statementId: number }
+  | { kind: "recipe"; recipeId: number }
+  | { kind: "medical_book"; employeeId: number; bookId: number };
 
 function ownerPath(owner: AttachmentOwner): string {
   switch (owner.kind) {
@@ -44,6 +52,10 @@ function ownerPath(owner: AttachmentOwner): string {
       return `/documents/${owner.documentId}/photos`;
     case "statement":
       return `/bank-statements/${owner.statementId}/files`;
+    case "recipe":
+      return `/recipes/${owner.recipeId}/files`;
+    case "medical_book":
+      return `/employees/${owner.employeeId}/medical-books/${owner.bookId}/files`;
   }
 }
 
@@ -121,4 +133,31 @@ export function fmtFileSize(bytes: number): string {
 /** Картинку можно показать превью, остальное — только скачать. */
 export function isImage(item: AttachmentOut): boolean {
   return item.content_type.startsWith("image/");
+}
+
+export function canPrintAttachment(item: AttachmentOut): boolean {
+  return isImage(item) || item.content_type === "application/pdf";
+}
+
+/** Открыть и послать на печать. Word/Excel браузер не печатает — их скачивают. */
+export async function printAttachment(item: AttachmentOut): Promise<boolean> {
+  const { data } = await api.get<Blob>(item.download_url, { responseType: "blob" });
+  const url = URL.createObjectURL(data);
+  const win = window.open(url, "_blank");
+  if (!win) {
+    URL.revokeObjectURL(url);
+    return false;
+  }
+  const kick = () => {
+    try {
+      win.focus();
+      win.print();
+    } catch {
+      /* пусто: вкладка открыта, человек нажмёт Ctrl+P сам */
+    }
+  };
+  win.addEventListener("load", kick);
+  window.setTimeout(kick, 700);
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  return true;
 }

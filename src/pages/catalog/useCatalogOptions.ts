@@ -6,7 +6,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import type { Page, PageParams } from "@/api/client";
-import { listProducts, listUnits } from "@/api/catalog";
+import { listProducts, listUnits, type ProductOut, type UnitOut } from "@/api/catalog";
 
 export interface IdOption {
   value: number;
@@ -29,15 +29,21 @@ async function fetchAll<T>(fetchPage: (p: PageParams) => Promise<Page<T>>): Prom
 export function useProductOptions() {
   const query = useQuery({
     queryKey: ["products", "options", "all"],
-    queryFn: () => fetchAll((p) => listProducts(p)),
+    queryFn: () => fetchAll((p) => listProducts({ ...p, include_inactive: true })),
     staleTime: 60_000,
   });
   const items = query.data ?? [];
   const byId = new Map(items.map((p) => [p.product_id, p.name]));
-  const options: IdOption[] = items.map((p) => ({ value: p.product_id, label: p.name }));
+  const byProduct = new Map(items.map((p) => [p.product_id, p]));
+  const options: IdOption[] = items.map((p) => ({
+    value: p.product_id,
+    label: p.sku ? `${p.name} · ${p.sku}` : p.name,
+  }));
   const nameOf = (id: number | null | undefined): string =>
     id == null ? "—" : byId.get(id) ?? `#${id}`;
-  return { options, nameOf, isLoading: query.isPending };
+  const productOf = (id: number | null | undefined): ProductOut | undefined =>
+    id == null ? undefined : byProduct.get(id);
+  return { options, nameOf, productOf, items, isLoading: query.isPending };
 }
 
 export function useUnitOptions() {
@@ -48,8 +54,11 @@ export function useUnitOptions() {
   });
   const items = query.data ?? [];
   const byId = new Map(items.map((u) => [u.unit_id, u.name]));
+  const byUnit = new Map(items.map((u) => [u.unit_id, u]));
   const options: IdOption[] = items.map((u) => ({ value: u.unit_id, label: u.name }));
   const nameOf = (id: number | null | undefined): string =>
     id == null ? "—" : byId.get(id) ?? `#${id}`;
-  return { options, nameOf, isLoading: query.isPending };
+  const unitOf = (id: number | null | undefined): UnitOut | undefined =>
+    id == null ? undefined : byUnit.get(id);
+  return { options, nameOf, unitOf, items, isLoading: query.isPending };
 }

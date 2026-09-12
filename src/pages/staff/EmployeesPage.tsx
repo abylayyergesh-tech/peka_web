@@ -19,15 +19,13 @@ import {
   UserDeleteOutlined,
 } from "@ant-design/icons";
 import {
+  Alert,
   App,
   Button,
   Card,
   Col,
   DatePicker,
-  Descriptions,
-  Divider,
   Drawer,
-  Empty,
   Form,
   Input,
   Modal,
@@ -46,32 +44,32 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { errorMessage } from "@/api/client";
-import { getRequest, listRequests, type RequestOut } from "@/api/requests";
+import { getRequest } from "@/api/requests";
 import {
   createEmployee,
   listDepartments,
   listEmployees,
+  listMedicalBookAlerts,
   terminateEmployee,
   updateEmployee,
   type EmployeeCreate,
   type EmployeeOut,
+  type EmployeePresence,
   type EmployeeUpdate,
   type Role,
 } from "@/api/staff";
 import { useCan } from "@/auth/store";
-import AttachmentsPanel from "@/components/AttachmentsPanel";
-import { fmtDate, fmtDateTime } from "@/components/format";
+import { fmtDate } from "@/components/format";
 import { usePagination } from "@/components/usePagination";
 import {
   ApprovalSteps,
   ApprovalsList,
   RequestDetails,
-  RequestStatusTags,
-  RequestTypeTag,
   TimesheetCorrectionLines,
-  describeRequest,
 } from "@/pages/requests/shared";
-import { EmployeeStatusTag, ROLE_OPTIONS } from "@/pages/staff/shared";
+import { EmployeeFileBody } from "@/pages/staff/EmployeeFileDrawer";
+import { EmployeeStatusTag, PRESENCE_LABELS, PresenceTag, ROLE_OPTIONS } from "@/pages/staff/shared";
+import { Link } from "react-router-dom";
 
 interface EmployeeFormValues {
   email?: string;
@@ -81,6 +79,7 @@ interface EmployeeFormValues {
   phone?: string;
   hire_date?: Dayjs;
   department_id?: number;
+  manager_id?: number;
   personnel_no?: string;
 }
 
@@ -89,6 +88,11 @@ const STATUS_OPTIONS = [
   { value: "terminated", label: "Уволен" },
 ];
 
+const PRESENCE_OPTIONS = (Object.keys(PRESENCE_LABELS) as EmployeePresence[]).map((v) => ({
+  value: v,
+  label: PRESENCE_LABELS[v],
+}));
+
 export default function EmployeesPage() {
   const { message } = App.useApp();
   const queryClient = useQueryClient();
@@ -96,10 +100,12 @@ export default function EmployeesPage() {
   // Заявления чужих людей отдаёт ручка под правом request.approve. Без него
   // раздел не показываем совсем — пустая рамка с 403 хуже, чем её отсутствие.
   const canSeeRequests = useCan("request.approve");
+  const canPayrollRead = useCan("payroll.read");
   const { limit, offset, tablePagination, reset } = usePagination();
 
   const [departmentId, setDepartmentId] = useState<number | undefined>();
   const [statusFilter, setStatusFilter] = useState<string | undefined>();
+  const [presenceFilter, setPresenceFilter] = useState<EmployeePresence | undefined>();
   /** Что набрано в поиске и что уже ушло в запрос — разные вещи. */
   const [search, setSearch] = useState("");
   const [q, setQ] = useState("");
@@ -126,15 +132,22 @@ export default function EmployeesPage() {
   }, [search]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const query = useQuery({
-    queryKey: ["employees", { limit, offset, departmentId, statusFilter, q }],
+    queryKey: ["employees", { limit, offset, departmentId, statusFilter, presenceFilter, q }],
     queryFn: () =>
       listEmployees({
         limit,
         offset,
         department_id: departmentId,
         status: statusFilter,
+        presence: presenceFilter,
         q: q || undefined,
       }),
+  });
+
+  const alerts = useQuery({
+    queryKey: ["medical-book-alerts"],
+    queryFn: () => listMedicalBookAlerts(30),
+    enabled: canManage,
   });
 
   const deptQuery = useQuery({
@@ -144,6 +157,16 @@ export default function EmployeesPage() {
   });
   const deptOptions =
     deptQuery.data?.items.map((d) => ({ value: d.department_id, label: d.name })) ?? [];
+
+  const empQuery = useQuery({
+    queryKey: ["employees", "options"],
+    queryFn: () => listEmployees({ limit: 200, offset: 0, status: "active" }),
+    staleTime: 60_000,
+  });
+  const managerOptions =
+    empQuery.data?.items
+      .filter((e) => e.employee_id !== editing?.employee_id)
+      .map((e) => ({ value: e.employee_id, label: e.full_name })) ?? [];
 
   const save = useMutation({
     mutationFn: (body: EmployeeCreate | EmployeeUpdate) =>
@@ -183,6 +206,7 @@ export default function EmployeesPage() {
       phone: row.phone ?? undefined,
       hire_date: row.hire_date ? dayjs(row.hire_date) : undefined,
       department_id: row.department_id ?? undefined,
+      manager_id: row.manager_id ?? undefined,
       personnel_no: row.personnel_no ?? undefined,
     });
     setModalOpen(true);
@@ -195,6 +219,7 @@ export default function EmployeesPage() {
       phone: values.phone || null,
       hire_date: values.hire_date ? values.hire_date.format("YYYY-MM-DD") : null,
       department_id: values.department_id ?? null,
+      manager_id: values.manager_id ?? null,
       personnel_no: values.personnel_no || null,
     };
     if (editing) {
@@ -209,12 +234,14 @@ export default function EmployeesPage() {
     }
   }
 
-  const hasFilters = !!search || departmentId != null || statusFilter != null;
+  const hasFilters =
+    !!search || departmentId != null || statusFilter != null || presenceFilter != null;
 
   function clearFilters() {
     setSearch("");
     setDepartmentId(undefined);
     setStatusFilter(undefined);
+    setPresenceFilter(undefined);
     reset();
   }
 
@@ -233,8 +260,15 @@ export default function EmployeesPage() {
     {
       title: "Статус",
       dataIndex: "status",
-      width: 110,
-      render: (v) => <EmployeeStatusTag status={v} />,
+      width: 200,
+      render: (_, row) => (
+        <Space size={4} wrap>
+          <EmployeeStatusTag status={row.status} />
+          {row.status === "active" && row.presence !== "at_work" && (
+            <PresenceTag presence={row.presence} />
+          )}
+        </Space>
+      ),
     },
   ];
 
@@ -253,10 +287,31 @@ export default function EmployeesPage() {
         )}
       </Space>
 
+      {canManage && alerts.data && (alerts.data.expired_count > 0 || alerts.data.expiring_count > 0) && (
+        <Alert
+          style={{ marginBottom: 16 }}
+          type={alerts.data.expired_count > 0 ? "error" : "warning"}
+          showIcon
+          message={
+            alerts.data.expired_count > 0
+              ? `Просроченных медкнижек: ${alerts.data.expired_count}` +
+                (alerts.data.expiring_count
+                  ? `, истекают в ближайшие 30 дней: ${alerts.data.expiring_count}`
+                  : "")
+              : `Медкнижки истекают в ближайшие 30 дней: ${alerts.data.expiring_count}`
+          }
+          action={
+            <Link to="/employees/medical-books">
+              <Button size="small">Журнал медкнижек</Button>
+            </Link>
+          }
+        />
+      )}
+
       {/* Поиск и фильтры — своей карточкой: с них начинается работа со списком. */}
       <Card size="small" style={{ marginBottom: 16 }}>
         <Row gutter={[12, 12]} align="middle">
-          <Col xs={24} lg={10}>
+          <Col xs={24} lg={8}>
             <Input
               size="large"
               allowClear
@@ -266,7 +321,7 @@ export default function EmployeesPage() {
               onChange={(e) => setSearch(e.target.value)}
             />
           </Col>
-          <Col xs={24} sm={12} lg={6}>
+          <Col xs={24} sm={12} lg={5}>
             <Select
               size="large"
               allowClear
@@ -282,7 +337,7 @@ export default function EmployeesPage() {
               optionFilterProp="label"
             />
           </Col>
-          <Col xs={24} sm={12} lg={5}>
+          <Col xs={24} sm={8} lg={4}>
             <Select
               size="large"
               allowClear
@@ -294,6 +349,20 @@ export default function EmployeesPage() {
                 reset();
               }}
               options={STATUS_OPTIONS}
+            />
+          </Col>
+          <Col xs={24} sm={8} lg={4}>
+            <Select
+              size="large"
+              allowClear
+              style={{ width: "100%" }}
+              placeholder="Присутствие"
+              value={presenceFilter}
+              onChange={(v) => {
+                setPresenceFilter(v);
+                reset();
+              }}
+              options={PRESENCE_OPTIONS}
             />
           </Col>
           <Col xs={24} lg={3}>
@@ -335,7 +404,7 @@ export default function EmployeesPage() {
       <Drawer
         open={detail != null}
         onClose={() => setDetailRow(null)}
-        width={640}
+        width={880}
         destroyOnClose
         title={
           detail && (
@@ -343,6 +412,9 @@ export default function EmployeesPage() {
               <Space size={8}>
                 <span>{detail.full_name}</span>
                 <EmployeeStatusTag status={detail.status} />
+                {detail.status === "active" && detail.presence !== "at_work" && (
+                  <PresenceTag presence={detail.presence} />
+                )}
               </Space>
               <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                 {[detail.position, detail.department_name].filter(Boolean).join(" · ") ||
@@ -355,8 +427,8 @@ export default function EmployeesPage() {
           detail &&
           canManage && (
             <Space>
-              <Button icon={<EditOutlined />} onClick={() => openEdit(detail)}>
-                Изменить
+              <Button type="primary" icon={<EditOutlined />} onClick={() => openEdit(detail)}>
+                Редактировать
               </Button>
               {detail.status === "active" && (
                 <Popconfirm
@@ -396,47 +468,13 @@ export default function EmployeesPage() {
         }
       >
         {detail && (
-          <>
-            <Descriptions bordered size="small" column={1}>
-              <Descriptions.Item label="Табельный номер">
-                {detail.personnel_no || "—"}
-              </Descriptions.Item>
-              <Descriptions.Item label="Должность">{detail.position || "—"}</Descriptions.Item>
-              <Descriptions.Item label="Отдел">{detail.department_name || "—"}</Descriptions.Item>
-              <Descriptions.Item label="Email">{detail.user_email || "—"}</Descriptions.Item>
-              <Descriptions.Item label="Телефон">{detail.phone || "—"}</Descriptions.Item>
-              <Descriptions.Item label="Принят">{fmtDate(detail.hire_date)}</Descriptions.Item>
-              {detail.status === "terminated" && (
-                <Descriptions.Item label="Уволен">
-                  {fmtDate(detail.termination_date)}
-                </Descriptions.Item>
-              )}
-            </Descriptions>
-
-            {canSeeRequests && (
-              <>
-                <Divider orientation="left" style={{ marginTop: 24 }}>
-                  Заявления
-                </Divider>
-                <EmployeeRequests
-                  employeeId={detail.employee_id}
-                  onOpen={(id) => setRequestId(id)}
-                />
-              </>
-            )}
-
-            <Divider orientation="left" style={{ marginTop: 24 }}>
-              Личное дело
-            </Divider>
-            {/* Файлы отдаёт бэкенд по праву staff.manage — по прямой ссылке их
-                не открыть, поэтому и загрузка, и скачивание идут запросом. */}
-            <AttachmentsPanel
-              owner={{ kind: "personnel", employeeId: detail.employee_id }}
-              canManage={canManage}
-              emptyText="В деле пока нет документов"
-              uploadHint="Договор, удостоверение, заявление — pdf, фото или документ Office"
-            />
-          </>
+          <EmployeeFileBody
+            employee={detail}
+            canManage={canManage}
+            canSeeRequests={canSeeRequests}
+            canPayrollRead={canPayrollRead}
+            onOpenRequest={(id) => setRequestId(id)}
+          />
         )}
       </Drawer>
 
@@ -506,78 +544,21 @@ export default function EmployeesPage() {
               placeholder="Без отдела"
             />
           </Form.Item>
+          <Form.Item name="manager_id" label="Руководитель">
+            <Select
+              allowClear
+              options={managerOptions}
+              showSearch
+              optionFilterProp="label"
+              placeholder="Не указан"
+            />
+          </Form.Item>
           <Form.Item name="personnel_no" label="Табельный номер">
             <Input />
           </Form.Item>
         </Form>
       </Modal>
     </div>
-  );
-}
-
-/** Заявления сотрудника: тип, статус, о чём и когда подано. Строка нажимается —
- *  открывается само заявление. */
-function EmployeeRequests({
-  employeeId,
-  onOpen,
-}: {
-  employeeId: number;
-  onOpen: (requestId: number) => void;
-}) {
-  const query = useQuery({
-    queryKey: ["employee-requests", employeeId],
-    // Пятьдесят последних: заявлений у человека десятки за годы, и постраничная
-    // навигация внутри карточки была бы навигацией внутри навигации.
-    queryFn: () => listRequests({ employee_id: employeeId, limit: 50, offset: 0 }),
-  });
-
-  const columns: ColumnsType<RequestOut> = [
-    {
-      title: "Тип",
-      dataIndex: "type",
-      width: 150,
-      render: (_, row) => <RequestTypeTag type={row.type} />,
-    },
-    {
-      title: "Статус",
-      dataIndex: "status",
-      width: 190,
-      render: (_, row) => <RequestStatusTags req={row} />,
-    },
-    {
-      title: "О чём",
-      render: (_, row) => (
-        <Typography.Text style={{ fontSize: 14 }}>{describeRequest(row)}</Typography.Text>
-      ),
-    },
-    {
-      title: "Подано",
-      dataIndex: "created_at",
-      width: 130,
-      render: (v) => (
-        <Typography.Text type="secondary" style={{ fontSize: 13 }}>
-          {fmtDateTime(v)}
-        </Typography.Text>
-      ),
-    },
-  ];
-
-  return (
-    <Table<RequestOut>
-      rowKey="request_id"
-      size="small"
-      loading={query.isPending}
-      dataSource={query.data?.items}
-      columns={columns}
-      pagination={false}
-      rowClassName={() => "row-clickable"}
-      onRow={(row) => ({ onClick: () => onOpen(row.request_id) })}
-      locale={{
-        emptyText: (
-          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Заявлений не подавал" />
-        ),
-      }}
-    />
   );
 }
 

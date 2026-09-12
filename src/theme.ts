@@ -27,7 +27,7 @@ export const theme: ThemeConfig = {
     colorLink: BRAND.green,
     colorInfo: BRAND.green,
     colorWarning: "#8a6a06",
-    borderRadius: 8,
+    borderRadius: 12,
     colorBgLayout: BRAND.cream,
     // Крупнее базовых 14: интерфейс смотрят с расстояния, а таблицы плотные.
     // Остальные размеры antd выводит отсюда (SM = 14, LG = 18, заголовки).

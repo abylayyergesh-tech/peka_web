@@ -161,6 +161,12 @@ export function errorMessage(e: unknown): string {
     const detail = validationDetail(body?.details);
     if (detail) return `Проверьте поля — ${detail}`;
     if (body?.message) {
+      const names = body.details?.["missing_product_names"];
+      if (Array.isArray(names) && names.length > 0) {
+        const shown = names.slice(0, 8).map(String).join(", ");
+        const more = names.length > 8 ? " и др." : "";
+        return `${body.message}${body.message.includes(":") ? "" : `: ${shown}${more}`}`;
+      }
       return body.code ? `${body.message} (${body.code})` : body.message;
     }
     if (e.response?.status === 422) return "Проверьте правильность заполнения полей";

@@ -4,6 +4,7 @@
  *  supplier_id/internal/free_goods, so a receipt can't be reconstructed safely. */
 import { App, Form, Modal } from "antd";
 import dayjs from "dayjs";
+import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { errorMessage } from "@/api/client";
@@ -19,6 +20,9 @@ import {
   useWarehousesLookup,
 } from "@/pages/inventory/shared";
 import { useCompanyEntities } from "@/pages/finance/companyEntities";
+import WriteOffCategoriesModal, {
+  useWriteOffCategories,
+} from "@/pages/inventory/WriteOffCategoriesModal";
 
 interface Props {
   open: boolean;
@@ -31,11 +35,13 @@ export default function DocumentEditModal({ open, doc, onClose, onSaved }: Props
   const { message } = App.useApp();
   const queryClient = useQueryClient();
   const [form] = Form.useForm<DocumentFormValues>();
+  const [categoriesOpen, setCategoriesOpen] = useState(false);
 
   const products = useProductsLookup();
   const warehouses = useWarehousesLookup();
   const suppliers = useSuppliersLookup();
   const entities = useCompanyEntities();
+  const writeOffCategories = useWriteOffCategories();
 
   const update = useMutation({
     mutationFn: (values: DocumentFormValues) =>
@@ -55,6 +61,8 @@ export default function DocumentEditModal({ open, doc, onClose, onSaved }: Props
     warehouse_id: doc.warehouse_id,
     target_warehouse_id: doc.target_warehouse_id ?? undefined,
     counterparty: doc.counterparty ?? undefined,
+    write_off_category_id: doc.write_off_category_id ?? undefined,
+    comment: doc.comment ?? undefined,
     lines: doc.lines.map((l) => ({
       product_id: l.product_id,
       quantity: l.quantity,
@@ -92,8 +100,23 @@ export default function DocumentEditModal({ open, doc, onClose, onSaved }: Props
           productOptions={products.options}
           warehouseOptions={warehouses.options}
           supplierOptions={suppliers.options}
+          writeOffCategoryOptions={(writeOffCategories.data ?? [])
+            .filter(
+              (c) =>
+                c.is_active ||
+                c.write_off_category_id === doc.write_off_category_id,
+            )
+            .map((c) => ({
+              value: c.write_off_category_id,
+              label: c.name,
+            }))}
+          onManageWriteOffCategories={() => setCategoriesOpen(true)}
         />
       </Form>
+      <WriteOffCategoriesModal
+        open={categoriesOpen}
+        onClose={() => setCategoriesOpen(false)}
+      />
     </Modal>
   );
 }

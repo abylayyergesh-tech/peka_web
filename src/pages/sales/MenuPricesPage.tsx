@@ -10,8 +10,8 @@
  *   цена  + «входит»  -> своя цена меню;
  *   «не входит»       -> позиция исключена, цены не несёт.
  */
-import { SearchOutlined } from "@ant-design/icons";
-import { Alert, App, Button, Input, Space, Switch, Table, Tag, Tooltip } from "antd";
+import { SearchOutlined, TeamOutlined } from "@ant-design/icons";
+import { Alert, App, Button, Drawer, Input, Space, Switch, Table, Tag, Tooltip } from "antd";
 import InputNumber from "antd/es/input-number";
 import type { ColumnsType } from "antd/es/table";
 import { useMemo, useState } from "react";
@@ -21,15 +21,18 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { errorMessage } from "@/api/client";
 import {
   getMenu,
+  listAllCustomers,
   listAllMenuItems,
   listMenuPrices,
   setMenuPrices,
+  type CustomerOut,
   type MenuItemOut,
   type MenuPriceIn,
 } from "@/api/sales";
 import { useCan } from "@/auth/store";
 import { Money } from "@/components/format";
 import { PRICE_LISTS_TAB } from "@/pages/sales/MenuPage";
+import { BillingModeTag } from "@/pages/sales/statusTags";
 
 /** Правка одной строки до сохранения. */
 interface Draft {
@@ -45,6 +48,7 @@ export default function MenuPricesPage() {
   const canManage = useCan("menu.manage");
   const [search, setSearch] = useState("");
   const [drafts, setDrafts] = useState<Record<number, Draft>>({});
+  const [customersOpen, setCustomersOpen] = useState(false);
 
   const menu = useQuery({ queryKey: ["menu", menuId], queryFn: () => getMenu(menuId) });
 
@@ -58,6 +62,12 @@ export default function MenuPricesPage() {
   const prices = useQuery({
     queryKey: ["menu-prices", menuId],
     queryFn: () => listMenuPrices(menuId),
+  });
+
+  const customers = useQuery({
+    queryKey: ["customers", { menu_id: menuId }],
+    queryFn: () => listAllCustomers({ menu_id: menuId }),
+    enabled: customersOpen && Number.isFinite(menuId),
   });
 
   /** Сохранённое состояние строки: из menu_prices, иначе «отклонения нет». */
@@ -125,7 +135,16 @@ export default function MenuPricesPage() {
   }, [saved, drafts]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const columns: ColumnsType<MenuItemOut> = [
-    { title: "Позиция", dataIndex: "name" },
+    {
+      title: "Позиция",
+      dataIndex: "name",
+      render: (name: string, row) => (
+        <Space>
+          {name}
+          {row.is_stopped && <Tag color="red">Стоп</Tag>}
+        </Space>
+      ),
+    },
     {
       title: "Категория",
       dataIndex: "category",
@@ -198,6 +217,32 @@ export default function MenuPricesPage() {
     },
   ];
 
+  const customerColumns: ColumnsType<CustomerOut> = [
+    {
+      title: "Клиент",
+      dataIndex: "name",
+      render: (v: string, row) => <Link to={`/customers/${row.customer_id}`}>{v}</Link>,
+    },
+    {
+      title: "Телефон",
+      dataIndex: "phone",
+      width: 140,
+      render: (v: string | null) => v ?? "—",
+    },
+    {
+      title: "Расчёты",
+      dataIndex: "billing_mode",
+      width: 150,
+      render: (v: CustomerOut["billing_mode"]) => <BillingModeTag mode={v} />,
+    },
+    {
+      title: "Статус",
+      dataIndex: "is_active",
+      width: 110,
+      render: (v: boolean) => (v ? <Tag color="green">Активен</Tag> : <Tag>Неактивен</Tag>),
+    },
+  ];
+
   if (menu.data?.is_default) {
     return (
       <div>
@@ -234,11 +279,14 @@ export default function MenuPricesPage() {
             onChange={(e) => setSearch(e.target.value)}
           />
         </Space>
-        {canManage && (
-          <Space>
-            {dirtyIds.length > 0 && (
-              <Button onClick={() => setDrafts({})}>Отменить правки</Button>
-            )}
+        <Space wrap>
+          <Button icon={<TeamOutlined />} onClick={() => setCustomersOpen(true)}>
+            Клиенты с этим прайсом
+          </Button>
+          {canManage && dirtyIds.length > 0 && (
+            <Button onClick={() => setDrafts({})}>Отменить правки</Button>
+          )}
+          {canManage && (
             <Tooltip title={dirtyIds.length === 0 ? "Нет изменений" : undefined}>
               <Button
                 type="primary"
@@ -249,8 +297,8 @@ export default function MenuPricesPage() {
                 Сохранить{dirtyIds.length > 0 ? ` (${dirtyIds.length})` : ""}
               </Button>
             </Tooltip>
-          </Space>
-        )}
+          )}
+        </Space>
       </Space>
 
       <Alert
@@ -280,6 +328,37 @@ export default function MenuPricesPage() {
         scroll={{ y: "calc(100vh - 340px)" }}
         columns={columns}
       />
+
+      <Drawer
+        title={
+          customers.data
+            ? `Клиенты с прайсом «${menu.data?.name ?? ""}»: ${customers.data.length}`
+            : `Клиенты с прайсом «${menu.data?.name ?? ""}»`
+        }
+        open={customersOpen}
+        onClose={() => setCustomersOpen(false)}
+        width={640}
+        destroyOnClose
+      >
+        {customers.isError && (
+          <Alert
+            style={{ marginBottom: 12 }}
+            type="error"
+            showIcon
+            message="Не удалось загрузить клиентов"
+            description={errorMessage(customers.error)}
+          />
+        )}
+        <Table
+          rowKey="customer_id"
+          size="small"
+          loading={customers.isPending}
+          dataSource={customers.data}
+          columns={customerColumns}
+          pagination={false}
+          locale={{ emptyText: "На этом прайсе никого нет" }}
+        />
+      </Drawer>
     </div>
   );
 }

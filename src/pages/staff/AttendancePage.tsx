@@ -155,13 +155,18 @@ export default function AttendancePage() {
     },
     {
       title: "",
-      width: 160,
-      render: (_, row) => (
-        <Space size="small">
-          <a onClick={() => openEdit(row)}>Изменить</a>
-          {row.status === "open" && <a onClick={() => openClose(row)}>Закрыть</a>}
-        </Space>
-      ),
+      width: 90,
+      render: (_, row) =>
+        row.status === "open" ? (
+          <a
+            onClick={(e) => {
+              e.stopPropagation();
+              openClose(row);
+            }}
+          >
+            Закрыть
+          </a>
+        ) : null,
     },
   ];
 
@@ -237,6 +242,8 @@ export default function AttendancePage() {
         pagination={tablePagination(query.data?.total)}
         columns={columns}
         scroll={{ x: 900 }}
+        rowClassName={() => "row-clickable"}
+        onRow={(row) => ({ onClick: () => openEdit(row) })}
       />
 
       <Modal

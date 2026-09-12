@@ -1,4 +1,4 @@
-import { Card, Col, Row, Typography } from "antd";
+import { Typography } from "antd";
 import { Link } from "react-router-dom";
 
 import { useAuthStore } from "@/auth/store";
@@ -11,25 +11,32 @@ export default function DashboardPage() {
 
   return (
     <div>
-      <Typography.Title level={3}>
-        {org ? org.name : "Peka RSM"}
-      </Typography.Title>
-      <Typography.Paragraph type="secondary">
-        Здравствуйте, {me?.full_name}! Выберите раздел:
-      </Typography.Paragraph>
-      <Row gutter={[16, 16]}>
-        {sections.map((s) => (
-          <Col key={s.key} xs={24} sm={12} lg={8} xl={6}>
-            <Card title={s.label} size="small">
-              {s.items.map((i) => (
-                <div key={i.path} style={{ marginBottom: 4 }}>
-                  <Link to={i.path}>{i.label}</Link>
-                </div>
-              ))}
-            </Card>
-          </Col>
-        ))}
-      </Row>
+      <p className="page-kicker">Рабочее место</p>
+      <h1 className="page-title">{org ? org.name : "Peka RSM"}</h1>
+      <p className="page-lead">
+        Здравствуйте, {me?.full_name}. Наведите на карточку — она загорится.
+        Нажмите — откроется раздел.
+      </p>
+      {sections.map((s) => (
+        <section key={s.key} className="dash-group">
+          <h2 className="dash-group-title">{s.label}</h2>
+          <div className="dash-grid">
+            {s.items.map((i) => (
+              <Link key={i.path} to={i.path} className="dash-tile">
+                <span>{i.label}</span>
+                <span className="dash-tile-go" aria-hidden>
+                  →
+                </span>
+              </Link>
+            ))}
+          </div>
+        </section>
+      ))}
+      {sections.length === 0 && (
+        <Typography.Paragraph type="secondary" style={{ marginTop: 24 }}>
+          Нет доступных разделов.
+        </Typography.Paragraph>
+      )}
     </div>
   );
 }

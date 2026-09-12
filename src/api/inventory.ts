@@ -4,10 +4,13 @@ import { api } from "@/api/client";
 import type { Page, PageParams } from "@/api/client";
 
 // --------------------------- warehouses ---------------------------
+export type WarehousePurpose = "raw" | "finished";
+
 export interface WarehouseOut {
   warehouse_id: number;
   organization_id: number;
   name: string;
+  purpose: WarehousePurpose;
   is_active: boolean;
   created_at: string;
   updated_at: string | null;
@@ -20,12 +23,23 @@ export async function listWarehouses(
   return data;
 }
 
-export async function createWarehouse(body: { name: string }): Promise<WarehouseOut> {
+export async function createWarehouse(body: {
+  name: string;
+  purpose?: WarehousePurpose;
+}): Promise<WarehouseOut> {
   const { data } = await api.post<WarehouseOut>("/warehouses", body);
   return data;
 }
 
-/** Soft-delete (deactivate) — backend has no rename/update endpoint. */
+export async function updateWarehouse(
+  id: number,
+  body: { name?: string; purpose?: WarehousePurpose },
+): Promise<WarehouseOut> {
+  const { data } = await api.patch<WarehouseOut>(`/warehouses/${id}`, body);
+  return data;
+}
+
+/** Soft-delete (deactivate). */
 export async function deleteWarehouse(id: number): Promise<WarehouseOut> {
   const { data } = await api.delete<WarehouseOut>(`/warehouses/${id}`);
   return data;
@@ -94,6 +108,8 @@ interface _BaseConsumptionCreate {
 
 export interface WriteOffDocumentCreate extends _BaseConsumptionCreate {
   type: "write_off";
+  write_off_category_id?: number | null;
+  comment?: string | null;
 }
 
 export interface TransferDocumentCreate extends _BaseConsumptionCreate {
@@ -136,6 +152,9 @@ export interface DocumentLineOut {
   unit_id: number;
   price: string | null;
   expected_quantity: string | null;
+  unit_cost?: string | null;
+  line_amount?: string | null;
+  stock_quantity?: string | null;
 }
 
 export interface DocumentOut {
@@ -150,6 +169,10 @@ export interface DocumentOut {
   counterparty: string | null;
   /** От чьего нашего юр. лица документ; null — до разделения на юр. лица. */
   company_entity_id: number | null;
+  write_off_category_id: number | null;
+  comment: string | null;
+  /** Заполнен у кассового списания; складские акты АУП поле не ставят. */
+  shift_id: number | null;
   recipe_id: number | null;
   posted_at: string | null;
   created_at: string;
@@ -164,6 +187,7 @@ export interface DocumentOut {
 export interface DocumentListParams extends PageParams {
   type?: DocumentType;
   status?: DocumentStatus;
+  write_off_category_id?: number;
   /** query aliases: from / to (ISO date). */
   from?: string;
   to?: string;
@@ -201,6 +225,52 @@ export async function deleteDocument(id: number): Promise<void> {
 
 export async function postDocument(id: number): Promise<DocumentOut> {
   const { data } = await api.post<DocumentOut>(`/documents/${id}/post`);
+  return data;
+}
+
+// --------------------- write-off categories ---------------------
+export interface WriteOffCategoryOut {
+  write_off_category_id: number;
+  organization_id: number;
+  name: string;
+  is_active: boolean;
+  is_default: boolean;
+  documents_count: number;
+}
+
+export async function listWriteOffCategories(
+  active?: boolean,
+): Promise<WriteOffCategoryOut[]> {
+  const { data } = await api.get<WriteOffCategoryOut[]>("/write-off-categories", {
+    params: active == null ? {} : { active },
+  });
+  return data;
+}
+
+export async function createWriteOffCategory(body: {
+  name: string;
+}): Promise<WriteOffCategoryOut> {
+  const { data } = await api.post<WriteOffCategoryOut>("/write-off-categories", body);
+  return data;
+}
+
+export async function updateWriteOffCategory(
+  id: number,
+  body: { name?: string; is_active?: boolean },
+): Promise<WriteOffCategoryOut> {
+  const { data } = await api.patch<WriteOffCategoryOut>(
+    `/write-off-categories/${id}`,
+    body,
+  );
+  return data;
+}
+
+export async function deactivateWriteOffCategory(
+  id: number,
+): Promise<WriteOffCategoryOut> {
+  const { data } = await api.delete<WriteOffCategoryOut>(
+    `/write-off-categories/${id}`,
+  );
   return data;
 }
 

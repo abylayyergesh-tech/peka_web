@@ -59,3 +59,22 @@ export async function deleteAnnouncement(id: number): Promise<AnnouncementOut> {
   const { data } = await api.delete<AnnouncementOut>(`/announcements/${id}`);
   return data;
 }
+
+/** Условия доп. заказа на клиентском сайте. Синглтон, не пост ленты. */
+export interface ExtraOrderTerms {
+  is_enabled: boolean;
+  title: string;
+  body: string | null;
+}
+
+export async function getExtraOrderTerms(): Promise<ExtraOrderTerms> {
+  const { data } = await api.get<ExtraOrderTerms>("/extra-order-terms");
+  return data;
+}
+
+export async function updateExtraOrderTerms(
+  body: ExtraOrderTerms,
+): Promise<ExtraOrderTerms> {
+  const { data } = await api.put<ExtraOrderTerms>("/extra-order-terms", body);
+  return data;
+}

@@ -128,12 +128,15 @@ export default function PriceListsTab() {
     },
     {
       title: "",
-      width: 260,
+      width: 220,
       render: (_, row) =>
-        canManage && (
+        canManage ? (
           <Space>
-            {!row.is_default && <Link to={`/menus/${row.menu_id}`}>Цены</Link>}
-            <a onClick={() => openEdit(row)}>Изменить</a>
+            {!row.is_default && (
+              <Link to={`/menus/${row.menu_id}`} onClick={(e) => e.stopPropagation()}>
+                Цены
+              </Link>
+            )}
             {!row.is_default && row.is_active && (
               <Popconfirm
                 title="Сделать основным?"
@@ -142,7 +145,7 @@ export default function PriceListsTab() {
                 cancelText="Нет"
                 onConfirm={() => makeDefault.mutate(row.menu_id)}
               >
-                <a>Сделать основным</a>
+                <a onClick={(e) => e.stopPropagation()}>Сделать основным</a>
               </Popconfirm>
             )}
             {!row.is_default && row.is_active && (
@@ -152,11 +155,11 @@ export default function PriceListsTab() {
                 cancelText="Нет"
                 onConfirm={() => remove.mutate(row.menu_id)}
               >
-                <a>Деактивировать</a>
+                <a onClick={(e) => e.stopPropagation()}>Деактивировать</a>
               </Popconfirm>
             )}
           </Space>
-        ),
+        ) : null,
     },
   ];
 
@@ -176,6 +179,8 @@ export default function PriceListsTab() {
         dataSource={query.data}
         pagination={false}
         columns={columns}
+        rowClassName={() => "row-clickable"}
+        onRow={(row) => ({ onClick: () => canManage && openEdit(row) })}
       />
       <Modal
         title={editing ? "Изменить меню" : "Новое меню"}

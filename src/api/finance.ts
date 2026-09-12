@@ -55,9 +55,16 @@ export interface ExpenseOut {
   organization_id: number;
   expense_date: string;
   category_id: number;
+  category_name?: string | null;
   amount: string;
   note: string | null;
   supplier_id: number | null;
+  supplier_name?: string | null;
+  counterparty_name?: string | null;
+  tax_id?: string | null;
+  bank_account?: string | null;
+  accepted_date?: string | null;
+  paid_date?: string | null;
   payment_method: string | null;
 }
 
@@ -67,6 +74,11 @@ export interface ExpenseCreate {
   amount: string;
   note?: string | null;
   supplier_id?: number | null;
+  counterparty_name?: string | null;
+  tax_id?: string | null;
+  bank_account?: string | null;
+  accepted_date?: string | null;
+  paid_date?: string | null;
   payment_method?: PaymentMethod | null;
 }
 
@@ -97,6 +109,26 @@ export async function updateExpense(id: number, body: ExpenseUpdate): Promise<Ex
 
 export async function deleteExpense(id: number): Promise<void> {
   await api.delete(`/expenses/${id}`);
+}
+
+export async function downloadExpenseRegister(params: ExpenseFilters): Promise<void> {
+  const { data } = await api.get<Blob>("/expenses/export.xlsx", {
+    params,
+    responseType: "blob",
+  });
+  const from = params.from ?? "";
+  const to = params.to ?? "";
+  const filename = from && to
+    ? `reestr_raskhodov_${from}_${to}.xlsx`
+    : "reestr_raskhodov.xlsx";
+  const url = URL.createObjectURL(data);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }
 
 
@@ -199,6 +231,69 @@ export async function fetchSalesByProduct(
   return data;
 }
 
+// ---- OLAP: клиент × товар ----
+export interface OlapSalesRow {
+  key: string;
+  customer_id: number | null;
+  customer_name: string;
+  product_id: number;
+  sku: string | null;
+  name: string;
+  category: string | null;
+  is_customer: boolean;
+  quantity: string;
+  replacement_quantity: string;
+  check_count: number;
+  /** Количество × текущая базовая цена позиции («Основное меню»). */
+  base_amount: string;
+  /** Количество × снимок прейскуранта в строке чека. */
+  list_amount: string;
+  /** Сумма строк со скидкой строки. */
+  revenue: string;
+  /** Итог чеков. Только у клиента; у товара null. */
+  order_total: string | null;
+  avg_price: string | null;
+  cost: string;
+  profit: string;
+  margin_pct: string | null;
+  food_cost_pct: string | null;
+  cost_missing: boolean;
+  children: OlapSalesRow[] | null;
+}
+
+export interface SalesOlapTotals {
+  check_count: number;
+  quantity: string;
+  customers: number;
+  positions: number;
+  base_amount: string;
+  list_amount: string;
+  revenue_lines: string;
+  check_discount_total: string;
+  delivery_total: string;
+  revenue_checks: string;
+  order_total: string;
+  cost: string;
+  profit: string;
+  margin_pct: string | null;
+}
+
+export interface SalesOlapReport {
+  date_from: string;
+  date_to: string;
+  rows: OlapSalesRow[];
+  totals: SalesOlapTotals;
+}
+
+export async function fetchSalesOlap(
+  params: ReportRangeParams,
+): Promise<SalesOlapReport> {
+  const { data } = await api.get<SalesOlapReport>("/reports/sales-olap", {
+    params,
+  });
+  return data;
+}
+
 // ---- ABC ----
 /** Показатель, по которому строится ABC. Только АДДИТИВНЫЕ величины: класс
  *  задаётся накопленной долей в итоге, а доля от процента (маржи, фудкоста)
@@ -291,6 +386,7 @@ export async function fetchCashFlow(params: {
 export interface SupplierRef {
   supplier_id: number;
   name: string;
+  tax_id?: string | null;
 }
 
 export async function listSuppliersRef(): Promise<SupplierRef[]> {

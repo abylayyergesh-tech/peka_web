@@ -59,7 +59,7 @@ export default function CheckDetailPage() {
 
   const menuItems = useQuery({
     queryKey: ["menu-items-lookup"],
-    queryFn: () => listMenuItems({ active: true, limit: 200 }),
+    queryFn: () => listMenuItems({ active: true, stopped: false, limit: 200 }),
     staleTime: 60_000,
   });
 

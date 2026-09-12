@@ -19,6 +19,7 @@ import {
 } from "antd";
 import type { FormInstance } from "antd";
 import type { Dayjs } from "dayjs";
+import { useEffect } from "react";
 
 import type {
   ConsumptionLineIn,
@@ -41,6 +42,8 @@ export interface DocumentFormValues {
   /** От чьего НАШЕГО юр. лица документ. Пусто — бэкенд подставит то, что по
    *  умолчанию: у приходной накладной от этого зависит, в чью кредиторку уйдёт долг. */
   company_entity_id?: number;
+  write_off_category_id?: number;
+  comment?: string;
   lines: {
     product_id: number;
     quantity: string;
@@ -137,8 +140,16 @@ export function buildDocumentPayload(
   // write_off | production | sale — identical bare-consumption shape.
   switch (values.type) {
     case "write_off":
-      return { type: "write_off", doc_date, warehouse_id, counterparty,
-               company_entity_id, lines };
+      return {
+        type: "write_off",
+        doc_date,
+        warehouse_id,
+        counterparty,
+        company_entity_id,
+        write_off_category_id: values.write_off_category_id,
+        comment: values.comment?.trim() || undefined,
+        lines,
+      };
     case "production":
       return { type: "production", doc_date, warehouse_id, counterparty,
                company_entity_id, lines };
@@ -159,6 +170,8 @@ interface FieldsProps {
   /** Наши юр. лица. Пустой список — справочник не заведён, и поле просто пустое:
    *  бэкенд в этом случае оставит документ без юрлица, и это видно в отчётах. */
   companyEntityOptions?: Option[];
+  writeOffCategoryOptions?: Option[];
+  onManageWriteOffCategories?: () => void;
 }
 
 export function DocumentFormFields({
@@ -168,6 +181,8 @@ export function DocumentFormFields({
   warehouseOptions,
   supplierOptions,
   companyEntityOptions = [],
+  writeOffCategoryOptions = [],
+  onManageWriteOffCategories,
 }: FieldsProps) {
   const type = Form.useWatch("type", form);
   const internal = Form.useWatch("internal", form);
@@ -176,6 +191,14 @@ export function DocumentFormFields({
   const isReceipt = type === "receipt";
   const isTransfer = type === "transfer";
   const isCount = type === "inventory_count";
+  const isWriteOff = type === "write_off";
+
+  useEffect(() => {
+    if (!isWriteOff) return;
+    if (form.getFieldValue("write_off_category_id") != null) return;
+    const first = writeOffCategoryOptions[0];
+    if (first) form.setFieldValue("write_off_category_id", first.value);
+  }, [isWriteOff, writeOffCategoryOptions, form]);
 
   function qtyRules() {
     return [
@@ -311,9 +334,35 @@ export function DocumentFormFields({
           options={companyEntityOptions}
         />
       </Form.Item>
-      <Form.Item name="counterparty" label="Контрагент / комментарий">
-        <Input maxLength={256} placeholder="Необязательно" />
-      </Form.Item>
+      {isWriteOff && (
+        <>
+          <Form.Item
+            name="write_off_category_id"
+            label="Категория списания"
+            rules={[{ required: true, message: "Выберите категорию" }]}
+            extra={
+              onManageWriteOffCategories ? (
+                <a onClick={onManageWriteOffCategories}>Управление категориями</a>
+              ) : undefined
+            }
+          >
+            <Select
+              showSearch
+              optionFilterProp="label"
+              options={writeOffCategoryOptions}
+              placeholder="Категория"
+            />
+          </Form.Item>
+          <Form.Item name="comment" label="Комментарий">
+            <Input.TextArea rows={2} maxLength={2000} placeholder="Необязательно" />
+          </Form.Item>
+        </>
+      )}
+      {!isWriteOff && (
+        <Form.Item name="counterparty" label="Контрагент / комментарий">
+          <Input maxLength={256} placeholder="Необязательно" />
+        </Form.Item>
+      )}
 
       <Divider style={{ margin: "8px 0" }}>Строки</Divider>
 

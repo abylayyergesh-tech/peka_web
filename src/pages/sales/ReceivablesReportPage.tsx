@@ -15,10 +15,11 @@ import { useQuery } from "@tanstack/react-query";
 import { errorMessage } from "@/api/client";
 import { reportReceivables, type CustomerBalanceOut } from "@/api/sales";
 import { useCan } from "@/auth/store";
-import { Money } from "@/components/format";
+import { Money, fmtDate } from "@/components/format";
 import {
   EntityTag,
   entityFilterOptions,
+  entityName,
   useCompanyEntities,
 } from "@/pages/finance/companyEntities";
 
@@ -41,8 +42,10 @@ function sumMoney(values: string[]): number {
 export default function ReceivablesReportPage() {
   const canRead = useCan("report.read");
   const [asOf, setAsOf] = useState<Dayjs | null>(null);
+  const [paidFrom, setPaidFrom] = useState<Dayjs | null>(null);
   const [search, setSearch] = useState("");
   const asOfStr = asOf?.format("YYYY-MM-DD");
+  const paidFromStr = paidFrom?.format("YYYY-MM-DD");
   // Юрлицо живёт в адресе, а не в состоянии: на этот экран проваливаются ссылкой
   // из «Денег по юр. лицам», и такую ссылку должно быть можно переслать или
   // положить в закладки.
@@ -60,8 +63,15 @@ export default function ReceivablesReportPage() {
   const rows = useMemo(() => {
     const needle = normalize(search.trim());
     const all = query.data ?? [];
-    return needle ? all.filter((r) => normalize(r.customer_name).includes(needle)) : all;
-  }, [query.data, search]);
+    return all.filter((r) => {
+      if (paidFromStr && (r.last_payment_date == null || r.last_payment_date < paidFromStr)) {
+        return false;
+      }
+      if (!needle) return true;
+      if (normalize(r.customer_name).includes(needle)) return true;
+      return normalize(entityName(entities.data, r.company_entity_id)).includes(needle);
+    });
+  }, [query.data, search, paidFromStr, entities.data]);
 
   const total = useMemo(() => sumMoney(rows.map((r) => r.balance)), [rows]);
 
@@ -105,6 +115,27 @@ export default function ReceivablesReportPage() {
       render: (v: string) => <Money value={v} />,
     },
     {
+      title: "Дата последнего платежа",
+      dataIndex: "last_payment_date",
+      width: 160,
+      sorter: (a, b) => {
+        if (a.last_payment_date == null && b.last_payment_date == null) return 0;
+        if (a.last_payment_date == null) return 1;
+        if (b.last_payment_date == null) return -1;
+        return a.last_payment_date.localeCompare(b.last_payment_date);
+      },
+      render: (v: string | null) => fmtDate(v),
+    },
+    {
+      title: "Сумма последнего платежа",
+      dataIndex: "last_payment_amount",
+      align: "right",
+      width: 170,
+      sorter: (a, b) =>
+        Number(a.last_payment_amount ?? 0) - Number(b.last_payment_amount ?? 0),
+      render: (v: string | null) => <Money value={v} />,
+    },
+    {
       title: "Долг",
       dataIndex: "balance",
       align: "right",
@@ -135,7 +166,7 @@ export default function ReceivablesReportPage() {
             allowClear
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Поиск по клиенту"
+            placeholder="Поиск по клиенту или юр. лицу"
             prefix={<SearchOutlined />}
             style={{ width: 260 }}
           />
@@ -155,13 +186,24 @@ export default function ReceivablesReportPage() {
               }}
             />
           </Tooltip>
-          <DatePicker
-            placeholder="На дату"
-            allowClear
-            value={asOf}
-            onChange={(v) => setAsOf(v)}
-            format="DD.MM.YYYY"
-          />
+          <Tooltip title="Только клиенты, чей последний платёж не раньше этой даты">
+            <DatePicker
+              placeholder="С"
+              allowClear
+              value={paidFrom}
+              onChange={(v) => setPaidFrom(v)}
+              format="DD.MM.YYYY"
+            />
+          </Tooltip>
+          <Tooltip title="Срез долга на дату">
+            <DatePicker
+              placeholder="По"
+              allowClear
+              value={asOf}
+              onChange={(v) => setAsOf(v)}
+              format="DD.MM.YYYY"
+            />
+          </Tooltip>
         </Space>
       </Space>
       <Table
@@ -177,10 +219,10 @@ export default function ReceivablesReportPage() {
         summary={() =>
           rows.length > 0 ? (
             <Table.Summary.Row>
-              <Table.Summary.Cell index={0} colSpan={4}>
+              <Table.Summary.Cell index={0} colSpan={6}>
                 <strong>{search ? "Итого по найденным" : "Итого"}</strong>
               </Table.Summary.Cell>
-              <Table.Summary.Cell index={4} align="right">
+              <Table.Summary.Cell index={6} align="right">
                 <strong style={{ color: total > 0 ? "#cf1322" : undefined }}>
                   <Money value={total} />
                 </strong>

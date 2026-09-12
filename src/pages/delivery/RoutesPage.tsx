@@ -1,21 +1,13 @@
-/** /delivery — рабочее место начальника курьеров: кто что везёт сегодня.
+/** /delivery — конструктор маршрута: слева адреса заказов на день, справа цепочки.
  *
- *  Экран из двух половин, потому что и работа такая: слева заказы, которые надо
- *  развезти и которые ещё никому не отданы, справа рейсы курьеров. Заказ уходит
- *  налево-направо ровно один раз — система не даст положить его в два рейса,
- *  иначе за одним адресом поедут двое, и каждый будет уверен, что он первый.
- *
- *  Порядок объезда задаётся стрелками, а не картой: координат у адресов нет,
- *  оптимизировать нечего, а начальник курьеров город знает лучше алгоритма.
- *
- *  Склада и денег здесь нет: отметки развозки на остатки не влияют, выдачу
- *  проводит касса. */
+ * Курьера здесь нет: маршрут собирают вечером на завтра, раздают во вкладке
+ * «Курьеры». Точка = адрес, на который есть заказ; основной и доп. едут вместе. */
 import {
   ArrowDownOutlined,
   ArrowUpOutlined,
-  CarOutlined,
   CloseOutlined,
   DeleteOutlined,
+  NodeIndexOutlined,
   PlusOutlined,
 } from "@ant-design/icons";
 import {
@@ -30,14 +22,13 @@ import {
   List,
   Modal,
   Popconfirm,
-  Select,
   Space,
-  Table,
   Tag,
   Tooltip,
   Typography,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
+import { Table } from "antd";
 import dayjs, { type Dayjs } from "dayjs";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -47,16 +38,20 @@ import {
   createRoute,
   deleteRoute,
   listCandidates,
-  listCouriers,
   listRoutes,
   setRouteStops,
   updateRoute,
-  type DeliveryCandidate,
   type DeliveryRouteOut,
   type DeliveryStopOut,
   type RouteStatus,
 } from "@/api/delivery";
-import { fmtDateTime, Money } from "@/components/format";
+import {
+  groupCandidates,
+  itemsLine,
+  orderIdsOfBlocks,
+  stopBlocks,
+  type DeliveryPoint,
+} from "@/pages/delivery/points";
 
 const ROUTE_STATUS: Record<RouteStatus, { label: string; color: string }> = {
   planned: { label: "Планируется", color: "default" },
@@ -71,31 +66,21 @@ const STOP_STATUS: Record<string, { label: string; color: string }> = {
   failed: { label: "Не отдали", color: "error" },
 };
 
-/** Состав заказа одной строкой: «Круассан × 2, Багет × 1». */
-function itemsLine(items: { name: string; quantity: string }[]): string {
-  if (items.length === 0) return "—";
-  return items.map((i) => `${i.name} × ${Number(i.quantity)}`).join(", ");
-}
-
 export default function RoutesPage() {
   const { message } = App.useApp();
   const queryClient = useQueryClient();
-  const [day, setDay] = useState<Dayjs>(dayjs());
-  const [selected, setSelected] = useState<number[]>([]);
+  const [day, setDay] = useState<Dayjs>(dayjs().add(1, "day"));
+  const [selected, setSelected] = useState<string[]>([]);
   const [creating, setCreating] = useState(false);
   const [form] = Form.useForm();
 
   const date = day.format("YYYY-MM-DD");
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["delivery"] });
+    queryClient.invalidateQueries({ queryKey: ["delivery-assignments"] });
     setSelected([]);
   };
 
-  const couriers = useQuery({
-    queryKey: ["delivery", "couriers"],
-    queryFn: listCouriers,
-    staleTime: 60_000,
-  });
   const candidates = useQuery({
     queryKey: ["delivery", "candidates", date],
     queryFn: () => listCandidates(date),
@@ -105,18 +90,22 @@ export default function RoutesPage() {
     queryFn: () => listRoutes({ date }),
   });
 
+  const points = groupCandidates(candidates.data ?? []);
   const fail = (e: unknown) => message.error(errorMessage(e));
 
+  const selectedOrderIds = points
+    .filter((p) => selected.includes(p.point_key))
+    .flatMap((p) => p.order_ids);
+
   const create = useMutation({
-    mutationFn: (values: { courier_employee_id: number; name?: string }) =>
+    mutationFn: (values: { name?: string }) =>
       createRoute({
         route_date: date,
-        courier_employee_id: values.courier_employee_id,
-        name: values.name || null,
-        order_ids: selected,
+        name: values.name?.trim() || null,
+        order_ids: selectedOrderIds,
       }),
-    onSuccess: () => {
-      message.success("Рейс создан");
+    onSuccess: (route) => {
+      message.success(`Маршрут «${route.name ?? "без названия"}» собран`);
       setCreating(false);
       form.resetFields();
       invalidate();
@@ -141,92 +130,102 @@ export default function RoutesPage() {
   const remove = useMutation({
     mutationFn: (id: number) => deleteRoute(id),
     onSuccess: () => {
-      message.success("Рейс удалён");
+      message.success("Маршрут удалён");
       invalidate();
     },
     onError: fail,
   });
 
-  /** Текущий состав рейса как список заказов — из него и строятся все правки. */
-  const orderIdsOf = (route: DeliveryRouteOut) => route.stops.map((s) => s.order_id);
-
   const addSelected = (route: DeliveryRouteOut) =>
-    stops.mutate({ id: route.delivery_route_id,
-                   orderIds: [...orderIdsOf(route), ...selected] });
-
-  const move = (route: DeliveryRouteOut, index: number, delta: number) => {
-    const ids = orderIdsOf(route);
-    const target = index + delta;
-    if (target < 0 || target >= ids.length) return;
-    [ids[index], ids[target]] = [ids[target], ids[index]];
-    stops.mutate({ id: route.delivery_route_id, orderIds: ids });
-  };
-
-  const drop = (route: DeliveryRouteOut, orderId: number) =>
     stops.mutate({
       id: route.delivery_route_id,
-      orderIds: orderIdsOf(route).filter((id) => id !== orderId),
+      orderIds: [...route.stops.map((s) => s.order_id), ...selectedOrderIds],
     });
 
-  const candidateColumns: ColumnsType<DeliveryCandidate> = [
+  const moveBlock = (route: DeliveryRouteOut, index: number, delta: number) => {
+    const blocks = stopBlocks(route.stops);
+    const target = index + delta;
+    if (target < 0 || target >= blocks.length) return;
+    [blocks[index], blocks[target]] = [blocks[target], blocks[index]];
+    stops.mutate({
+      id: route.delivery_route_id,
+      orderIds: orderIdsOfBlocks(blocks),
+    });
+  };
+
+  const dropBlock = (route: DeliveryRouteOut, pointKey: string) =>
+    stops.mutate({
+      id: route.delivery_route_id,
+      orderIds: route.stops
+        .filter((s) => (s.point_key || `o:${s.order_id}`) !== pointKey)
+        .map((s) => s.order_id),
+    });
+
+  const columns: ColumnsType<DeliveryPoint> = [
     {
-      title: "Заказ",
-      dataIndex: "number",
-      width: 90,
-      render: (v: number | null, row) => (v != null ? `№${v}` : `#${row.order_id}`),
-    },
-    {
-      title: "Куда",
+      title: "Адрес",
       dataIndex: "delivery_address",
       render: (v: string | null, row) => (
         <>
           <div>{v ?? "адрес не указан"}</div>
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
             {row.customer_name ?? "—"}
-            {row.requested_for ? ` · к ${fmtDateTime(row.requested_for)}` : ""}
+            {row.orders.length > 1
+              ? ` · заказов: ${row.orders.length}`
+              : row.orders[0]?.number != null
+                ? ` · №${row.orders[0].number}`
+                : ""}
+            {row.is_extra ? " · доп." : ""}
           </Typography.Text>
+          {row.entrance_comment && (
+            <div style={{ fontSize: 12, color: "#8c8c8c" }}>
+              Вход: {row.entrance_comment}
+            </div>
+          )}
         </>
       ),
     },
     {
       title: "Что везти",
-      dataIndex: "items",
-      render: (items: DeliveryCandidate["items"]) => (
+      render: (_, row) => (
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-          {itemsLine(items)}
+          {itemsLine(row.orders.flatMap((o) => o.items))}
         </Typography.Text>
       ),
-    },
-    {
-      title: "Сумма",
-      dataIndex: "total",
-      width: 120,
-      align: "right",
-      render: (v: string) => <Money value={v} />,
     },
   ];
 
   return (
     <div>
       <Space wrap style={{ marginBottom: 16 }} align="center">
-        <h2 style={{ margin: 0 }}>Курьеры и маршруты</h2>
+        <h2 style={{ margin: 0 }}>Маршруты</h2>
         <DatePicker
           value={day}
-          onChange={(v) => v && setDay(v)}
+          onChange={(v) => {
+            if (!v) return;
+            setDay(v);
+            setSelected([]);
+          }}
           format="DD.MM.YYYY"
           allowClear={false}
         />
+        {day.isSame(dayjs().add(1, "day"), "day") && <Tag color="blue">завтра</Tag>}
         <Button
           type="primary"
           icon={<PlusOutlined />}
+          disabled={selected.length === 0}
           onClick={() => setCreating(true)}
         >
-          Новый рейс
+          Собрать маршрут
         </Button>
         {selected.length > 0 && (
-          <Tag color="blue">выбрано заказов: {selected.length}</Tag>
+          <Tag color="blue">выбрано точек: {selected.length}</Tag>
         )}
       </Space>
+      <Typography.Paragraph type="secondary" style={{ fontSize: 13 }}>
+        Слева адреса, на которые есть заказ. Отметьте точки, соберите маршрут —
+        курьера привяжете во вкладке «Курьеры».
+      </Typography.Paragraph>
 
       {(candidates.isError || routes.isError) && (
         <Alert
@@ -241,37 +240,33 @@ export default function RoutesPage() {
         <Card
           size="small"
           style={{ flex: "1 1 420px", minWidth: 380 }}
-          title="Не разложены"
+          title="Адреса к доставке"
           extra={
             <Typography.Text type="secondary">
-              {candidates.data?.length ?? 0} заказ(ов)
+              {points.length} точ{points.length === 1 ? "ка" : "ек"}
             </Typography.Text>
           }
         >
-          <Table<DeliveryCandidate>
-            rowKey="order_id"
+          <Table<DeliveryPoint>
+            rowKey="point_key"
             size="small"
             loading={candidates.isPending}
-            dataSource={candidates.data ?? []}
-            columns={candidateColumns}
+            dataSource={points}
+            columns={columns}
             pagination={false}
-            scroll={{ y: 420 }}
-            locale={{ emptyText: "Все заказы этого дня разложены по рейсам" }}
+            scroll={{ y: 480 }}
+            locale={{ emptyText: "На этот день все адреса разложены — или заказов нет" }}
             rowSelection={{
               selectedRowKeys: selected,
-              onChange: (keys) => setSelected(keys as number[]),
+              onChange: (keys) => setSelected(keys as string[]),
             }}
           />
-          <Typography.Paragraph type="secondary" style={{ fontSize: 12, marginTop: 8 }}>
-            Выберите заказы и добавьте их в рейс кнопкой в карточке курьера —
-            или создайте новый рейс, он заберёт выбранное сразу.
-          </Typography.Paragraph>
         </Card>
 
         <div style={{ flex: "1 1 480px", minWidth: 420 }}>
           {routes.data && routes.data.length === 0 && (
             <Empty
-              description="На этот день рейсов нет"
+              description="На этот день маршрутов нет"
               image={Empty.PRESENTED_IMAGE_SIMPLE}
             />
           )}
@@ -283,8 +278,8 @@ export default function RoutesPage() {
                 canAdd={selected.length > 0}
                 busy={stops.isPending || patch.isPending}
                 onAdd={() => addSelected(route)}
-                onMove={(index, delta) => move(route, index, delta)}
-                onDrop={(orderId) => drop(route, orderId)}
+                onMove={(index, delta) => moveBlock(route, index, delta)}
+                onDrop={(pointKey) => dropBlock(route, pointKey)}
                 onCancel={() =>
                   patch.mutate({
                     id: route.delivery_route_id,
@@ -300,7 +295,7 @@ export default function RoutesPage() {
 
       <Modal
         open={creating}
-        title="Новый рейс"
+        title="Новый маршрут"
         okText="Создать"
         cancelText="Отмена"
         confirmLoading={create.isPending}
@@ -309,30 +304,15 @@ export default function RoutesPage() {
       >
         <Form form={form} layout="vertical" onFinish={(v) => create.mutate(v)}>
           <Form.Item
-            name="courier_employee_id"
-            label="Курьер"
-            rules={[{ required: true, message: "Выберите курьера" }]}
+            name="name"
+            label="Название маршрута"
+            rules={[{ required: true, message: "Назовите маршрут" }]}
           >
-            <Select
-              showSearch
-              optionFilterProp="label"
-              loading={couriers.isPending}
-              placeholder="Кто повезёт"
-              options={couriers.data?.map((c) => ({
-                value: c.employee_id,
-                label: [c.full_name, c.position, c.department_name]
-                  .filter(Boolean)
-                  .join(" · "),
-              }))}
-            />
-          </Form.Item>
-          <Form.Item name="name" label="Название рейса">
-            <Input placeholder="Например: Север, второй круг" />
+            <Input placeholder="Например: Север, Левый берег" maxLength={128} />
           </Form.Item>
           <Typography.Text type="secondary">
-            {selected.length > 0
-              ? `Выбранные заказы (${selected.length}) попадут в рейс сразу.`
-              : "Заказы можно добавить после создания."}
+            {selected.length} точ{selected.length === 1 ? "ка" : "ек"} попадут в
+            маршрут. Курьера назначите отдельно.
           </Typography.Text>
         </Form>
       </Modal>
@@ -355,25 +335,20 @@ function RouteCard({
   busy: boolean;
   onAdd: () => void;
   onMove: (index: number, delta: number) => void;
-  onDrop: (orderId: number) => void;
+  onDrop: (pointKey: string) => void;
   onCancel: () => void;
   onDelete: () => void;
 }) {
   const status = ROUTE_STATUS[route.status];
   const done = route.stops_delivered + route.stops_failed;
+  const blocks = stopBlocks(route.stops);
   return (
     <Card
       size="small"
       title={
         <Space wrap>
-          <CarOutlined />
-          <b>
-            {route.courier_name ??
-              (route.courier_employee_id == null
-                ? "Курьер не назначен"
-                : `Сотрудник #${route.courier_employee_id}`)}
-          </b>
-          {route.name && <Typography.Text type="secondary">{route.name}</Typography.Text>}
+          <NodeIndexOutlined />
+          <b>{route.name ?? "Без названия"}</b>
           <Tag color={status.color}>{status.label}</Tag>
           <Typography.Text type="secondary">
             {done} из {route.stops_total}
@@ -389,9 +364,8 @@ function RouteCard({
           )}
           {route.status !== "cancelled" && (
             <Popconfirm
-              title="Отменить рейс?"
-              description="Отметки останутся, но рейс будет закрыт."
-              okText="Отменить рейс"
+              title="Отменить маршрут?"
+              okText="Отменить"
               cancelText="Нет"
               onConfirm={onCancel}
             >
@@ -399,7 +373,7 @@ function RouteCard({
             </Popconfirm>
           )}
           <Popconfirm
-            title="Удалить рейс?"
+            title="Удалить маршрут?"
             description="Можно, пока в нём нет отметок."
             okText="Удалить"
             cancelText="Нет"
@@ -410,20 +384,27 @@ function RouteCard({
         </Space>
       }
     >
-      {route.stops.length === 0 ? (
+      {route.courier_name ? (
+        <Tag color="green" style={{ marginBottom: 8 }}>
+          Курьер: {route.courier_name}
+        </Tag>
+      ) : (
+        <Tag style={{ marginBottom: 8 }}>Курьер не назначен</Tag>
+      )}
+      {blocks.length === 0 ? (
         <Typography.Text type="secondary">
-          Пусто — выберите заказы слева и нажмите «Добавить выбранные».
+          Пусто — отметьте адреса слева и добавьте их сюда.
         </Typography.Text>
       ) : (
         <List
           size="small"
-          dataSource={route.stops}
-          renderItem={(stop: DeliveryStopOut, index: number) => {
-            const marked = stop.status !== "pending";
-            const st = STOP_STATUS[stop.status];
+          dataSource={blocks}
+          renderItem={(block: DeliveryStopOut[], index: number) => {
+            const head = block[0];
+            const marked = block.some((s) => s.status !== "pending");
+            const key = head.point_key || `o:${head.order_id}`;
             return (
               <List.Item
-                key={stop.delivery_stop_id}
                 actions={[
                   <Button
                     key="up"
@@ -437,17 +418,13 @@ function RouteCard({
                     key="down"
                     size="small"
                     type="text"
-                    disabled={index === route.stops.length - 1 || busy}
+                    disabled={index === blocks.length - 1 || busy}
                     icon={<ArrowDownOutlined />}
                     onClick={() => onMove(index, 1)}
                   />,
                   <Tooltip
                     key="drop"
-                    title={
-                      marked
-                        ? "Точка уже отмечена — это история, её не убрать"
-                        : "Убрать из рейса"
-                    }
+                    title={marked ? "Точка уже отмечена" : "Убрать из маршрута"}
                   >
                     <Button
                       size="small"
@@ -455,26 +432,35 @@ function RouteCard({
                       danger
                       disabled={marked || busy}
                       icon={<CloseOutlined />}
-                      onClick={() => onDrop(stop.order_id)}
+                      onClick={() => onDrop(key)}
                     />
                   </Tooltip>,
                 ]}
               >
                 <Space direction="vertical" size={0} style={{ flex: 1 }}>
                   <Space size={6} wrap>
-                    <b>{stop.position}.</b>
-                    <span>{stop.delivery_address ?? "адрес не указан"}</span>
-                    <Tag color={st.color}>{st.label}</Tag>
+                    <b>{index + 1}.</b>
+                    <span>{head.delivery_address ?? "адрес не указан"}</span>
+                    {block.map((s) => {
+                      const st = STOP_STATUS[s.status];
+                      return s.status !== "pending" ? (
+                        <Tag key={s.delivery_stop_id} color={st.color}>
+                          {st.label}
+                        </Tag>
+                      ) : null;
+                    })}
                   </Space>
                   <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                    {stop.customer_name ?? "—"}
-                    {stop.order_number != null ? ` · заказ №${stop.order_number}` : ""}
+                    {head.customer_name ?? "—"}
+                    {block.map((s) =>
+                      s.order_number != null ? ` · №${s.order_number}` : "",
+                    ).join("")}
                     {" · "}
-                    {itemsLine(stop.items)}
+                    {itemsLine(block.flatMap((s) => s.items))}
                   </Typography.Text>
-                  {stop.note && (
-                    <Typography.Text type="warning" style={{ fontSize: 12 }}>
-                      {stop.note}
+                  {head.entrance_comment && (
+                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                      Вход: {head.entrance_comment}
                     </Typography.Text>
                   )}
                 </Space>

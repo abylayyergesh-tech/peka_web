@@ -13,25 +13,36 @@
  * Пустое поле и ноль — разные вещи: пусто значит «не заполняли», ноль — «ничего
  * не вышло». Ноль это результат смены, и превращать его в пусто нельзя.
  */
-import { DeleteOutlined, PlusOutlined, ReloadOutlined, SaveOutlined } from "@ant-design/icons";
+import { CheckCircleOutlined, DeleteOutlined, PlusOutlined, ReloadOutlined, SaveOutlined } from "@ant-design/icons";
 import {
   Alert, App, Button, Card, Col, DatePicker, Input, InputNumber, Popconfirm, Row,
   Select, Space, Statistic, Table, Tabs, Tag, Typography,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import dayjs, { type Dayjs } from "dayjs";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { errorMessage } from "@/api/client";
 import {
-  getProductionPlan, getProductionPlanPeriod, saveProductionPlan,
+  getProductionPlan, getProductionPlanPeriod, postProductionPlan, saveProductionPlan,
   type ProductionPlanLineIn,
 } from "@/api/production";
 import { useTabParam } from "@/components/useTabParam";
 import { fmtQty } from "@/components/format";
-import { useProductsLookup } from "@/pages/inventory/shared";
+import { useProductsLookup, useWarehousesLookup } from "@/pages/inventory/shared";
 import { useUnsavedChanges } from "@/components/useUnsavedChanges";
+
+const RAW_WH_KEY = "peka.productionPlan.warehouseId";
+const FIN_WH_KEY = "peka.productionPlan.targetWarehouseId";
+
+function readStoredId(key: string): number | undefined {
+  const raw = localStorage.getItem(key);
+  if (!raw) return undefined;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : undefined;
+}
 
 const TABS = ["day", "period"] as const;
 
@@ -67,6 +78,8 @@ interface SheetRow {
   unit_name: string | null;
   planned: number | null;
   actual: number | null;
+  posted: number;
+  last_document_id: number | null;
   note: string;
   /** Есть ли строка на сервере — от этого зависит, надо ли её удалять. */
   saved: boolean;
@@ -80,12 +93,19 @@ function DayTab() {
   const { message, modal } = App.useApp();
   const queryClient = useQueryClient();
   const products = useProductsLookup();
+  const warehouses = useWarehousesLookup();
 
   const [day, setDay] = useState<Dayjs>(dayjs());
   const [drafts, setDrafts] = useState<Record<number, Draft>>({});
   const [added, setAdded] = useState<number[]>([]);
   const [removed, setRemoved] = useState<number[]>([]);
   const [picker, setPicker] = useState<number | undefined>();
+  const [rawWarehouseId, setRawWarehouseId] = useState<number | undefined>(
+    () => readStoredId(RAW_WH_KEY),
+  );
+  const [finishedWarehouseId, setFinishedWarehouseId] = useState<number | undefined>(
+    () => readStoredId(FIN_WH_KEY),
+  );
 
   const date = day.format("YYYY-MM-DD");
 
@@ -131,6 +151,8 @@ function DayTab() {
         unit_name: r.unit_name,
         planned: d ? d.planned : num(r.planned_quantity),
         actual: d ? d.actual : num(r.actual_quantity),
+        posted: num(r.posted_quantity) ?? 0,
+        last_document_id: r.last_document_id,
         note: d ? d.note : r.note ?? "",
         saved: true,
       });
@@ -146,6 +168,8 @@ function DayTab() {
         unit_name: null,
         planned: d ? d.planned : null,
         actual: d ? d.actual : null,
+        posted: 0,
+        last_document_id: null,
         note: d ? d.note : "",
         saved: false,
       });
@@ -203,10 +227,59 @@ function DayTab() {
     onError: (e) => message.error(errorMessage(e)),
   });
 
+  const rawWarehouses = useMemo(
+    () => warehouses.items.filter((w) => w.is_active && (w.purpose ?? "raw") === "raw"),
+    [warehouses.items],
+  );
+  const finishedWarehouses = useMemo(
+    () => warehouses.items.filter((w) => w.is_active && w.purpose === "finished"),
+    [warehouses.items],
+  );
+
+  useEffect(() => {
+    if (rawWarehouseId == null && rawWarehouses.length === 1) {
+      const id = rawWarehouses[0].warehouse_id;
+      setRawWarehouseId(id);
+      localStorage.setItem(RAW_WH_KEY, String(id));
+    }
+    if (finishedWarehouseId == null && finishedWarehouses.length === 1) {
+      const id = finishedWarehouses[0].warehouse_id;
+      setFinishedWarehouseId(id);
+      localStorage.setItem(FIN_WH_KEY, String(id));
+    }
+  }, [rawWarehouseId, finishedWarehouseId, rawWarehouses, finishedWarehouses]);
+
+  const pendingRelease = rows.filter(
+    (r) => r.actual != null && r.actual > 0 && r.actual > r.posted,
+  ).length;
+
+  const post = useMutation({
+    mutationFn: () => {
+      if (rawWarehouseId == null || finishedWarehouseId == null) {
+        throw new Error("Выберите склады сырья и готовой продукции");
+      }
+      return postProductionPlan({
+        plan_date: date,
+        warehouse_id: rawWarehouseId,
+        target_warehouse_id: finishedWarehouseId,
+      });
+    },
+    onSuccess: (out) => {
+      queryClient.setQueryData(["production-plan", date], out.rows);
+      queryClient.invalidateQueries({ queryKey: ["stock"] });
+      queryClient.invalidateQueries({ queryKey: ["documents"] });
+      const n = out.document_number != null ? ` №${out.document_number}` : "";
+      message.success(`Выпуск проведён документом${n}`);
+    },
+    onError: (e) => message.error(errorMessage(e)),
+  });
+
   const pickerOptions = useMemo(() => {
     const inSheet = new Set(rows.map((r) => r.product_id));
-    return products.options.filter((o) => !inSheet.has(o.value));
-  }, [products.options, rows]);
+    return products.items
+      .filter((p) => p.kind === "dish" && !inSheet.has(p.product_id))
+      .map((p) => ({ value: p.product_id, label: p.name }));
+  }, [products.items, rows]);
 
   const columns: ColumnsType<SheetRow> = [
     {
@@ -277,6 +350,30 @@ function DayTab() {
       },
     },
     {
+      title: "На складе",
+      key: "posted",
+      width: 140,
+      render: (_, row) => {
+        if (!row.saved || row.posted <= 0) {
+          return <span style={{ color: "#bbb" }}>—</span>;
+        }
+        const doc = row.last_document_id;
+        return (
+          <Space direction="vertical" size={0}>
+            <span>
+              проведено {fmtQty(row.posted)}
+              {row.actual != null ? ` из ${fmtQty(row.actual)}` : ""}
+            </span>
+            {doc != null && (
+              <Link to={`/documents/${doc}`} style={{ fontSize: 12 }}>
+                документ
+              </Link>
+            )}
+          </Space>
+        );
+      },
+    },
+    {
       title: "Примечание",
       key: "note",
       width: 260,
@@ -295,9 +392,14 @@ function DayTab() {
       width: 60,
       render: (_, row) => (
         <Popconfirm
-          title="Убрать позицию из листа?"
+          title={
+            row.posted > 0
+              ? "Позицию с проведённым выпуском убрать нельзя"
+              : "Убрать позицию из листа?"
+          }
           okText="Убрать"
           cancelText="Отмена"
+          disabled={row.posted > 0}
           onConfirm={() => {
             setRemoved((prev) => (row.saved ? [...prev, row.product_id] : prev));
             setAdded((prev) => prev.filter((p) => p !== row.product_id));
@@ -308,7 +410,7 @@ function DayTab() {
             });
           }}
         >
-          <Button type="text" icon={<DeleteOutlined />} />
+          <Button type="text" icon={<DeleteOutlined />} disabled={row.posted > 0} />
         </Popconfirm>
       ),
     },
@@ -365,6 +467,60 @@ function DayTab() {
         >
           Сохранить день
         </Button>
+        <Select
+          showSearch
+          optionFilterProp="label"
+          placeholder="Склад сырья"
+          style={{ width: 220 }}
+          loading={warehouses.isPending}
+          options={rawWarehouses.map((w) => ({
+            value: w.warehouse_id,
+            label: w.name,
+          }))}
+          value={rawWarehouseId}
+          onChange={(v) => {
+            setRawWarehouseId(v);
+            localStorage.setItem(RAW_WH_KEY, String(v));
+          }}
+        />
+        <Select
+          showSearch
+          optionFilterProp="label"
+          placeholder="Склад готовой продукции"
+          style={{ width: 240 }}
+          loading={warehouses.isPending}
+          options={finishedWarehouses.map((w) => ({
+            value: w.warehouse_id,
+            label: w.name,
+          }))}
+          value={finishedWarehouseId}
+          onChange={(v) => {
+            setFinishedWarehouseId(v);
+            localStorage.setItem(FIN_WH_KEY, String(v));
+          }}
+        />
+        <Button
+          icon={<CheckCircleOutlined />}
+          loading={post.isPending}
+          disabled={
+            dirty ||
+            rawWarehouseId == null ||
+            finishedWarehouseId == null ||
+            pendingRelease === 0
+          }
+          onClick={() => {
+            modal.confirm({
+              title: "Провести выпуск?",
+              content:
+                "С склада сырья спишутся ингредиенты по техкартам. Блюда по не проведённому факту приходуются на склад готовой продукции.",
+              okText: "Провести выпуск",
+              cancelText: "Отмена",
+              onOk: () => post.mutateAsync(),
+            });
+          }}
+        >
+          Провести выпуск
+        </Button>
       </Space>
 
       <Row gutter={16} style={{ marginBottom: 16 }}>
@@ -400,14 +556,24 @@ function DayTab() {
           showIcon
           style={{ marginBottom: 16 }}
           message="Есть несохранённые правки"
-          description="Нажмите «Сохранить день» — иначе они пропадут при смене даты или обновлении."
+          description="Нажмите «Сохранить день» — иначе они пропадут при смене даты или обновлении. Провести выпуск можно после сохранения."
+        />
+      )}
+
+      {!warehouses.isPending && finishedWarehouses.length === 0 && (
+        <Alert
+          type="info"
+          showIcon
+          style={{ marginBottom: 16 }}
+          message="Нет склада готовой продукции"
+          description="Создайте его в справочнике складов и укажите назначение «Готовая продукция»."
         />
       )}
 
       <Typography.Paragraph type="secondary" style={{ fontSize: 13 }}>
-        Пустое поле — «не заполняли». Ноль — это результат: ничего не делали или
-        ничего не вышло. Строка без прогноза, факта и примечания при сохранении
-        убирается из листа.
+        В лист — только блюда. Сохранение факта склад не двигает: остатки меняет
+        отдельная кнопка «Провести выпуск». Пустое поле — «не заполняли». Ноль —
+        результат смены.
       </Typography.Paragraph>
 
       <Table<SheetRow>

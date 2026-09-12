@@ -21,6 +21,7 @@ import {
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useState } from "react";
+import { useLocation } from "react-router-dom";
 
 import { useListControls } from "@/components/useListControls";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -74,6 +75,20 @@ interface ProductFormValues {
  *  строка как значение выпадающего списка неотличима от «ничего не выбрано». */
 const NO_CATEGORY_KEY = "__none__";
 
+/** Отдельные пункты меню ТМЗ — те же список и карточка, но kind зафиксирован. */
+const KIND_BY_PATH: Record<string, ProductKind> = {
+  "/products/ingredients": "ingredient",
+  "/products/semi-finished": "semi_finished",
+  "/products/dishes": "dish",
+};
+
+const TITLE_BY_PATH: Record<string, string> = {
+  "/products/ingredients": "Сырьё",
+  "/products/semi-finished": "Полуфабрикаты",
+  "/products/dishes": "Блюда",
+  "/products": "Номенклатура",
+};
+
 /** Пустое поле формы -> null (стереть значение), число -> строка для Decimal. */
 const num = (v: number | undefined) => (v == null ? null : String(v));
 const numOrUndef = (v: string | null | undefined) =>
@@ -82,13 +97,17 @@ const numOrUndef = (v: string | null | undefined) =>
 export default function ProductsPage() {
   const { message } = App.useApp();
   const queryClient = useQueryClient();
+  const location = useLocation();
   const canManage = useCan("catalog.manage");
   const { limit, offset, tablePagination, reset } = usePagination();
   const units = useUnitOptions();
+  const forcedKind = KIND_BY_PATH[location.pathname];
+  const pageTitle = TITLE_BY_PATH[location.pathname] ?? "Номенклатура";
 
   const { search, setSearch, searchParam, sort, onTableChange } =
     useListControls<ProductOut>({ onReset: reset });
-  const [kind, setKind] = useState<ProductKind | undefined>(undefined);
+  const [kind, setKind] = useState<ProductKind | undefined>(forcedKind);
+  const effectiveKind = forcedKind ?? kind;
   const [includeInactive, setIncludeInactive] = useState(false);
   /** «Заполнено / не заполнено КБЖУ» — по нему находят, что осталось завести. */
   const [nutritionFilter, setNutritionFilter] = useState<"filled" | "missing" | undefined>();
@@ -108,6 +127,10 @@ export default function ProductsPage() {
    *  реквизитов, себестоимости, состава, КБЖУ и остатков в таблицу не влезает. */
   const [cardId, setCardId] = useState<number | null>(null);
   const [form] = Form.useForm<ProductFormValues>();
+  const formKind = Form.useWatch("kind", form);
+  const formItemType = Form.useWatch("item_type", form);
+  const requireNutrition =
+    formKind === "ingredient" && (formItemType ?? "food") === "food";
 
   const categories = useProductCategories();
 
@@ -115,13 +138,13 @@ export default function ProductsPage() {
     queryKey: [
       "products",
       {
-        limit, offset, kind, includeInactive, searchParam, sort,
+        limit, offset, kind: effectiveKind, includeInactive, searchParam, sort,
         nutritionFilter, itemType, group, category,
       },
     ],
     queryFn: () =>
       listProducts({
-        limit, offset, kind, include_inactive: includeInactive,
+        limit, offset, kind: effectiveKind, include_inactive: includeInactive,
         search: searchParam, sort, nutrition: nutritionFilter,
         item_type: itemType, group, category,
         // Единственное место, где себестоимость нужна в списке; справочникам
@@ -198,6 +221,7 @@ export default function ProductsPage() {
   function openCreate() {
     setEditing(null);
     form.resetFields();
+    if (forcedKind) form.setFieldsValue({ kind: forcedKind, item_type: "food" });
     setModalOpen(true);
   }
   function openEdit(row: ProductOut) {
@@ -311,11 +335,9 @@ export default function ProductsPage() {
       sorter: true,
       render: (v: string, row) => (
         <Space direction="vertical" size={0}>
-          <a onClick={() => setCardId(row.product_id)} style={{ fontWeight: 500 }}>
-            {v}
-          </a>
+          <span className="row-card-title">{v}</span>
           {(row.sku || row.category) && (
-            <span style={{ color: "#8c8c8c", fontSize: 12 }}>
+            <span className="row-card-meta">
               {[row.sku, row.category].filter(Boolean).join(" · ")}
             </span>
           )}
@@ -393,7 +415,13 @@ export default function ProductsPage() {
             </Tag>
             {canManage && (
               <Tooltip title="Тара, вода, соль, статья затрат — проставить нули, чтобы расчёт блюд стал полным">
-                <a style={{ fontSize: 12 }} onClick={() => markZero.mutate(row)}>
+                <a
+                  style={{ fontSize: 12 }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    markZero.mutate(row);
+                  }}
+                >
                   нет КБЖУ
                 </a>
               </Tooltip>
@@ -407,33 +435,38 @@ export default function ProductsPage() {
     },
     {
       title: "",
-      width: 150,
-      render: (_, row) => (
-        <Space size="middle">
-          <a onClick={() => setCardId(row.product_id)}>Подробнее</a>
-          {canManage && row.is_active && (
-            <Popconfirm
-              title="Деактивировать продукт?"
-              description="Он будет скрыт из списка (мягкое удаление)."
-              okText="Да"
-              cancelText="Нет"
-              onConfirm={() => remove.mutate(row.product_id)}
-            >
-              <a>Удалить</a>
-            </Popconfirm>
-          )}
-          {!row.is_active && <Tag>неактивен</Tag>}
-        </Space>
-      ),
+      width: 90,
+      render: (_, row) =>
+        canManage && row.is_active ? (
+          <Popconfirm
+            title="Деактивировать продукт?"
+            description="Он будет скрыт из списка (мягкое удаление)."
+            okText="Да"
+            cancelText="Нет"
+            onConfirm={() => remove.mutate(row.product_id)}
+          >
+            <a onClick={(e) => e.stopPropagation()}>Удалить</a>
+          </Popconfirm>
+        ) : !row.is_active ? (
+          <Tag>неактивен</Tag>
+        ) : null,
     },
   ];
 
   return (
     <div>
       <Space
-        style={{ marginBottom: 16, justifyContent: "space-between", width: "100%" }}
+        style={{ marginBottom: 20, justifyContent: "space-between", width: "100%" }}
+        align="start"
       >
-        <h2 style={{ margin: 0 }}>Продукты</h2>
+        <div>
+          <p className="page-kicker">Товаро-материальный запас</p>
+          <h1 className="page-title">{pageTitle}</h1>
+          <p className="page-lead">
+            Наведите на строку — она загорится. Нажмите — откроется личное дело:
+            себестоимость, КБЖУ, остатки и состав.
+          </p>
+        </div>
         <Space>
           <Button icon={<TagsOutlined />} onClick={() => setCategoriesOpen(true)}>
             Категории
@@ -455,17 +488,19 @@ export default function ProductsPage() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
-        <Select
-          allowClear
-          placeholder="Тип"
-          style={{ width: 200 }}
-          value={kind}
-          options={PRODUCT_KIND_OPTIONS}
-          onChange={(v) => {
-            setKind(v);
-            reset();
-          }}
-        />
+        {!forcedKind && (
+          <Select
+            allowClear
+            placeholder="Тип"
+            style={{ width: 200 }}
+            value={kind}
+            options={PRODUCT_KIND_OPTIONS}
+            onChange={(v) => {
+              setKind(v);
+              reset();
+            }}
+          />
+        )}
         <Select
           allowClear
           placeholder="Вид"
@@ -620,7 +655,11 @@ export default function ProductsPage() {
             label="Тип"
             rules={[{ required: true, message: "Выберите тип" }]}
           >
-            <Select options={PRODUCT_KIND_OPTIONS} placeholder="Тип продукта" />
+            <Select
+              options={PRODUCT_KIND_OPTIONS}
+              placeholder="Тип продукта"
+              disabled={forcedKind != null && editing == null}
+            />
           </Form.Item>
           <Form.Item
             name="item_type"
@@ -666,30 +705,50 @@ export default function ProductsPage() {
             Пищевая ценность на 100 г
           </Divider>
           <Alert
-            type="info"
+            type={requireNutrition ? "warning" : "info"}
             showIcon
             style={{ marginBottom: 12 }}
-            message="Заполняется у сырья"
-            description="У полуфабрикатов и блюд КБЖУ считается по тех-карте — вводить его здесь не нужно, иначе этикетка разойдётся с рецептом."
+            message={requireNutrition ? "КБЖУ обязательно для сырья" : "Заполняется у сырья"}
+            description={
+              requireNutrition
+                ? "Калории, белки, жиры, углеводы и вес единицы нужны, чтобы сырьё можно было поставить в тех-карту. Ноль — допустимое значение (вода, соль)."
+                : "У полуфабрикатов и блюд КБЖУ считается по тех-карте — вводить его здесь не нужно, иначе этикетка разойдётся с рецептом."
+            }
           />
           <Row gutter={12}>
             <Col span={6}>
-              <Form.Item name="energy_kcal_100g" label="Ккал">
+              <Form.Item
+                name="energy_kcal_100g"
+                label="Ккал"
+                rules={[{ required: requireNutrition, message: "Обязательно для сырья" }]}
+              >
                 <InputNumber min={0} max={10000} style={{ width: "100%" }} />
               </Form.Item>
             </Col>
             <Col span={6}>
-              <Form.Item name="protein_100g" label="Белки, г">
+              <Form.Item
+                name="protein_100g"
+                label="Белки, г"
+                rules={[{ required: requireNutrition, message: "Обязательно для сырья" }]}
+              >
                 <InputNumber min={0} max={100} style={{ width: "100%" }} />
               </Form.Item>
             </Col>
             <Col span={6}>
-              <Form.Item name="fat_100g" label="Жиры, г">
+              <Form.Item
+                name="fat_100g"
+                label="Жиры, г"
+                rules={[{ required: requireNutrition, message: "Обязательно для сырья" }]}
+              >
                 <InputNumber min={0} max={100} style={{ width: "100%" }} />
               </Form.Item>
             </Col>
             <Col span={6}>
-              <Form.Item name="carbs_100g" label="Углеводы, г">
+              <Form.Item
+                name="carbs_100g"
+                label="Углеводы, г"
+                rules={[{ required: requireNutrition, message: "Обязательно для сырья" }]}
+              >
                 <InputNumber min={0} max={100} style={{ width: "100%" }} />
               </Form.Item>
             </Col>
@@ -698,6 +757,7 @@ export default function ProductsPage() {
             name="unit_weight_kg"
             label="Вес одной базовой единицы, кг"
             tooltip="Сколько весит 1 шт / 1 л и т.п. Без него «на 100 г» не посчитать; для товара в килограммах это 1."
+            rules={[{ required: requireNutrition, message: "Обязательно для сырья" }]}
           >
             <InputNumber min={0} step={0.001} style={{ width: 240 }} />
           </Form.Item>

@@ -25,9 +25,10 @@ import {
   type RecipeOut,
 } from "@/api/recipes";
 import { useCan } from "@/auth/store";
-import { fmtQty } from "@/components/format";
+import { fmtDate, fmtQty } from "@/components/format";
 import { useListControls } from "@/components/useListControls";
 import { usePagination } from "@/components/usePagination";
+import { foodIngredientNutritionMissing } from "@/pages/catalog/recipeMath";
 import RecipeItemsField from "@/pages/catalog/RecipeItemsField";
 import {
   useProductOptions,
@@ -64,12 +65,25 @@ export default function RecipesPage() {
 
   const query = useQuery({
     queryKey: ["recipes", { limit, offset, searchParam, sort }],
-    queryFn: () => listRecipes({ limit, offset, search: searchParam, sort }),
+    queryFn: () => listRecipes({ limit, offset, search: searchParam, sort, active: true }),
   });
 
   const create = useMutation({
-    mutationFn: (values: RecipeCreateForm) =>
-      createRecipe({
+    mutationFn: (values: RecipeCreateForm) => {
+      const missing = [
+        ...new Set(
+          values.items
+            .map((i) => products.productOf(i.component_product_id))
+            .filter((p) => foodIngredientNutritionMissing(p))
+            .map((p) => p!.name),
+        ),
+      ];
+      if (missing.length) {
+        return Promise.reject(
+          new Error(`У сырья не заполнено КБЖУ: ${missing.join(", ")}`),
+        );
+      }
+      return createRecipe({
         product_id: values.product_id,
         output_quantity: values.output_quantity,
         output_unit_id: values.output_unit_id,
@@ -78,7 +92,8 @@ export default function RecipesPage() {
           quantity: i.quantity,
           unit_id: i.unit_id,
         })),
-      }),
+      });
+    },
     onSuccess: (recipe) => {
       message.success("Тех-карта создана");
       setModalOpen(false);
@@ -126,30 +141,32 @@ export default function RecipesPage() {
       render: (_, row) => row.items.length,
     },
     {
+      title: "Действует с",
+      dataIndex: "effective_from",
+      width: 130,
+      render: (v: string) => fmtDate(v),
+    },
+    {
       title: "Статус",
       dataIndex: "is_active",
       width: 110,
       render: (active: boolean) =>
-        active ? <Tag color="green">Активна</Tag> : <Tag>Неактивна</Tag>,
+        active ? <Tag color="green">Действует</Tag> : <Tag>Архив</Tag>,
     },
     {
       title: "",
-      width: 160,
-      render: (_, row) => (
-        <Space size="middle">
-          <a onClick={() => navigate(`/recipes/${row.recipe_id}`)}>Открыть</a>
-          {canManage && (
-            <Popconfirm
-              title="Удалить тех-карту?"
-              okText="Да"
-              cancelText="Нет"
-              onConfirm={() => remove.mutate(row.recipe_id)}
-            >
-              <a>Удалить</a>
-            </Popconfirm>
-          )}
-        </Space>
-      ),
+      width: 90,
+      render: (_, row) =>
+        canManage ? (
+          <Popconfirm
+            title="Удалить тех-карту?"
+            okText="Да"
+            cancelText="Нет"
+            onConfirm={() => remove.mutate(row.recipe_id)}
+          >
+            <a onClick={(e) => e.stopPropagation()}>Удалить</a>
+          </Popconfirm>
+        ) : null,
     },
   ];
 
@@ -184,6 +201,10 @@ export default function RecipesPage() {
         pagination={tablePagination(query.data?.total)}
         columns={columns}
         onChange={onTableChange}
+        rowClassName={() => "row-clickable"}
+        onRow={(row) => ({
+          onClick: () => navigate(`/recipes/${row.recipe_id}`),
+        })}
       />
 
       <Modal

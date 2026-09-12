@@ -70,7 +70,7 @@ export default function ShiftDetailPage() {
       <Space style={{ marginBottom: 16, justifyContent: "space-between", width: "100%" }}>
         <Space>
           <Button icon={<ArrowLeftOutlined />} onClick={() => navigate("/shifts")}>
-            К сменам
+            К журналу
           </Button>
           <h2 style={{ margin: 0 }}>
             Смена №{shift.number ?? shift.shift_id} <ShiftStatusTag status={shift.status} />
@@ -80,8 +80,8 @@ export default function ShiftDetailPage() {
           <Button icon={<PrinterOutlined />} onClick={() => setReceiptOpen(true)}>
             Чек за смену
           </Button>
-          <Link to={`/shifts?tab=checks&shift=${shift.shift_id}`}>
-            <Button>Чеки смены</Button>
+          <Link to={`/shifts?shift=${shift.shift_id}`}>
+            <Button>Чеки и списания смены</Button>
           </Link>
           {canOperate && shift.status === "open" && (
             <Popconfirm

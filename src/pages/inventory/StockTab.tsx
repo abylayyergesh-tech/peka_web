@@ -11,6 +11,7 @@ import {
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 
 import { listUnits } from "@/api/catalog";
@@ -19,6 +20,7 @@ import { getStock, type StockRow } from "@/api/reports";
 import { fmtMoney, fmtQty } from "@/components/format";
 import {
   nameOf,
+  pickMainWarehouse,
   useProductsLookup,
   useWarehousesLookup,
 } from "@/pages/inventory/shared";
@@ -57,6 +59,37 @@ export default function StockTab() {
     queryKey: ["stock", { warehouseId, productId }],
     queryFn: () => getStock({ warehouse_id: warehouseId, product_id: productId }),
   });
+
+  const mainWarehouse = useMemo(() => {
+    const active = warehouses.items.filter((w) => w.is_active);
+    return pickMainWarehouse(active.length ? active : warehouses.items);
+  }, [warehouses.items]);
+  const mainWarehouseId = mainWarehouse?.warehouse_id;
+  const viewingMain = warehouseId != null && warehouseId === mainWarehouseId;
+
+  /** Остаток того же товара на основном складе. Если смотрим все склады —
+   *  строки основного уже в этом ответе; если выбран другой склад — отдельный
+   *  запрос, иначе колонка была бы пустой. */
+  const mainStock = useQuery({
+    queryKey: ["stock", { warehouseId: mainWarehouseId, productId }],
+    queryFn: () =>
+      getStock({ warehouse_id: mainWarehouseId, product_id: productId }),
+    enabled: mainWarehouseId != null && warehouseId != null && !viewingMain,
+  });
+  const qtyOnMain = useMemo(() => {
+    const map = new Map<number, string>();
+    const source =
+      warehouseId == null || viewingMain
+        ? (query.data ?? [])
+        : (mainStock.data ?? []);
+    if (mainWarehouseId == null) return map;
+    for (const row of source) {
+      if (row.warehouse_id === mainWarehouseId) {
+        map.set(row.product_id, row.quantity);
+      }
+    }
+    return map;
+  }, [query.data, mainStock.data, warehouseId, viewingMain, mainWarehouseId]);
 
   const rows = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -100,7 +133,12 @@ export default function StockTab() {
     {
       title: "Продукт",
       dataIndex: "product_id",
-      render: (id: number) => nameOf(products.byId, id),
+      render: (id: number) => {
+        const href = warehouseId
+          ? `/reports/product-movements?product_id=${id}&warehouse_id=${warehouseId}`
+          : `/reports/product-movements?product_id=${id}`;
+        return <Link to={href}>{nameOf(products.byId, id)}</Link>;
+      },
       sorter: (a, b) =>
         nameOf(products.byId, a.product_id).localeCompare(
           nameOf(products.byId, b.product_id),
@@ -118,6 +156,33 @@ export default function StockTab() {
         </span>
       ),
     },
+  );
+  if (mainWarehouseId != null && !viewingMain) {
+    columns.push({
+      title: (
+        <Tooltip title={mainWarehouse?.name ?? "Основной склад"}>
+          <span>В основном складе</span>
+        </Tooltip>
+      ),
+      key: "qty_on_main",
+      align: "right",
+      width: 180,
+      sorter: (a, b) =>
+        Number(qtyOnMain.get(a.product_id) ?? 0) -
+        Number(qtyOnMain.get(b.product_id) ?? 0),
+      render: (_, row) => {
+        if (row.warehouse_id === mainWarehouseId) return "—";
+        const qty = qtyOnMain.get(row.product_id);
+        const n = Number(qty ?? 0);
+        return (
+          <span style={n < 0 ? { color: "#cf1322" } : undefined}>
+            {fmtQty(qty ?? "0")} {unitOf(row.product_id)}
+          </span>
+        );
+      },
+    });
+  }
+  columns.push(
     {
       // Себестоимость одна на товар и не зависит от склада: в строках одного
       // продукта здесь всегда одно и то же число. Подсказка нужна, чтобы это не
@@ -247,7 +312,7 @@ export default function StockTab() {
       <Table<StockRow>
         rowKey={(r) => `${r.warehouse_id}-${r.product_id}`}
         size="small"
-        loading={query.isPending || products.isPending}
+        loading={query.isPending || products.isPending || mainStock.isFetching}
         dataSource={rows}
         columns={columns}
         pagination={{

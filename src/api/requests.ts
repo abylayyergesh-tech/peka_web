@@ -53,6 +53,7 @@ export interface ResignationRequestCreate {
 export interface ScheduleRequestCreate {
   type: "schedule";
   effective_date: string;
+  counterpart_employee_id: number;
   comment?: string | null;
 }
 
@@ -180,6 +181,8 @@ export interface RequestOut {
   is_paid: boolean | null;
   last_working_day: string | null;
   effective_date: string | null;
+  counterpart_employee_id: number | null;
+  counterpart_employee_name: string | null;
   term_months: number | null;
   monthly_amount: string | null;
   timesheet_id: number | null;

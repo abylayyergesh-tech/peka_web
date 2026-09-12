@@ -26,6 +26,7 @@ import {
 import { useCan } from "@/auth/store";
 import { fmtDateTime } from "@/components/format";
 import { usePagination } from "@/components/usePagination";
+import RequestsSectionTabs from "@/pages/requests/RequestsSectionTabs";
 import SubmitForEmployeeModal from "@/pages/requests/SubmitForEmployeeModal";
 import {
   ApprovalSteps, ApprovalsList, describeRequest, REQUEST_STATUS_OPTIONS,
@@ -160,12 +161,6 @@ export default function AllRequestsPage() {
     { title: "Статус", key: "status", width: 200, render: (_, row) => <RequestStatusTags req={row} /> },
     { title: "Детали", key: "details", render: (_, row) => describeRequest(row) },
     { title: "Создано", dataIndex: "created_at", width: 140, render: fmtDateTime },
-    {
-      title: "",
-      key: "actions",
-      width: 90,
-      render: (_, row) => <a onClick={() => openDetail(row.request_id)}>Открыть</a>,
-    },
   ];
 
   const req = detail.data;
@@ -176,14 +171,18 @@ export default function AllRequestsPage() {
 
   return (
     <div>
-      <Space style={{ marginBottom: 16, justifyContent: "space-between", width: "100%" }}>
-        <h2 style={{ margin: 0 }}>Все заявления</h2>
+      <Space style={{ marginBottom: 12, justifyContent: "space-between", width: "100%" }} align="start">
+        <div>
+          <p className="page-kicker">HR</p>
+          <h1 className="page-title">Заявления</h1>
+        </div>
         {canSubmitAny && (
           <Button type="primary" icon={<PlusOutlined />} onClick={() => setSubmitForOpen(true)}>
             Подать за сотрудника
           </Button>
         )}
       </Space>
+      <RequestsSectionTabs active="list" />
       <Space style={{ marginBottom: 16 }} wrap>
         <Select
           allowClear
@@ -223,6 +222,8 @@ export default function AllRequestsPage() {
         dataSource={query.data?.items}
         pagination={tablePagination(query.data?.total)}
         columns={columns}
+        rowClassName={() => "row-clickable"}
+        onRow={(row) => ({ onClick: () => openDetail(row.request_id) })}
       />
 
       <Drawer

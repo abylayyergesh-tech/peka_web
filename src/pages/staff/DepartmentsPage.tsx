@@ -3,9 +3,9 @@ import {
   App,
   Button,
   Checkbox,
+  Descriptions,
   Form,
   Input,
-  Modal,
   Popconfirm,
   Select,
   Space,
@@ -28,6 +28,7 @@ import {
   type DepartmentUpdate,
 } from "@/api/staff";
 import { useCan } from "@/auth/store";
+import EntityCardDrawer from "@/components/EntityCardDrawer";
 import { usePagination } from "@/components/usePagination";
 import { ActiveTag } from "@/pages/staff/shared";
 
@@ -44,8 +45,9 @@ export default function DepartmentsPage() {
   const { limit, offset, tablePagination, reset } = usePagination();
 
   const [includeInactive, setIncludeInactive] = useState(false);
-  const [editing, setEditing] = useState<DepartmentOut | null>(null);
-  const [modalOpen, setModalOpen] = useState(false);
+  const [card, setCard] = useState<DepartmentOut | null>(null);
+  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
   const [form] = Form.useForm<DepartmentFormValues>();
 
   const query = useQuery({
@@ -61,13 +63,19 @@ export default function DepartmentsPage() {
   const empOptions =
     empQuery.data?.items.map((e) => ({ value: e.employee_id, label: e.full_name })) ?? [];
 
+  const fresh =
+    query.data?.items.find((r) => r.department_id === card?.department_id) ?? card;
+
   const save = useMutation({
     mutationFn: (body: DepartmentCreate | DepartmentUpdate) =>
-      editing ? updateDepartment(editing.department_id, body) : createDepartment(body as DepartmentCreate),
-    onSuccess: () => {
-      message.success(editing ? "Сохранено" : "Отдел создан");
-      setModalOpen(false);
+      card
+        ? updateDepartment(card.department_id, body)
+        : createDepartment(body as DepartmentCreate),
+    onSuccess: (row) => {
+      message.success(card ? "Сохранено" : "Отдел создан");
       queryClient.invalidateQueries({ queryKey: ["departments"] });
+      setCard(row);
+      setEditing(false);
     },
     onError: (e) => message.error(errorMessage(e)),
   });
@@ -81,24 +89,36 @@ export default function DepartmentsPage() {
     onError: (e) => message.error(errorMessage(e)),
   });
 
-  function openCreate() {
-    setEditing(null);
-    form.resetFields();
-    setModalOpen(true);
-  }
-
-  function openEdit(row: DepartmentOut) {
-    setEditing(row);
+  function fillForm(row: DepartmentOut) {
     form.setFieldsValue({
       name: row.name,
       head_employee_id: row.head_employee_id ?? undefined,
       is_active: row.is_active,
     });
-    setModalOpen(true);
+  }
+
+  function openCard(row: DepartmentOut) {
+    setCard(row);
+    fillForm(row);
+    setEditing(false);
+    setOpen(true);
+  }
+
+  function openCreate() {
+    setCard(null);
+    form.resetFields();
+    setEditing(true);
+    setOpen(true);
+  }
+
+  function closeCard() {
+    setOpen(false);
+    setEditing(false);
+    setCard(null);
   }
 
   function onFinish(values: DepartmentFormValues) {
-    if (editing) {
+    if (card) {
       save.mutate({
         name: values.name,
         head_employee_id: values.head_employee_id ?? null,
@@ -125,28 +145,33 @@ export default function DepartmentsPage() {
       width: 120,
       render: (v: boolean) => <ActiveTag active={v} />,
     },
-    {
-      title: "",
-      width: 180,
-      render: (_, row) =>
-        canManage && (
-          <Space size="small">
-            <a onClick={() => openEdit(row)}>Изменить</a>
-            {row.is_active && (
-              <Popconfirm
-                title="Деактивировать отдел?"
-                okText="Деактивировать"
-                cancelText="Отмена"
-                okButtonProps={{ danger: true, loading: deactivate.isPending }}
-                onConfirm={() => deactivate.mutate(row.department_id)}
-              >
-                <a style={{ color: "#cf1322" }}>Деактивировать</a>
-              </Popconfirm>
-            )}
-          </Space>
-        ),
-    },
   ];
+
+  const formBody = (
+    <Form form={form} layout="vertical" onFinish={onFinish}>
+      <Form.Item
+        name="name"
+        label="Название"
+        rules={[{ required: true, message: "Обязательное поле" }]}
+      >
+        <Input />
+      </Form.Item>
+      <Form.Item name="head_employee_id" label="Руководитель">
+        <Select
+          allowClear
+          options={empOptions}
+          showSearch
+          optionFilterProp="label"
+          placeholder="Не назначен"
+        />
+      </Form.Item>
+      {card && (
+        <Form.Item name="is_active" label="Активен" valuePropName="checked">
+          <Switch />
+        </Form.Item>
+      )}
+    </Form>
+  );
 
   return (
     <div>
@@ -178,42 +203,58 @@ export default function DepartmentsPage() {
         dataSource={query.data?.items}
         pagination={tablePagination(query.data?.total)}
         columns={columns}
+        rowClassName={() => "row-clickable"}
+        onRow={(row) => ({ onClick: () => openCard(row) })}
       />
 
-      <Modal
-        title={editing ? "Изменить отдел" : "Новый отдел"}
-        open={modalOpen}
-        onCancel={() => setModalOpen(false)}
-        onOk={() => form.submit()}
-        okText="Сохранить"
-        cancelText="Отмена"
-        confirmLoading={save.isPending}
-        destroyOnClose
-      >
-        <Form form={form} layout="vertical" onFinish={onFinish}>
-          <Form.Item
-            name="name"
-            label="Название"
-            rules={[{ required: true, message: "Обязательное поле" }]}
-          >
-            <Input />
-          </Form.Item>
-          <Form.Item name="head_employee_id" label="Руководитель">
-            <Select
-              allowClear
-              options={empOptions}
-              showSearch
-              optionFilterProp="label"
-              placeholder="Не назначен"
-            />
-          </Form.Item>
-          {editing && (
-            <Form.Item name="is_active" label="Активен" valuePropName="checked">
-              <Switch />
-            </Form.Item>
-          )}
-        </Form>
-      </Modal>
+      <EntityCardDrawer
+        open={open}
+        onClose={closeCard}
+        title={fresh?.name ?? "Новый отдел"}
+        canEdit={canManage && fresh != null}
+        editing={editing}
+        onStartEdit={() => {
+          if (fresh) fillForm(fresh);
+          setEditing(true);
+        }}
+        onCancelEdit={() => {
+          if (fresh) {
+            fillForm(fresh);
+            setEditing(false);
+          } else {
+            closeCard();
+          }
+        }}
+        onSave={() => form.submit()}
+        savePending={save.isPending}
+        extra={
+          fresh?.is_active && canManage ? (
+            <Popconfirm
+              title="Деактивировать отдел?"
+              okText="Деактивировать"
+              cancelText="Отмена"
+              okButtonProps={{ danger: true, loading: deactivate.isPending }}
+              onConfirm={() => deactivate.mutate(fresh.department_id)}
+            >
+              <Button danger>Деактивировать</Button>
+            </Popconfirm>
+          ) : undefined
+        }
+        view={
+          fresh ? (
+            <Descriptions column={1} bordered size="small">
+              <Descriptions.Item label="Название">{fresh.name}</Descriptions.Item>
+              <Descriptions.Item label="Руководитель">
+                {fresh.head_employee_name || "—"}
+              </Descriptions.Item>
+              <Descriptions.Item label="Статус">
+                <ActiveTag active={fresh.is_active} />
+              </Descriptions.Item>
+            </Descriptions>
+          ) : null
+        }
+        form={formBody}
+      />
     </div>
   );
 }

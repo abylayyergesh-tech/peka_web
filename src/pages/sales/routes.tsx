@@ -13,12 +13,13 @@ import SalesReportPage from "@/pages/sales/SalesReportPage";
 import ShiftDetailPage from "@/pages/sales/ShiftDetailPage";
 import ShiftsPage from "@/pages/sales/ShiftsPage";
 
-/** /checks?shift=N → /shifts?tab=checks&shift=N: фильтр по смене не теряется. */
-function ChecksTabRedirect() {
+/** /checks?shift=N → /shifts?shift=N. Вкладка «Чеки» больше не нужна. */
+function ChecksRedirect() {
   const { search } = useLocation();
   const params = new URLSearchParams(search);
-  params.set("tab", "checks");
-  return <Navigate to={{ pathname: "/shifts", search: params.toString() }} replace />;
+  params.delete("tab");
+  const next = params.toString();
+  return <Navigate to={next ? `/shifts?${next}` : "/shifts"} replace />;
 }
 
 export const salesRoutes: RouteObject[] = [
@@ -28,9 +29,7 @@ export const salesRoutes: RouteObject[] = [
   { path: "/menus/:id", element: <MenuPricesPage /> },
   { path: "/shifts", element: <ShiftsPage /> },
   { path: "/shifts/:id", element: <ShiftDetailPage /> },
-  // Список чеков переехал во вкладку. Редирект сохраняет ?shift=N — по этой
-  // ссылке из отчёта по смене приходят с уже выбранной сменой.
-  { path: "/checks", element: <ChecksTabRedirect /> },
+  { path: "/checks", element: <ChecksRedirect /> },
   { path: "/checks/:id", element: <CheckDetailPage /> },
   { path: "/customers", element: <CustomersPage /> },
   { path: "/customers/:id", element: <CustomerDetailPage /> },

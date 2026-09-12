@@ -1,6 +1,6 @@
 /** /customers/:id — customer card: info + tabs "Платежи" (register/void)
  * and "Взаиморасчёты" (cursor-paged receivable ledger). */
-import { ArrowLeftOutlined, PlusOutlined } from "@ant-design/icons";
+import { ArrowLeftOutlined, EditOutlined, PlusOutlined } from "@ant-design/icons";
 import {
   App, Button, Card, DatePicker, Descriptions, Form, Input, InputNumber, Modal,
   Popconfirm, Result, Select, Space, Spin, Table, Tabs, Tag,
@@ -13,10 +13,11 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tansta
 
 import { errorMessage } from "@/api/client";
 import {
-  customerLedger, getCustomer, listCustomerPayments, listMenus, recordCustomerPayment,
+  customerLedger, getCustomer,   listCustomerPayments, listMenus, recordCustomerPayment,
   updateCustomer, voidCustomerPayment,
   type BillingMode, type CustomerPaymentOut, type ReceivableEntryOut,
 } from "@/api/sales";
+import { useCustomerCategories } from "@/pages/sales/CustomerCategoriesModal";
 import { useCan } from "@/auth/store";
 import {
   EntityTag,
@@ -59,7 +60,9 @@ export default function CustomerDetailPage() {
   const canReport = useCan("report.read");
   const canManageCustomer = useCan("customer.manage");
   const [payModalOpen, setPayModalOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const [payForm] = Form.useForm();
+  const [editForm] = Form.useForm();
 
   const entities = useCompanyEntities(true);
 
@@ -80,6 +83,7 @@ export default function CustomerDetailPage() {
     queryFn: () => listMenus({ active: true }),
     staleTime: 60_000,
   });
+  const categories = useCustomerCategories();
   const defaultMenuName = menus.data?.find((m) => m.is_default)?.name ?? "Основное меню";
 
   /** Прайс-лист меняется прямо из карточки — это самая частая правка клиента. */
@@ -93,11 +97,53 @@ export default function CustomerDetailPage() {
     onError: (e) => message.error(errorMessage(e)),
   });
 
+  const setCategory = useMutation({
+    mutationFn: (categoryId: number | null) =>
+      updateCustomer(customerId, { customer_category_id: categoryId }),
+    onSuccess: () => {
+      message.success("Категория клиента обновлена");
+      queryClient.invalidateQueries({ queryKey: ["customer", customerId] });
+      queryClient.invalidateQueries({ queryKey: ["customers"] });
+      queryClient.invalidateQueries({ queryKey: ["customer-categories"] });
+    },
+    onError: (e) => message.error(errorMessage(e)),
+  });
+
   /** Категория расчётов — отдельная мутация: прайс-лист при переводе не трогаем. */
   const setBillingMode = useMutation({
     mutationFn: (mode: BillingMode) => updateCustomer(customerId, { billing_mode: mode }),
     onSuccess: (updated) => {
       message.success(`Расчёты: ${BILLING_MODE[updated.billing_mode].label.toLowerCase()}`);
+      queryClient.invalidateQueries({ queryKey: ["customer", customerId] });
+      queryClient.invalidateQueries({ queryKey: ["customers"] });
+    },
+    onError: (e) => message.error(errorMessage(e)),
+  });
+
+  const saveProfile = useMutation({
+    mutationFn: (v: {
+      name: string;
+      legal_name?: string;
+      tax_id?: string;
+      bank_account?: string;
+      phone?: string;
+      email?: string;
+      credit_limit?: number;
+      note?: string;
+    }) =>
+      updateCustomer(customerId, {
+        name: v.name,
+        legal_name: v.legal_name || null,
+        tax_id: v.tax_id || null,
+        bank_account: v.bank_account || null,
+        phone: v.phone || null,
+        email: v.email || null,
+        credit_limit: v.credit_limit ?? null,
+        note: v.note || null,
+      }),
+    onSuccess: () => {
+      message.success("Сохранено");
+      setEditOpen(false);
       queryClient.invalidateQueries({ queryKey: ["customer", customerId] });
       queryClient.invalidateQueries({ queryKey: ["customers"] });
     },
@@ -290,14 +336,37 @@ export default function CustomerDetailPage() {
 
   return (
     <div>
-      <Space style={{ marginBottom: 16 }}>
-        <Button icon={<ArrowLeftOutlined />} onClick={() => navigate("/customers")}>
-          К клиентам
-        </Button>
-        <h2 style={{ margin: 0 }}>
-          {c.name}{" "}
-          {c.is_active ? <Tag color="green">Активен</Tag> : <Tag>Неактивен</Tag>}
-        </h2>
+      <Space style={{ marginBottom: 16, justifyContent: "space-between", width: "100%" }}>
+        <Space>
+          <Button icon={<ArrowLeftOutlined />} onClick={() => navigate("/customers")}>
+            К клиентам
+          </Button>
+          <h2 style={{ margin: 0 }}>
+            {c.name}{" "}
+            {c.is_active ? <Tag color="green">Активен</Tag> : <Tag>Неактивен</Tag>}
+          </h2>
+        </Space>
+        {canManageCustomer && (
+          <Button
+            type="primary"
+            icon={<EditOutlined />}
+            onClick={() => {
+              editForm.setFieldsValue({
+                name: c.name,
+                legal_name: c.legal_name ?? undefined,
+                tax_id: c.tax_id ?? undefined,
+                bank_account: c.bank_account ?? undefined,
+                phone: c.phone ?? undefined,
+                email: c.email ?? undefined,
+                credit_limit: c.credit_limit != null ? Number(c.credit_limit) : undefined,
+                note: c.note ?? undefined,
+              });
+              setEditOpen(true);
+            }}
+          >
+            Редактировать
+          </Button>
+        )}
       </Space>
 
       <Card size="small" style={{ marginBottom: 16 }}>
@@ -320,6 +389,35 @@ export default function CustomerDetailPage() {
           </Descriptions.Item>
           <Descriptions.Item label="Кредитный лимит">
             <Money value={c.credit_limit} />
+          </Descriptions.Item>
+          <Descriptions.Item label="Категория">
+            {canManageCustomer ? (
+              <Select
+                size="small"
+                allowClear
+                showSearch
+                optionFilterProp="label"
+                style={{ minWidth: 200 }}
+                placeholder="Без категории"
+                loading={categories.isPending || setCategory.isPending}
+                value={c.customer_category_id ?? undefined}
+                onChange={(v) => setCategory.mutate(v ?? null)}
+                options={(categories.data ?? [])
+                  .filter(
+                    (cat) =>
+                      cat.is_active ||
+                      cat.customer_category_id === c.customer_category_id,
+                  )
+                  .map((cat) => ({
+                    value: cat.customer_category_id,
+                    label: cat.is_active ? cat.name : `${cat.name} (откл.)`,
+                  }))}
+              />
+            ) : (
+              categories.data?.find(
+                (cat) => cat.customer_category_id === c.customer_category_id,
+              )?.name ?? (c.customer_category_id == null ? "—" : `#${c.customer_category_id}`)
+            )}
           </Descriptions.Item>
           <Descriptions.Item label="Прайс-лист">
             {canManageCustomer ? (
@@ -369,6 +467,48 @@ export default function CustomerDetailPage() {
       </Card>
 
       <Tabs items={tabItems} />
+
+      <Modal
+        title="Редактировать клиента"
+        open={editOpen}
+        onCancel={() => setEditOpen(false)}
+        onOk={() => editForm.submit()}
+        okText="Сохранить"
+        cancelText="Отмена"
+        confirmLoading={saveProfile.isPending}
+        destroyOnClose
+      >
+        <Form form={editForm} layout="vertical" onFinish={(v) => saveProfile.mutate(v)}>
+          <Form.Item
+            name="name"
+            label="Название"
+            rules={[{ required: true, message: "Обязательное поле" }]}
+          >
+            <Input maxLength={256} />
+          </Form.Item>
+          <Form.Item name="legal_name" label="Юридическое название">
+            <Input maxLength={256} />
+          </Form.Item>
+          <Form.Item name="tax_id" label="БИН/ИИН">
+            <Input maxLength={64} />
+          </Form.Item>
+          <Form.Item name="bank_account" label="Расчётный счёт">
+            <Input maxLength={64} />
+          </Form.Item>
+          <Form.Item name="phone" label="Телефон">
+            <Input maxLength={64} />
+          </Form.Item>
+          <Form.Item name="email" label="Email" rules={[{ type: "email", message: "Некорректный email" }]}>
+            <Input maxLength={256} />
+          </Form.Item>
+          <Form.Item name="credit_limit" label="Кредитный лимит">
+            <InputNumber min={0} style={{ width: "100%" }} />
+          </Form.Item>
+          <Form.Item name="note" label="Примечание">
+            <Input.TextArea rows={2} />
+          </Form.Item>
+        </Form>
+      </Modal>
 
       <Modal
         title="Зарегистрировать платёж"

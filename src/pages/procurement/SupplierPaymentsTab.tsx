@@ -44,6 +44,7 @@ export default function SupplierPaymentsTab({ supplierId }: { supplierId: number
   function invalidate() {
     queryClient.invalidateQueries({ queryKey: ["supplier-payments", supplierId] });
     queryClient.invalidateQueries({ queryKey: ["supplier-ledger", supplierId] });
+    queryClient.invalidateQueries({ queryKey: ["supplier-reconciliation", supplierId] });
     queryClient.invalidateQueries({ queryKey: ["payables"] });
     queryClient.invalidateQueries({ queryKey: ["company-money"] });
   }

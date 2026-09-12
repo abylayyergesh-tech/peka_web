@@ -43,8 +43,11 @@ export default function MenuItemsTab() {
   const { limit, offset, tablePagination, reset } = usePagination();
   const { search, setSearch, searchParam, sort, onTableChange } =
     useListControls<MenuItemOut>({ onReset: reset });
-  const [activeFilter, setActiveFilter] = useState<"all" | "active" | "inactive">("active");
-  const active = activeFilter === "all" ? undefined : activeFilter === "active";
+  const [activeFilter, setActiveFilter] = useState<"all" | "active" | "inactive" | "stopped">("active");
+  const active = activeFilter === "all" || activeFilter === "stopped"
+    ? undefined
+    : activeFilter === "active";
+  const stopped = activeFilter === "stopped" ? true : undefined;
   const [editing, setEditing] = useState<MenuItemOut | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   /** Позиция, для которой открыт расчёт КБЖУ порции. */
@@ -55,8 +58,11 @@ export default function MenuItemsTab() {
   const [form] = Form.useForm();
 
   const query = useQuery({
-    queryKey: ["menu-items", { limit, offset, active, searchParam, sort }],
-    queryFn: () => listMenuItems({ limit, offset, active, search: searchParam, sort }),
+    queryKey: ["menu-items", { limit, offset, active, stopped, searchParam, sort }],
+    queryFn: () =>
+      listMenuItems({
+        limit, offset, active, stopped, search: searchParam, sort, with_cost: true,
+      }),
   });
 
   const products = useQuery({
@@ -127,6 +133,16 @@ export default function MenuItemsTab() {
     onError: (e) => message.error(errorMessage(e)),
   });
 
+  const toggleStop = useMutation({
+    mutationFn: ({ id, is_stopped }: { id: number; is_stopped: boolean }) =>
+      updateMenuItem(id, { is_stopped }),
+    onSuccess: (_row, { is_stopped }) => {
+      message.success(is_stopped ? "Позиция на стопе" : "Стоп снят");
+      queryClient.invalidateQueries({ queryKey: ["menu-items"] });
+    },
+    onError: (e) => message.error(errorMessage(e)),
+  });
+
   function openCreate() {
     setEditing(null);
     setPendingFile(null);
@@ -187,19 +203,59 @@ export default function MenuItemsTab() {
       render: (v: string) => <Money value={v} />,
     },
     {
+      title: "Себестоимость",
+      dataIndex: "portion_cost",
+      align: "right",
+      width: 140,
+      render: (v: string | null | undefined, row) => {
+        if (v == null) return <span style={{ color: "#bfbfbf" }}>—</span>;
+        return (
+          <Space size={4}>
+            <Money value={v} />
+            {row.portion_cost_missing && (
+              <Tag color="warning" style={{ marginInlineEnd: 0 }}>неполная</Tag>
+            )}
+          </Space>
+        );
+      },
+    },
+    {
       title: "Статус",
       dataIndex: "is_active",
-      width: 110,
-      render: (v: boolean) => (v ? <Tag color="green">Активна</Tag> : <Tag>Неактивна</Tag>),
+      width: 130,
+      render: (_v: boolean, row) => {
+        if (row.is_stopped) return <Tag color="red">Стоп</Tag>;
+        return row.is_active ? <Tag color="green">Активна</Tag> : <Tag>Неактивна</Tag>;
+      },
     },
     {
       title: "",
-      width: 230,
+      width: 300,
       render: (_, row) => (
         <Space>
-          <a onClick={() => setNutritionOf(row)}>КБЖУ</a>
-          {canManage && (
-            <a onClick={() => openEdit(row)}>Изменить</a>
+          <a onClick={(e) => { e.stopPropagation(); setNutritionOf(row); }}>КБЖУ</a>
+          {canManage && row.is_active && !row.is_stopped && (
+            <Popconfirm
+              title={`Поставить «${row.name}» на стоп?`}
+              description="Позиция пропадёт из кассы и клиентского меню, пока стоп не снимете."
+              okText="На стоп"
+              cancelText="Отмена"
+              okButtonProps={{ danger: true }}
+              onConfirm={() => toggleStop.mutate({ id: row.menu_item_id, is_stopped: true })}
+            >
+              <a onClick={(e) => e.stopPropagation()}>На стоп</a>
+            </Popconfirm>
+          )}
+          {canManage && row.is_stopped && (
+            <Popconfirm
+              title={`Снять «${row.name}» со стопа?`}
+              description="Позиция снова появится в кассе и у клиентов."
+              okText="Снять стоп"
+              cancelText="Отмена"
+              onConfirm={() => toggleStop.mutate({ id: row.menu_item_id, is_stopped: false })}
+            >
+              <a onClick={(e) => e.stopPropagation()}>Снять стоп</a>
+            </Popconfirm>
           )}
           {canManage && row.is_active && (
             <Popconfirm
@@ -208,7 +264,7 @@ export default function MenuItemsTab() {
               cancelText="Нет"
               onConfirm={() => remove.mutate(row.menu_item_id)}
             >
-              <a>Деактивировать</a>
+              <a onClick={(e) => e.stopPropagation()}>Деактивировать</a>
             </Popconfirm>
           )}
         </Space>
@@ -238,6 +294,7 @@ export default function MenuItemsTab() {
             options={[
               { value: "all", label: "Все позиции" },
               { value: "active", label: "Активные" },
+              { value: "stopped", label: "На стопе" },
               { value: "inactive", label: "Неактивные" },
             ]}
           />
@@ -256,7 +313,16 @@ export default function MenuItemsTab() {
         pagination={tablePagination(query.data?.total)}
         columns={columns}
         onChange={onTableChange}
+        rowClassName={(row) =>
+          `row-clickable${row.is_stopped ? " menu-item-stopped" : ""}`
+        }
+        onRow={(row) => ({
+          onClick: () => canManage && openEdit(row),
+        })}
       />
+      <style>{`
+        .menu-item-stopped td { background: #fff2f0; }
+      `}</style>
       <Modal
         title={editing ? "Изменить позицию меню" : "Новая позиция меню"}
         open={modalOpen}

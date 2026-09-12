@@ -29,6 +29,16 @@ export interface MovementRow {
   avg_cost_after: string;
   doc_date: string;
   posting_seq: number;
+  document_type?: string | null;
+  document_number?: number | null;
+  correspondence?: string | null;
+  posted_at?: string | null;
+}
+
+export interface ProductMovementsOut {
+  items: MovementRow[];
+  truncated: boolean;
+  limit: number;
 }
 
 export interface ProductCostNode {
@@ -60,6 +70,66 @@ export async function getMovements(
   params: MovementsParams,
 ): Promise<CursorPage<MovementRow>> {
   const { data } = await api.get<CursorPage<MovementRow>>("/reports/movements", {
+    params,
+  });
+  return data;
+}
+
+/** Карточка одного товара: приход, расход и остаток за период (новые сверху). */
+export async function getProductMovements(params: {
+  product_id: number;
+  from?: string;
+  to?: string;
+  warehouse_id?: number;
+}): Promise<ProductMovementsOut> {
+  const { data } = await api.get<ProductMovementsOut>(
+    "/reports/product-movements",
+    { params },
+  );
+  return data;
+}
+
+export interface TrialBalanceRow {
+  product_id: number;
+  name: string;
+  sku: string | null;
+  category: string | null;
+  group_name: string | null;
+  unit_name: string;
+  item_type: string;
+  opening_qty: string;
+  opening_cost: string;
+  receipt_qty: string;
+  receipt_cost: string;
+  sale_qty: string;
+  sale_cost: string;
+  transfer_qty: string;
+  transfer_cost: string;
+  write_off_qty: string;
+  write_off_cost: string;
+  inventory_qty: string;
+  inventory_cost: string;
+  production_qty: string;
+  production_cost: string;
+  closing_qty: string;
+  closing_cost: string;
+}
+
+export interface TrialBalanceOut {
+  date_from: string;
+  date_to: string;
+  warehouse_id: number | null;
+  items: TrialBalanceRow[];
+}
+
+/** Расширенная оборотно-сальдовая: остатки и обороты по типу документа. */
+export async function getTrialBalance(params: {
+  from: string;
+  to: string;
+  warehouse_id?: number;
+  category?: string;
+}): Promise<TrialBalanceOut> {
+  const { data } = await api.get<TrialBalanceOut>("/reports/trial-balance", {
     params,
   });
   return data;
@@ -98,6 +168,8 @@ export interface TechCardRow {
   hot_loss_pct: string | null;
   unit_cost: string | null;
   cost_total: string | null;
+  /** Себестоимость на килограмм брутто — колонка «стоимость за ед. веса». */
+  cost_per_kg: string | null;
   missing_cost: boolean;
   /** Откуда цена: остаток склада, цена последнего поступления или статья без
    *  ставки (ФОТ, аренда). null у полуфабриката — он стоит столько, сколько состав. */
@@ -107,6 +179,11 @@ export interface TechCardRow {
   /** Дата той последней цены (только когда cost_source = last_price). */
   last_cost_at: string | null;
   children: TechCardRow[];
+  nutrition_missing: boolean;
+  energy_kcal_100g: string | null;
+  protein_100g: string | null;
+  fat_100g: string | null;
+  carbs_100g: string | null;
 }
 
 export interface TechCardPricing {
@@ -115,6 +192,20 @@ export interface TechCardPricing {
   sale_price: string | null;
   markup: string | null;
   food_cost_pct: string | null;
+}
+
+export interface TechCardCostLine {
+  amount: string | null;
+  food_cost_pct: string | null;
+  markup_pct: string | null;
+}
+
+/** ССС/СПП — само изделие; ССН/ССНПП — сырьевой набор закладки. */
+export interface TechCardCosts {
+  sss: TechCardCostLine;
+  spp: TechCardCostLine;
+  ssn: TechCardCostLine;
+  ssnpp: TechCardCostLine;
 }
 
 export interface TechCardTotals {
@@ -129,15 +220,27 @@ export interface TechCardTotals {
   cost_estimated: boolean;
 }
 
+export interface TechCardNutrition {
+  per_100g: { energy_kcal: string; protein: string; fat: string; carbs: string } | null;
+  per_unit: { energy_kcal: string; protein: string; fat: string; carbs: string };
+  complete: boolean;
+  source: "own" | "recipe";
+  missing_products: number[];
+  missing_product_names: string[];
+}
+
 export interface TechCard {
   product_id: number;
   sku: string | null;
   name: string;
+  recipe_id: number | null;
   output_quantity: string;
   output_unit_name: string;
   rows: TechCardRow[];
   totals: TechCardTotals;
   pricing: TechCardPricing;
+  costs?: TechCardCosts | null;
+  nutrition?: TechCardNutrition | null;
 }
 
 /** Калькуляционная карта (только просмотр).
@@ -148,7 +251,7 @@ export interface TechCard {
  *  На себестоимость выбор не влияет: она считается по брутто. */
 export async function getTechCard(
   productId: number,
-  params: { menu_id?: number; average?: boolean } = {},
+  params: { menu_id?: number; average?: boolean; recipe_id?: number } = {},
 ): Promise<TechCard> {
   const { data } = await api.get<TechCard>(`/reports/tech-card/${productId}`, {
     params,

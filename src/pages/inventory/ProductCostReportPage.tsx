@@ -167,18 +167,25 @@ export default function ProductCostReportPage() {
         </>
       ),
     },
-    { title: "Фасовка", dataIndex: "unit_name", width: 96 },
+    { title: "Ед. изм.", dataIndex: "unit_name", width: 80 },
     {
-      title: "Количество фасовок",
+      title: "Кол-во в фасовке",
       dataIndex: "package_count",
       width: 120,
       align: "right",
       render: (v: string) => fmtQty(v),
     },
     {
-      title: "Брутто",
-      dataIndex: "brutto_kg",
+      title: "Брутто, ед. изм.",
+      dataIndex: "brutto",
       width: 110,
+      align: "right",
+      render: (v: string) => fmtQty(v),
+    },
+    {
+      title: "Брутто, кг",
+      dataIndex: "brutto_kg",
+      width: 100,
       align: "right",
       render: (v: string | null) => <Kg value={v} />,
     },
@@ -211,9 +218,23 @@ export default function ProductCostReportPage() {
       render: (v: string | null) => <Kg value={v} />,
     },
     {
-      title: "Себестоимость всего",
+      title: "Себестоимость",
       dataIndex: "cost_total",
-      width: 140,
+      width: 130,
+      align: "right",
+      render: (v: string | null) => (v == null ? "—" : fmtMoney(v)),
+    },
+    {
+      title: "Стоимость за ед.",
+      dataIndex: "unit_cost",
+      width: 120,
+      align: "right",
+      render: (v: string | null) => (v == null ? "—" : fmtMoney(v)),
+    },
+    {
+      title: "Стоимость за ед. веса",
+      dataIndex: "cost_per_kg",
+      width: 130,
       align: "right",
       render: (v: string | null) => (v == null ? "—" : fmtMoney(v)),
     },
@@ -284,7 +305,7 @@ export default function ProductCostReportPage() {
             dataSource={rows}
             columns={columns}
             pagination={false}
-            scroll={{ x: 1400 }}
+            scroll={{ x: 1760 }}
             expandable={{ defaultExpandAllRows: true }}
             title={() =>
               card.data ? (
@@ -299,7 +320,7 @@ export default function ProductCostReportPage() {
               totals ? (
                 <Table.Summary fixed>
                   <Table.Summary.Row>
-                    <Table.Summary.Cell index={0} colSpan={5}>
+                    <Table.Summary.Cell index={0} colSpan={6}>
                       <b>Итого</b>
                       {totals.missing_weight && (
                         <Tooltip title="Часть строк не переведена в килограммы: у товаров не задан вес единицы">
@@ -309,20 +330,22 @@ export default function ProductCostReportPage() {
                         </Tooltip>
                       )}
                     </Table.Summary.Cell>
-                    <Table.Summary.Cell index={5} align="right">
+                    <Table.Summary.Cell index={6} align="right">
                       <b>{fmtQty(totals.brutto_kg)}</b>
                     </Table.Summary.Cell>
-                    <Table.Summary.Cell index={6} />
-                    <Table.Summary.Cell index={7} align="right">
+                    <Table.Summary.Cell index={7} />
+                    <Table.Summary.Cell index={8} align="right">
                       <b>{fmtQty(totals.netto_kg)}</b>
                     </Table.Summary.Cell>
-                    <Table.Summary.Cell index={8} />
-                    <Table.Summary.Cell index={9} align="right">
+                    <Table.Summary.Cell index={9} />
+                    <Table.Summary.Cell index={10} align="right">
                       <b>{fmtQty(totals.yield_kg)}</b>
                     </Table.Summary.Cell>
-                    <Table.Summary.Cell index={10} align="right">
+                    <Table.Summary.Cell index={11} align="right">
                       <b>{fmtMoney(totals.cost)}</b>
                     </Table.Summary.Cell>
+                    <Table.Summary.Cell index={12} />
+                    <Table.Summary.Cell index={13} />
                   </Table.Summary.Row>
                 </Table.Summary>
               ) : null

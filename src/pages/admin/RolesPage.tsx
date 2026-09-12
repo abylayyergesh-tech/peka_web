@@ -106,23 +106,18 @@ export default function RolesPage() {
     },
     {
       title: "",
-      width: 180,
+      width: 90,
       render: (_, row) =>
-        canRole && (
-          <Space size="middle">
-            <a onClick={() => openEdit(row)}>Изменить</a>
-            {!row.is_builtin && (
-              <Popconfirm
-                title="Удалить роль?"
-                okText="Удалить"
-                cancelText="Отмена"
-                onConfirm={() => remove.mutate(row.role_id)}
-              >
-                <a>Удалить</a>
-              </Popconfirm>
-            )}
-          </Space>
-        ),
+        canRole && !row.is_builtin ? (
+          <Popconfirm
+            title="Удалить роль?"
+            okText="Удалить"
+            cancelText="Отмена"
+            onConfirm={() => remove.mutate(row.role_id)}
+          >
+            <a onClick={(e) => e.stopPropagation()}>Удалить</a>
+          </Popconfirm>
+        ) : null,
     },
   ];
 
@@ -143,6 +138,8 @@ export default function RolesPage() {
         dataSource={rolesQuery.data}
         pagination={false}
         columns={columns}
+        rowClassName={() => "row-clickable"}
+        onRow={(row) => ({ onClick: () => canRole && openEdit(row) })}
       />
       <Modal
         title={editing ? "Изменить роль" : "Новая роль"}

@@ -1,20 +1,31 @@
 /** /customers — customer list + CRUD modal (cap customer.manage). */
 import { PlusOutlined } from "@ant-design/icons";
 import {
-  Alert, App, Button, Form, Input, InputNumber, Modal, Popconfirm, Select, Space,
+  Alert, App, Button, Form, Input, InputNumber, Modal, Select, Space,
   Table, Tag, Tooltip,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
+import dayjs from "dayjs";
 import { useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { errorMessage } from "@/api/client";
+import { listAssignments } from "@/api/delivery";
 import {
-  createCustomer, deleteCustomer, listCustomers, listMenus, updateCustomer,
+  assignCustomersCategory,
+  createCustomer, listCustomers, listMenus, updateCustomer,
   type BillingMode, type CustomerCreate, type CustomerOut,
 } from "@/api/sales";
 import { useCan } from "@/auth/store";
+import TableColumnSettings from "@/components/TableColumnSettings";
+import {
+  useTableColumnSettings,
+  type TableColumnSpec,
+} from "@/components/useTableColumnSettings";
+import CustomerCategoriesModal, {
+  useCustomerCategories,
+} from "@/pages/sales/CustomerCategoriesModal";
 import {
   EntityTag,
   NO_ENTITY_FILTER,
@@ -28,14 +39,27 @@ import {
   BILLING_MODE, BILLING_MODE_OPTIONS, BillingModeTag,
 } from "@/pages/sales/statusTags";
 
-/** Куда переводится клиент по кнопке «Перевести» — категорий ровно две. */
-const OTHER_MODE: Record<BillingMode, BillingMode> = {
-  weekly: "per_order",
-  per_order: "weekly",
-};
+/** Колонки, которые можно спрятать. Название всегда на месте. */
+const CUSTOMER_COLUMN_SPECS: TableColumnSpec[] = [
+  { key: "name", label: "Название", locked: true },
+  { key: "customer_category_id", label: "Категория" },
+  { key: "legal_name", label: "Юр. название", defaultVisible: false },
+  { key: "phone", label: "Телефон" },
+  { key: "email", label: "Email" },
+  { key: "tax_id", label: "БИН/ИИН" },
+  { key: "bank_account", label: "Расчётный счёт", defaultVisible: false },
+  { key: "company_entity_id", label: "Наше юр. лицо" },
+  { key: "menu_id", label: "Прайс-лист" },
+  { key: "billing_mode", label: "Расчёты" },
+  { key: "credit_limit", label: "Кредитный лимит" },
+  { key: "note", label: "Примечание", defaultVisible: false },
+  { key: "courier", label: "Курьер (завтра)" },
+  { key: "is_active", label: "Статус" },
+];
 
 export default function CustomersPage() {
   const { message } = App.useApp();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const canManage = useCan("customer.manage");
   const { limit, offset, tablePagination, reset } = usePagination();
@@ -43,8 +67,12 @@ export default function CustomersPage() {
   const active = activeFilter === "all" ? undefined : activeFilter === "active";
   const [modeFilter, setModeFilter] = useState<BillingMode | "all">("all");
   const billing_mode = modeFilter === "all" ? undefined : modeFilter;
+  const [categoryFilter, setCategoryFilter] = useState<number | undefined>();
   const [editing, setEditing] = useState<CustomerOut | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
+  const [dictOpen, setDictOpen] = useState(false);
+  const [assignCatOpen, setAssignCatOpen] = useState(false);
+  const [assignCatTarget, setAssignCatTarget] = useState<number | null | undefined>();
   // Фильтр по нашему юр. лицу — в адресе: на страницу проваливаются ссылкой из
   // «Денег по юр. лицам» («у этого юрлица 24 клиента»).
   const [urlParams, setUrlParams] = useSearchParams();
@@ -57,15 +85,44 @@ export default function CustomersPage() {
   const [form] = Form.useForm();
 
   const query = useQuery({
-    queryKey: ["customers", { limit, offset, active, billing_mode }],
-    queryFn: () => listCustomers({ limit, offset, active, billing_mode }),
+    queryKey: ["customers", { limit, offset, active, billing_mode, categoryFilter }],
+    queryFn: () =>
+      listCustomers({
+        limit,
+        offset,
+        active,
+        billing_mode,
+        category: categoryFilter,
+      }),
   });
+  const categories = useCustomerCategories();
+  const colSettings = useTableColumnSettings("customers", CUSTOMER_COLUMN_SPECS);
+  const categoryName = (id: number | null) => {
+    if (id == null) return null;
+    return (
+      categories.data?.find((c) => c.customer_category_id === id)?.name ?? `#${id}`
+    );
+  };
 
   const menus = useQuery({
     queryKey: ["menus", "active"],
     queryFn: () => listMenus({ active: true }),
     staleTime: 60_000,
   });
+  const assignments = useQuery({
+    queryKey: ["delivery-assignments", "tomorrow"],
+    queryFn: () => listAssignments(dayjs().add(1, "day").format("YYYY-MM-DD")),
+  });
+  const couriersByCustomer = useMemo(() => {
+    const map = new Map<number, string[]>();
+    for (const row of assignments.data ?? []) {
+      if (row.customer_id == null || !row.courier_name) continue;
+      const list = map.get(row.customer_id) ?? [];
+      if (!list.includes(row.courier_name)) list.push(row.courier_name);
+      map.set(row.customer_id, list);
+    }
+    return map;
+  }, [assignments.data]);
   const defaultMenuName =
     menus.data?.find((m) => m.is_default)?.name ?? "Основное меню";
   /** menu_id = null означает базовые цены, то есть основное меню. */
@@ -85,40 +142,9 @@ export default function CustomersPage() {
     onError: (e) => message.error(errorMessage(e)),
   });
 
-  const remove = useMutation({
-    mutationFn: (id: number) => deleteCustomer(id),
-    onSuccess: () => {
-      message.success("Клиент деактивирован");
-      queryClient.invalidateQueries({ queryKey: ["customers"] });
-    },
-    onError: (e) => message.error(errorMessage(e)),
-  });
-
-  /** Перевод между категориями расчётов. Прайс-лист не трогаем: разделение он
-   *  задал однократно при переходе, дальше это независимые атрибуты. */
-  const moveMode = useMutation({
-    mutationFn: (v: { id: number; mode: BillingMode }) =>
-      updateCustomer(v.id, { billing_mode: v.mode }),
-    onSuccess: (c) => {
-      message.success(`«${c.name}» → ${BILLING_MODE[c.billing_mode].label.toLowerCase()}`);
-      queryClient.invalidateQueries({ queryKey: ["customers"] });
-      queryClient.invalidateQueries({ queryKey: ["customer", c.customer_id] });
-    },
-    onError: (e) => message.error(errorMessage(e)),
-  });
-
   function openCreate() {
     setEditing(null);
     form.resetFields();
-    setModalOpen(true);
-  }
-
-  function openEdit(row: CustomerOut) {
-    setEditing(row);
-    form.setFieldsValue({
-      ...row,
-      credit_limit: row.credit_limit != null ? Number(row.credit_limit) : undefined,
-    });
     setModalOpen(true);
   }
 
@@ -157,15 +183,56 @@ export default function CustomersPage() {
     onError: (e) => message.error(errorMessage(e)),
   });
 
+  const assignCategory = useMutation({
+    mutationFn: () =>
+      assignCustomersCategory({
+        customer_ids: selected,
+        customer_category_id: assignCatTarget ?? null,
+      }),
+    onSuccess: (res) => {
+      message.success(
+        res.customer_category_name
+          ? `Отнесено клиентов: ${res.updated} → «${res.customer_category_name}»`
+          : `Категория снята у ${res.updated} клиентов`,
+      );
+      setAssignCatOpen(false);
+      setSelected([]);
+      queryClient.invalidateQueries({ queryKey: ["customers"] });
+      queryClient.invalidateQueries({ queryKey: ["customer-categories"] });
+    },
+    onError: (e) => message.error(errorMessage(e)),
+  });
+
   const columns: ColumnsType<CustomerOut> = [
     {
+      key: "name",
       title: "Название",
       dataIndex: "name",
-      render: (v: string, row) => <Link to={`/customers/${row.customer_id}`}>{v}</Link>,
+      render: (v: string) => v,
     },
-    { title: "Телефон", dataIndex: "phone", render: (v: string | null) => v ?? "—" },
-    { title: "Email", dataIndex: "email", render: (v: string | null) => v ?? "—" },
     {
+      key: "customer_category_id",
+      title: "Категория",
+      dataIndex: "customer_category_id",
+      width: 150,
+      render: (id: number | null) => {
+        const name = categoryName(id);
+        if (!name) return <span style={{ color: "#999" }}>—</span>;
+        const off = categories.data?.find((c) => c.customer_category_id === id)?.is_active === false;
+        return <Tag color={off ? "default" : "purple"}>{name}</Tag>;
+      },
+    },
+    {
+      key: "legal_name",
+      title: "Юр. название",
+      dataIndex: "legal_name",
+      width: 180,
+      render: (v: string | null) => v ?? "—",
+    },
+    { key: "phone", title: "Телефон", dataIndex: "phone", render: (v: string | null) => v ?? "—" },
+    { key: "email", title: "Email", dataIndex: "email", render: (v: string | null) => v ?? "—" },
+    {
+      key: "tax_id",
       title: "БИН/ИИН",
       dataIndex: "tax_id",
       width: 150,
@@ -173,14 +240,23 @@ export default function CustomersPage() {
         v ?? <span style={{ color: "#999" }}>самост. точка</span>,
     },
     {
+      key: "bank_account",
+      title: "Расчётный счёт",
+      dataIndex: "bank_account",
+      width: 180,
+      render: (v: string | null) => v ?? "—",
+    },
+    {
       // НАШЕ юрлицо, а не клиентское: от его имени с клиентом работают, и в его
       // дебиторку попадает долг. БИН клиента — колонка выше, это другое.
+      key: "company_entity_id",
       title: "Наше юр. лицо",
       dataIndex: "company_entity_id",
       width: 190,
       render: (id: number | null) => <EntityTag entities={entities.data} id={id} />,
     },
     {
+      key: "menu_id",
       title: "Прайс-лист",
       dataIndex: "menu_id",
       width: 170,
@@ -192,6 +268,7 @@ export default function CustomersPage() {
         ),
     },
     {
+      key: "billing_mode",
       title: "Расчёты",
       dataIndex: "billing_mode",
       width: 150,
@@ -204,60 +281,39 @@ export default function CustomersPage() {
       ),
     },
     {
+      key: "credit_limit",
       title: "Кредитный лимит",
       dataIndex: "credit_limit",
       align: "right",
       render: (v: string | null) => <Money value={v} />,
     },
     {
+      key: "note",
+      title: "Примечание",
+      dataIndex: "note",
+      ellipsis: true,
+      render: (v: string | null) => v ?? "—",
+    },
+    {
+      key: "courier",
+      title: "Курьер (завтра)",
+      width: 180,
+      render: (_, row) => {
+        const names = couriersByCustomer.get(row.customer_id);
+        if (!names?.length) return <span style={{ color: "#999" }}>—</span>;
+        return names.map((n) => (
+          <Tag key={n} color="blue">
+            {n}
+          </Tag>
+        ));
+      },
+    },
+    {
+      key: "is_active",
       title: "Статус",
       dataIndex: "is_active",
       width: 110,
       render: (v: boolean) => (v ? <Tag color="green">Активен</Tag> : <Tag>Неактивен</Tag>),
-    },
-    {
-      title: "",
-      width: 300,
-      render: (_, row) => (
-        <Space>
-          <Link to={`/customers/${row.customer_id}`}>Карточка</Link>
-          {canManage && (
-            <>
-              <a onClick={() => openEdit(row)}>Изменить</a>
-              <Popconfirm
-                title="Перевести в другую категорию?"
-                description={
-                  <span style={{ display: "block", maxWidth: 320 }}>
-                    {BILLING_MODE[OTHER_MODE[row.billing_mode]].hint}
-                    <br />
-                    Прайс-лист клиента не меняется.
-                  </span>
-                }
-                okText="Перевести"
-                cancelText="Отмена"
-                onConfirm={() =>
-                  moveMode.mutate({
-                    id: row.customer_id,
-                    mode: OTHER_MODE[row.billing_mode],
-                  })
-                }
-              >
-                <a>→ {BILLING_MODE[OTHER_MODE[row.billing_mode]].label.toLowerCase()}</a>
-              </Popconfirm>
-              {row.is_active && (
-                <Popconfirm
-                  title="Деактивировать клиента?"
-                  okText="Да"
-                  cancelText="Нет"
-                  onConfirm={() => remove.mutate(row.customer_id)}
-                >
-                  <a>Деактивировать</a>
-                </Popconfirm>
-              )}
-            </>
-          )}
-        </Space>
-      ),
     },
   ];
 
@@ -309,12 +365,38 @@ export default function CustomersPage() {
               })),
             ]}
           />
+          <Select
+            allowClear
+            showSearch
+            optionFilterProp="label"
+            placeholder="Все категории"
+            style={{ width: 200 }}
+            loading={categories.isPending}
+            value={categoryFilter}
+            onChange={(v) => {
+              setCategoryFilter(v);
+              reset();
+            }}
+            options={[
+              { value: 0, label: "Без категории" },
+              ...(categories.data ?? []).map((c) => ({
+                value: c.customer_category_id,
+                label: c.is_active ? c.name : `${c.name} (откл.)`,
+              })),
+            ]}
+          />
         </Space>
-        {canManage && (
-          <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-            Добавить
-          </Button>
-        )}
+        <Space>
+          <TableColumnSettings settings={colSettings} />
+          {canManage && (
+            <>
+              <Button onClick={() => setDictOpen(true)}>Категории</Button>
+              <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
+                Добавить
+              </Button>
+            </>
+          )}
+        </Space>
       </Space>
       {selected.length > 0 && (
         <Alert
@@ -334,6 +416,15 @@ export default function CustomersPage() {
               >
                 Отнести к юр. лицу
               </Button>
+              <Button
+                size="small"
+                onClick={() => {
+                  setAssignCatTarget(undefined);
+                  setAssignCatOpen(true);
+                }}
+              >
+                Отнести к категории
+              </Button>
               <Button size="small" onClick={() => setSelected([])}>
                 Снять
               </Button>
@@ -347,7 +438,15 @@ export default function CustomersPage() {
         loading={query.isPending}
         dataSource={rows}
         pagination={tablePagination(query.data?.total)}
-        columns={columns}
+        columns={columns.map((col) => ({
+          ...col,
+          hidden: !colSettings.isVisible(String(col.key)),
+        }))}
+        scroll={{ x: 1400 }}
+        rowClassName={() => "row-clickable"}
+        onRow={(row) => ({
+          onClick: () => navigate(`/customers/${row.customer_id}`),
+        })}
         rowSelection={
           canManage
             ? {
@@ -370,7 +469,16 @@ export default function CustomersPage() {
         confirmLoading={save.isPending}
         destroyOnClose
       >
-        <Form form={form} layout="vertical" onFinish={(v) => save.mutate(v)}>
+        <Form
+          form={form}
+          layout="vertical"
+          onFinish={(v) =>
+            save.mutate({
+              ...v,
+              customer_category_id: v.customer_category_id ?? null,
+            })
+          }
+        >
           <Form.Item
             name="name"
             label="Название"
@@ -435,6 +543,29 @@ export default function CustomersPage() {
             <Select options={BILLING_MODE_OPTIONS} />
           </Form.Item>
           <Form.Item
+            name="customer_category_id"
+            label="Категория"
+            tooltip="Тип клиента из словаря: комп клуб, кофейня, школа. Пусто — без категории."
+          >
+            <Select
+              allowClear
+              showSearch
+              optionFilterProp="label"
+              placeholder="Без категории"
+              loading={categories.isPending}
+              options={(categories.data ?? [])
+                .filter(
+                  (c) =>
+                    c.is_active ||
+                    c.customer_category_id === editing?.customer_category_id,
+                )
+                .map((c) => ({
+                  value: c.customer_category_id,
+                  label: c.is_active ? c.name : `${c.name} (откл.)`,
+                }))}
+            />
+          </Form.Item>
+          <Form.Item
             name="company_entity_id"
             label="Наше юр. лицо"
             tooltip="От его имени работают с этим клиентом, и в его дебиторку попадёт долг. Пусто — клиент ни к кому не отнесён."
@@ -491,6 +622,39 @@ export default function CustomersPage() {
           />
         </Space>
       </Modal>
+
+      <Modal
+        title={`Отнести к категории: ${selected.length} клиентов`}
+        open={assignCatOpen}
+        onCancel={() => setAssignCatOpen(false)}
+        onOk={() => assignCategory.mutate()}
+        okText="Отнести"
+        cancelText="Отмена"
+        confirmLoading={assignCategory.isPending}
+        okButtonProps={{ disabled: assignCatTarget === undefined }}
+        destroyOnHidden
+      >
+        <Select
+          style={{ width: "100%" }}
+          placeholder="Выберите категорию"
+          value={assignCatTarget === undefined ? undefined : assignCatTarget}
+          allowClear
+          showSearch
+          optionFilterProp="label"
+          options={[
+            { value: 0, label: "Снять категорию" },
+            ...(categories.data ?? [])
+              .filter((c) => c.is_active)
+              .map((c) => ({
+                value: c.customer_category_id,
+                label: c.name,
+              })),
+          ]}
+          onChange={(v) => setAssignCatTarget(v === 0 || v == null ? null : v)}
+        />
+      </Modal>
+
+      <CustomerCategoriesModal open={dictOpen} onClose={() => setDictOpen(false)} />
     </div>
   );
 }

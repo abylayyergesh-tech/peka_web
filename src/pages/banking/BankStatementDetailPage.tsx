@@ -78,6 +78,7 @@ export default function BankStatementDetailPage() {
     queryClient.invalidateQueries({ queryKey: ["bank-transactions"] });
     queryClient.invalidateQueries({ queryKey: ["bank-statement-summary", statementId] });
     queryClient.invalidateQueries({ queryKey: ["payables"] });
+    queryClient.invalidateQueries({ queryKey: ["supplier-reconciliation"] });
   };
 
   const assign = useMutation({

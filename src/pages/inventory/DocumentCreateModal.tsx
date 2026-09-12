@@ -1,6 +1,7 @@
 /** Create-document modal (opened from /documents). Wraps the shared form. */
 import { App, Form, Modal } from "antd";
 import dayjs from "dayjs";
+import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { errorMessage } from "@/api/client";
@@ -16,6 +17,9 @@ import {
   useWarehousesLookup,
 } from "@/pages/inventory/shared";
 import { useCompanyEntities } from "@/pages/finance/companyEntities";
+import WriteOffCategoriesModal, {
+  useWriteOffCategories,
+} from "@/pages/inventory/WriteOffCategoriesModal";
 
 interface Props {
   open: boolean;
@@ -27,11 +31,13 @@ export default function DocumentCreateModal({ open, onClose, onCreated }: Props)
   const { message } = App.useApp();
   const queryClient = useQueryClient();
   const [form] = Form.useForm<DocumentFormValues>();
+  const [categoriesOpen, setCategoriesOpen] = useState(false);
 
   const products = useProductsLookup();
   const warehouses = useWarehousesLookup();
   const suppliers = useSuppliersLookup();
   const entities = useCompanyEntities();
+  const writeOffCategories = useWriteOffCategories(true);
 
   const create = useMutation({
     mutationFn: (values: DocumentFormValues) =>
@@ -39,6 +45,7 @@ export default function DocumentCreateModal({ open, onClose, onCreated }: Props)
     onSuccess: (doc) => {
       message.success("Документ создан");
       queryClient.invalidateQueries({ queryKey: ["documents"] });
+      queryClient.invalidateQueries({ queryKey: ["write-offs"] });
       onCreated(doc.document_id);
     },
     onError: (e) => message.error(errorMessage(e)),
@@ -72,8 +79,17 @@ export default function DocumentCreateModal({ open, onClose, onCreated }: Props)
           productOptions={products.options}
           warehouseOptions={warehouses.options}
           supplierOptions={suppliers.options}
+          writeOffCategoryOptions={(writeOffCategories.data ?? []).map((c) => ({
+            value: c.write_off_category_id,
+            label: c.name,
+          }))}
+          onManageWriteOffCategories={() => setCategoriesOpen(true)}
         />
       </Form>
+      <WriteOffCategoriesModal
+        open={categoriesOpen}
+        onClose={() => setCategoriesOpen(false)}
+      />
     </Modal>
   );
 }

@@ -13,6 +13,120 @@
      сливается с ним и «наведение» перестаёт читаться. Текст antd рисует
      почти-чёрным, на этом фоне он остаётся контрастным. */
   --brand-lime-hover: #e2ea75;
+  --brand-cream: #f9f7e1;
+}
+
+/* Заголовки экрана: Display, если он есть в Windows 11, иначе тот же текст.
+   Кернинг отрицательный — иначе 28px Segoe выглядит рыхлым. */
+.page-kicker {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #8c8c8c;
+}
+
+.page-title {
+  margin: 0;
+  font-family: "Segoe UI Variable Display", "Segoe UI Variable Text", "Segoe UI",
+    sans-serif;
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+  color: var(--brand-green);
+}
+
+.page-lead {
+  margin: 8px 0 0;
+  max-width: 46rem;
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.45;
+  color: #8c8c8c;
+}
+
+/* Дашборд: каждая ссылка — плитка. Жёлтое наведение то же, что у строки
+   товара: «загорелось — можно нажать». */
+.dash-group {
+  margin-top: 28px;
+}
+
+.dash-group-title {
+  margin: 0 0 12px;
+  font-family: "Segoe UI Variable Display", "Segoe UI Variable Text", "Segoe UI",
+    sans-serif;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--brand-green);
+}
+
+.dash-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.dash-tile {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 56px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: #fff;
+  border: 1px solid var(--brand-green-soft);
+  color: var(--brand-green);
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  text-decoration: none;
+  transition: background 0.12s ease, transform 0.12s ease;
+}
+
+.dash-tile:hover,
+.dash-tile:focus-visible {
+  background: var(--brand-lime-hover);
+  color: var(--brand-green);
+  text-decoration: none;
+}
+
+.dash-tile-go {
+  flex: none;
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 1;
+  opacity: 0.45;
+}
+
+.dash-tile:hover .dash-tile-go,
+.dash-tile:focus-visible .dash-tile-go {
+  opacity: 1;
+}
+
+.row-card-title {
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+}
+
+.row-card-meta {
+  color: #8c8c8c;
+  font-size: 12px;
+  letter-spacing: 0.01em;
+}
+
+.row-card-open {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--brand-green);
+  white-space: nowrap;
 }
 
 /* Насыщенность текста. Размер задаётся токеном `fontSize` в theme.ts, а веса
@@ -64,8 +178,30 @@ body {
    подсветка просто не показывалась. Дубль класса добавляет вес без `!important`
    (тот же приём, что в правиле меню выше), а второй селектор перебивает и родной
    механизм antd — какой бы из них ни сработал. */
-.ant-table-tbody > tr.row-clickable {
+.ant-table-tbody > tr.row-clickable,
+.ant-table-tbody > tr.row-product {
   cursor: pointer;
+}
+
+.ant-table-tbody > tr.row-clickable > td,
+.ant-table-tbody > tr.row-product > td {
+  padding-top: 14px;
+  padding-bottom: 14px;
+  border-top: none;
+  border-bottom: 8px solid var(--brand-cream);
+  transition: background 0.12s ease;
+}
+
+.ant-table-tbody > tr.row-clickable > td:first-child,
+.ant-table-tbody > tr.row-product > td:first-child {
+  border-top-left-radius: 12px;
+  border-bottom-left-radius: 12px;
+}
+
+.ant-table-tbody > tr.row-clickable > td:last-child,
+.ant-table-tbody > tr.row-product > td:last-child {
+  border-top-right-radius: 12px;
+  border-bottom-right-radius: 12px;
 }
 
 .ant-table-tbody > tr.row-clickable.row-clickable:hover > td,
@@ -80,11 +216,155 @@ body {
    там и там под курсором товар, и разный цвет читался бы как разный смысл.
 
    Про два селектора и дубль класса — см. `.row-clickable` выше. */
-.ant-table-tbody > tr.row-product {
-  cursor: pointer;
-}
-
 .ant-table-tbody > tr.row-product.row-product:hover > td,
 .ant-table-tbody > tr.row-product.row-product > td.ant-table-cell-row-hover {
   background: var(--brand-lime-hover);
+}
+
+/* Личное дело: секции — плитки той же формы, что строки списка. */
+.dossier-drawer .ant-drawer-header {
+  align-items: flex-start;
+  border-bottom: none;
+  padding-bottom: 8px;
+}
+
+.dossier-drawer .ant-drawer-body {
+  padding-top: 4px;
+  background: var(--brand-cream);
+}
+
+.dossier-name {
+  margin: 0;
+  font-family: "Segoe UI Variable Display", "Segoe UI Variable Text", "Segoe UI",
+    sans-serif;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.2;
+  color: var(--brand-green);
+}
+
+.dossier-crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 2px;
+  margin-bottom: 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.dossier-crumb {
+  border: none;
+  padding: 0;
+  background: none;
+  color: var(--brand-green);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.dossier-crumb-now {
+  color: #8c8c8c;
+}
+
+.dossier-block {
+  background: #fff;
+  border: 1px solid var(--brand-green-soft);
+  border-radius: 14px;
+  padding: 16px 18px;
+}
+
+.dossier-block-title {
+  margin: 0 0 12px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #8c8c8c;
+}
+
+.dossier-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 8px;
+}
+
+.dossier-stat {
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--brand-green-soft);
+}
+
+.dossier-stat-label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #8c8c8c;
+}
+
+.dossier-stat-value {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+
+.dossier-note {
+  margin-top: 10px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: #8c8c8c;
+}
+
+.dossier-stock {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--brand-green-soft);
+}
+
+.dossier-stock:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.dossier-stock:first-child {
+  padding-top: 0;
+}
+
+.nutri-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.nutri-cell {
+  padding: 12px 8px;
+  border-radius: 12px;
+  background: var(--brand-green-soft);
+  text-align: center;
+}
+
+.nutri-cell strong {
+  display: block;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--brand-green);
+}
+
+.nutri-cell span {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #8c8c8c;
 }

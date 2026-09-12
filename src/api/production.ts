@@ -20,6 +20,9 @@ export interface ProductionPlanRow {
   /** Decimal приезжает строкой. null — «не заполняли»; «0» — «ничего не вышло». */
   planned_quantity: string | null;
   actual_quantity: string | null;
+  /** Уже проведено на склад готовой продукции. */
+  posted_quantity: string;
+  last_document_id: number | null;
   note: string | null;
   updated_at: string | null;
 }
@@ -62,4 +65,26 @@ export async function saveProductionPlan(
 
 export async function deleteProductionPlanRow(id: number): Promise<void> {
   await api.delete(`/production-plan/${id}`);
+}
+
+export interface ProductionReleaseLine {
+  product_id: number;
+  product_name: string;
+  quantity: string;
+}
+
+export interface ProductionReleaseOut {
+  document_id: number;
+  document_number: number | null;
+  lines: ProductionReleaseLine[];
+  rows: ProductionPlanRow[];
+}
+
+export async function postProductionPlan(body: {
+  plan_date: string;
+  warehouse_id: number;
+  target_warehouse_id: number;
+}): Promise<ProductionReleaseOut> {
+  const { data } = await api.post<ProductionReleaseOut>("/production-plan/post", body);
+  return data;
 }

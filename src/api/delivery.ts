@@ -1,5 +1,6 @@
 /** Развозка: рейсы курьеров и их точки. DTO повторяют app/delivery/schemas.py.
  *
+ *  Маршрут собирают из адресов завтрашних заказов, курьера привязывают потом.
  *  Склада и денег здесь нет: отметка «доставлено» — факт логистики, выдачу
  *  проводит касса. */
 import { api } from "@/api/client";
@@ -24,9 +25,13 @@ export interface DeliveryCandidate {
   number: number | null;
   status: string;
   customer_id: number | null;
+  customer_address_id: number | null;
   customer_name: string | null;
   customer_phone: string | null;
   delivery_address: string | null;
+  entrance_comment: string | null;
+  point_key: string;
+  is_extra: boolean;
   requested_for: string | null;
   total: string;
   items: DeliveryOrderLine[];
@@ -40,9 +45,14 @@ export interface DeliveryStopOut {
   delivered_at: string | null;
   note: string | null;
   order_number: number | null;
+  customer_id: number | null;
+  customer_address_id: number | null;
   customer_name: string | null;
   customer_phone: string | null;
   delivery_address: string | null;
+  entrance_comment: string | null;
+  point_key: string;
+  is_extra: boolean;
   requested_for: string | null;
   total: string;
   items: DeliveryOrderLine[];
@@ -51,8 +61,6 @@ export interface DeliveryStopOut {
 export interface DeliveryRouteOut {
   delivery_route_id: number;
   route_date: string;
-  /** null — маршрут собран, но курьер ещё не привязан (см. кабинет сотрудника:
-   *  цепочку адресов там собирают отдельно от того, кто её повезёт). */
   courier_employee_id: number | null;
   courier_name: string | null;
   name: string | null;
@@ -64,6 +72,40 @@ export interface DeliveryRouteOut {
   stops_delivered: number;
   stops_failed: number;
   stops: DeliveryStopOut[];
+}
+
+export interface DeliveryAssignmentOut {
+  customer_id: number | null;
+  customer_address_id: number | null;
+  customer_name: string | null;
+  delivery_address: string | null;
+  point_key: string;
+  delivery_route_id: number;
+  route_name: string | null;
+  courier_employee_id: number | null;
+  courier_name: string | null;
+}
+
+export interface DeliveryLogRow {
+  delivery_stop_id: number;
+  delivery_route_id: number;
+  route_date: string;
+  route_name: string | null;
+  courier_employee_id: number | null;
+  courier_name: string | null;
+  marked_by_name: string | null;
+  delivered_at: string | null;
+  status: StopStatus;
+  note: string | null;
+  customer_id: number | null;
+  customer_address_id: number | null;
+  customer_name: string | null;
+  delivery_address: string | null;
+  entrance_comment: string | null;
+  order_id: number;
+  order_number: number | null;
+  is_extra: boolean;
+  items: DeliveryOrderLine[];
 }
 
 export async function listCouriers(): Promise<CourierOut[]> {
@@ -78,10 +120,30 @@ export async function listCandidates(date: string): Promise<DeliveryCandidate[]>
   return data;
 }
 
+export async function listAssignments(date: string): Promise<DeliveryAssignmentOut[]> {
+  const { data } = await api.get<DeliveryAssignmentOut[]>("/delivery/assignments", {
+    params: { date },
+  });
+  return data;
+}
+
+export async function listDeliveryLogs(params: {
+  date_from: string;
+  date_to: string;
+  courier?: number;
+  customer_id?: number;
+  status?: StopStatus;
+  q?: string;
+}): Promise<DeliveryLogRow[]> {
+  const { data } = await api.get<DeliveryLogRow[]>("/delivery/logs", { params });
+  return data;
+}
+
 export async function listRoutes(params: {
   date?: string;
   courier?: number;
   status?: RouteStatus;
+  assigned?: boolean;
 }): Promise<DeliveryRouteOut[]> {
   const { data } = await api.get<DeliveryRouteOut[]>("/delivery/routes", { params });
   return data;
@@ -89,7 +151,7 @@ export async function listRoutes(params: {
 
 export async function createRoute(body: {
   route_date: string;
-  courier_employee_id: number;
+  courier_employee_id?: number | null;
   name?: string | null;
   note?: string | null;
   order_ids?: number[];
@@ -102,7 +164,6 @@ export async function updateRoute(
   id: number,
   body: {
     name?: string | null;
-    courier_employee_id?: number;
     status?: RouteStatus;
     note?: string | null;
   },
@@ -111,8 +172,6 @@ export async function updateRoute(
   return data;
 }
 
-/** Состав рейса и порядок объезда — одним списком: добавить, убрать и
- *  переставить на экране это одно движение. */
 export async function setRouteStops(
   id: number,
   orderIds: number[],
@@ -125,6 +184,16 @@ export async function setRouteStops(
 
 export async function deleteRoute(id: number): Promise<void> {
   await api.delete(`/delivery/routes/${id}`);
+}
+
+export async function assignCourier(
+  id: number,
+  courierEmployeeId: number | null,
+): Promise<DeliveryRouteOut> {
+  const { data } = await api.post<DeliveryRouteOut>(`/delivery/routes/${id}/assign`, {
+    courier_employee_id: courierEmployeeId,
+  });
+  return data;
 }
 
 export async function markStop(

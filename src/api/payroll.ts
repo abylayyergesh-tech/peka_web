@@ -130,6 +130,15 @@ export async function upsertCompensation(
   return data;
 }
 
+export async function listCompensationHistory(
+  employeeId: number,
+): Promise<CompensationOut[]> {
+  const { data } = await api.get<CompensationOut[]>(
+    `/payroll/compensations/${employeeId}/history`,
+  );
+  return data;
+}
+
 // ==== табель ====
 export interface TimesheetOut {
   timesheet_id: number;
@@ -621,7 +630,9 @@ export interface StaffMealOut {
   check_number: number | null;
   meal_date: string;
   kind: "breakfast" | "lunch" | "dinner" | "other";
-  /** Сумма по ценам меню — её удерживает зарплатная ведомость. */
+  /** credit — удержать из зарплаты. paid — уже оплачено на кассе. */
+  settlement: "credit" | "paid";
+  /** Сумма по ценам меню. При credit её удерживает ведомость. */
   amount: string;
   cost: string;
   note: string | null;
@@ -638,6 +649,7 @@ export interface StaffMealsSummaryRow {
   employee_name: string;
   meals: number;
   amount: string;
+  paid_amount: string;
   cost: string;
 }
 
@@ -647,6 +659,7 @@ export interface StaffMealsSummary {
   rows: StaffMealsSummaryRow[];
   meals: number;
   amount: string;
+  paid_amount: string;
   cost: string;
 }
 

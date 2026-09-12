@@ -33,7 +33,7 @@ import {
   type RequestCreate,
   type RequestType,
 } from "@/api/requests";
-import { listDepartments, listEmployees } from "@/api/staff";
+import { getScheduleSwapPreview, listDepartments, listEmployees } from "@/api/staff";
 import { PAY_TYPE_OPTIONS, periodLabel } from "@/pages/payroll/shared";
 import { REQUEST_TYPE_LABELS } from "@/pages/requests/shared";
 
@@ -54,6 +54,7 @@ interface FormValues {
   is_paid?: boolean;
   last_working_day?: Dayjs;
   effective_date?: Dayjs;
+  counterpart_employee_id?: number;
   term_months?: number;
   monthly_amount?: number;
   timesheet_id?: number;
@@ -85,6 +86,8 @@ export default function SubmitForEmployeeModal({
   const queryClient = useQueryClient();
   const [form] = Form.useForm<FormValues>();
   const selectedType = Form.useWatch("type", form);
+  const giverId = Form.useWatch("employee_id", form);
+  const swapDate = Form.useWatch("effective_date", form);
   const [rows, setRows] = useState<CorrectionRow[]>([]);
 
   const employees = useQuery({
@@ -115,6 +118,20 @@ export default function SubmitForEmployeeModal({
     enabled: open,
   });
 
+  const swapPreview = useQuery({
+    queryKey: [
+      "schedule-swap-preview",
+      giverId,
+      swapDate ? swapDate.format("YYYY-MM-DD") : null,
+    ],
+    queryFn: () =>
+      getScheduleSwapPreview({
+        employee_id: giverId!,
+        work_date: swapDate!.format("YYYY-MM-DD"),
+      }),
+    enabled: open && selectedType === "schedule" && giverId != null && swapDate != null,
+  });
+
   function toBody(v: FormValues): RequestCreate {
     const comment = v.comment?.trim() ? v.comment.trim() : null;
     switch (v.type) {
@@ -143,7 +160,12 @@ export default function SubmitForEmployeeModal({
           comment,
         };
       case "schedule":
-        return { type: "schedule", effective_date: v.effective_date!.format("YYYY-MM-DD"), comment };
+        return {
+          type: "schedule",
+          effective_date: v.effective_date!.format("YYYY-MM-DD"),
+          counterpart_employee_id: v.counterpart_employee_id!,
+          comment,
+        };
       case "loan":
         return {
           type: "loan",
@@ -341,9 +363,45 @@ export default function SubmitForEmployeeModal({
         )}
 
         {selectedType === "schedule" && (
-          <Form.Item name="effective_date" label="Действует с" rules={[{ required: true }]}>
-            <DatePicker format="DD.MM.YYYY" style={{ width: "100%" }} />
-          </Form.Item>
+          <>
+            <Form.Item
+              name="effective_date"
+              label="Дата смены"
+              rules={[{ required: true }]}
+              extra="Отдающий должен быть в графике на работу в этот день"
+            >
+              <DatePicker format="DD.MM.YYYY" style={{ width: "100%" }} />
+            </Form.Item>
+            {swapPreview.data && !swapPreview.data.can_offer && (
+              <Alert
+                type="warning"
+                showIcon
+                style={{ marginBottom: 16 }}
+                message="В графике нет рабочей смены на эту дату"
+                description="Сначала поставьте смену на странице «График», иначе заявление не примут."
+              />
+            )}
+            <Form.Item
+              name="counterpart_employee_id"
+              label="Кто принимает смену"
+              rules={[{ required: true, message: "Выберите коллегу" }]}
+            >
+              <Select
+                showSearch
+                optionFilterProp="label"
+                loading={swapPreview.isFetching}
+                placeholder={
+                  swapPreview.data?.can_offer
+                    ? "Свободные в этот день"
+                    : "Сначала укажите дату и отдающего"
+                }
+                options={(swapPreview.data?.candidates ?? []).map((e) => ({
+                  value: e.employee_id,
+                  label: e.department_name ? `${e.full_name} · ${e.department_name}` : e.full_name,
+                }))}
+              />
+            </Form.Item>
+          </>
         )}
 
         {selectedType === "loan" && (

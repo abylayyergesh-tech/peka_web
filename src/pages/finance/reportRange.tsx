@@ -8,12 +8,14 @@ import { useState } from "react";
 
 export type Range = [Dayjs, Dayjs];
 
-export function useReportRange(): {
+export function useReportRange(initial?: Range): {
   range: Range;
   setRange: (r: Range) => void;
   params: { from: string; to: string };
 } {
-  const [range, setRange] = useState<Range>([dayjs().startOf("month"), dayjs()]);
+  const [range, setRange] = useState<Range>(
+    initial ?? [dayjs().startOf("month"), dayjs()],
+  );
   return {
     range,
     setRange,

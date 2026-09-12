@@ -14,9 +14,9 @@ import {
   App,
   Button,
   Col,
+  Descriptions,
   Form,
   Input,
-  Modal,
   Popconfirm,
   Row,
   Space,
@@ -39,6 +39,7 @@ import {
   type CompanyEntityOut,
 } from "@/api/companies";
 import { useCan } from "@/auth/store";
+import EntityCardDrawer from "@/components/EntityCardDrawer";
 import {
   COMPANY_ENTITIES_KEY,
   useCompanyEntities,
@@ -61,8 +62,9 @@ export default function CompanyEntitiesPage() {
   const canManage = useCan("finance.manage");
   const [showClosed, setShowClosed] = useState(false);
   const entities = useCompanyEntities(showClosed);
-  const [editing, setEditing] = useState<CompanyEntityOut | null>(null);
-  const [modalOpen, setModalOpen] = useState(false);
+  const [card, setCard] = useState<CompanyEntityOut | null>(null);
+  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
   const [form] = Form.useForm<EntityForm>();
 
   function invalidate() {
@@ -82,13 +84,14 @@ export default function CompanyEntitiesPage() {
         bank_account: values.bank_account?.trim() || null,
         is_default: values.is_default ?? false,
       };
-      return editing
-        ? updateCompanyEntity(editing.company_entity_id, body)
+      return card
+        ? updateCompanyEntity(card.company_entity_id, body)
         : createCompanyEntity(body);
     },
     onSuccess: (entity) => {
-      message.success(editing ? `«${entity.name}» сохранено` : "Компания заведена");
-      setModalOpen(false);
+      message.success(card ? `«${entity.name}» сохранено` : "Компания заведена");
+      setCard(entity);
+      setEditing(false);
       invalidate();
     },
     onError: (e) => message.error(errorMessage(e)),
@@ -116,18 +119,42 @@ export default function CompanyEntitiesPage() {
 
   /** Значения формы задаются `initialValues`: окно с `destroyOnHidden` создаёт
    *  форму заново на каждое открытие, и до него формы ещё нет. */
-  const initialValues: EntityForm = editing
-    ? {
-        name: editing.name,
-        tax_id: editing.tax_id,
-        address: editing.address ?? undefined,
-        bank_name: editing.bank_name ?? undefined,
-        bank_bic: editing.bank_bic ?? undefined,
-        kbe: editing.kbe ?? undefined,
-        bank_account: editing.bank_account ?? undefined,
-        is_default: editing.is_default,
-      }
-    : { name: "", tax_id: "", is_default: false };
+  const fresh =
+    entities.data?.find((r) => r.company_entity_id === card?.company_entity_id) ?? card;
+
+  function fillForm(row: CompanyEntityOut) {
+    form.setFieldsValue({
+      name: row.name,
+      tax_id: row.tax_id,
+      address: row.address ?? undefined,
+      bank_name: row.bank_name ?? undefined,
+      bank_bic: row.bank_bic ?? undefined,
+      kbe: row.kbe ?? undefined,
+      bank_account: row.bank_account ?? undefined,
+      is_default: row.is_default,
+    });
+  }
+
+  function openCard(row: CompanyEntityOut) {
+    setCard(row);
+    fillForm(row);
+    setEditing(false);
+    setOpen(true);
+  }
+
+  function openCreate() {
+    setCard(null);
+    form.resetFields();
+    form.setFieldsValue({ name: "", tax_id: "", is_default: false });
+    setEditing(true);
+    setOpen(true);
+  }
+
+  function closeCard() {
+    setOpen(false);
+    setEditing(false);
+    setCard(null);
+  }
 
   const columns: ColumnsType<CompanyEntityOut> = [
     {
@@ -176,37 +203,6 @@ export default function CompanyEntitiesPage() {
         ),
     },
     { title: "Адрес", dataIndex: "address", render: (v) => v || "—" },
-    {
-      title: "",
-      width: 220,
-      render: (_, row) =>
-        canManage && (
-          <Space size="middle">
-            <a
-              onClick={() => {
-                setEditing(row);
-                setModalOpen(true);
-              }}
-            >
-              Изменить
-            </a>
-            {row.is_active && !row.is_default && (
-              <a onClick={() => makeDefault.mutate(row)}>По умолчанию</a>
-            )}
-            {row.is_active && (
-              <Popconfirm
-                title="Закрыть компанию?"
-                description="Накладные и журналы за ней остаются; новым документам её больше не подставят."
-                okText="Закрыть"
-                cancelText="Отмена"
-                onConfirm={() => close.mutate(row)}
-              >
-                <a>Закрыть</a>
-              </Popconfirm>
-            )}
-          </Space>
-        ),
-    },
   ];
 
   return (
@@ -221,14 +217,7 @@ export default function CompanyEntitiesPage() {
             <span>Показывать закрытые</span>
           </Space>
           {canManage && (
-            <Button
-              type="primary"
-              icon={<PlusOutlined />}
-              onClick={() => {
-                setEditing(null);
-                setModalOpen(true);
-              }}
-            >
+            <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
               Добавить
             </Button>
           )}
@@ -268,25 +257,80 @@ export default function CompanyEntitiesPage() {
         dataSource={entities.data}
         columns={columns}
         pagination={false}
-        scroll={{ x: 1300 }}
+        scroll={{ x: 1100 }}
         locale={{ emptyText: "Компаний пока нет" }}
+        rowClassName={() => "row-clickable"}
+        onRow={(row) => ({ onClick: () => openCard(row) })}
       />
 
-      <Modal
-        title={editing ? `Реквизиты «${editing.name}»` : "Новая компания"}
-        open={modalOpen}
-        onCancel={() => setModalOpen(false)}
-        onOk={() => form.submit()}
-        okText="Сохранить"
-        cancelText="Отмена"
-        confirmLoading={save.isPending}
-        destroyOnHidden
+      <EntityCardDrawer
+        open={open}
+        onClose={closeCard}
+        title={fresh?.name ?? "Новая компания"}
         width={560}
-      >
+        canEdit={canManage && fresh != null}
+        editing={editing}
+        onStartEdit={() => {
+          if (fresh) fillForm(fresh);
+          setEditing(true);
+        }}
+        onCancelEdit={() => {
+          if (fresh) {
+            fillForm(fresh);
+            setEditing(false);
+          } else {
+            closeCard();
+          }
+        }}
+        onSave={() => form.submit()}
+        savePending={save.isPending}
+        extra={
+          fresh && canManage ? (
+            <Space>
+              {fresh.is_active && !fresh.is_default && (
+                <Button onClick={() => makeDefault.mutate(fresh)}>По умолчанию</Button>
+              )}
+              {fresh.is_active && (
+                <Popconfirm
+                  title="Закрыть компанию?"
+                  description="Накладные и журналы за ней остаются; новым документам её больше не подставят."
+                  okText="Закрыть"
+                  cancelText="Отмена"
+                  onConfirm={() => close.mutate(fresh)}
+                >
+                  <Button danger>Закрыть</Button>
+                </Popconfirm>
+              )}
+            </Space>
+          ) : undefined
+        }
+        view={
+          fresh ? (
+            <Descriptions column={1} bordered size="small">
+              <Descriptions.Item label="Компания">{fresh.name}</Descriptions.Item>
+              <Descriptions.Item label="БИН / ИИН">{fresh.tax_id}</Descriptions.Item>
+              <Descriptions.Item label="Адрес">{fresh.address || "—"}</Descriptions.Item>
+              <Descriptions.Item label="Банк">{fresh.bank_name || "—"}</Descriptions.Item>
+              <Descriptions.Item label="БИК">{fresh.bank_bic || "—"}</Descriptions.Item>
+              <Descriptions.Item label="КБе">{fresh.kbe || "—"}</Descriptions.Item>
+              <Descriptions.Item label="Счёт">{fresh.bank_account || "—"}</Descriptions.Item>
+              <Descriptions.Item label="По умолчанию">
+                {fresh.is_default ? "да" : "нет"}
+              </Descriptions.Item>
+              <Descriptions.Item label="Статус">
+                {fresh.is_active ? (
+                  <Tag color="green">активна</Tag>
+                ) : (
+                  <Tag>закрыта</Tag>
+                )}
+              </Descriptions.Item>
+            </Descriptions>
+          ) : null
+        }
+        form={
         <Form
           form={form}
           layout="vertical"
-          initialValues={initialValues}
           onFinish={(v) => save.mutate(v)}
         >
           <Form.Item
@@ -348,7 +392,8 @@ export default function CompanyEntitiesPage() {
             <Switch />
           </Form.Item>
         </Form>
-      </Modal>
+        }
+      />
     </div>
   );
 }

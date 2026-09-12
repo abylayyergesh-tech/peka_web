@@ -2,7 +2,7 @@
 import type { Dimension, ItemType, ProductKind } from "@/api/catalog";
 
 export const PRODUCT_KIND_LABELS: Record<ProductKind, string> = {
-  ingredient: "Ингредиент",
+  ingredient: "Сырьё",
   semi_finished: "Полуфабрикат",
   dish: "Блюдо",
 };

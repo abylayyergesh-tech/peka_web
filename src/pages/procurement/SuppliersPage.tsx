@@ -1,15 +1,14 @@
 /** /suppliers — supplier list with CRUD modal (cap supplier.manage). */
 import { PlusOutlined } from "@ant-design/icons";
-import { App, Button, Form, Input, Modal, Popconfirm, Select, Space, Table, Tag } from "antd";
+import { App, Button, Form, Input, Modal, Select, Space, Table, Tag } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 
 import { errorMessage } from "@/api/client";
 import {
   createSupplier,
-  deleteSupplier,
   listSuppliers,
   updateSupplier,
   type SupplierCreate,
@@ -29,6 +28,7 @@ interface SupplierFormValues {
 
 export default function SuppliersPage() {
   const { message } = App.useApp();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const canManage = useCan("supplier.manage");
   const { limit, offset, tablePagination, reset } = usePagination();
@@ -69,30 +69,9 @@ export default function SuppliersPage() {
     onError: (e) => message.error(errorMessage(e)),
   });
 
-  const remove = useMutation({
-    mutationFn: (id: number) => deleteSupplier(id),
-    onSuccess: () => {
-      message.success("Поставщик деактивирован");
-      invalidate();
-    },
-    onError: (e) => message.error(errorMessage(e)),
-  });
-
   function openCreate() {
     setEditing(null);
     form.resetFields();
-    setModalOpen(true);
-  }
-
-  function openEdit(row: SupplierOut) {
-    setEditing(row);
-    form.setFieldsValue({
-      name: row.name,
-      tax_id: row.tax_id ?? undefined,
-      phone: row.phone ?? undefined,
-      email: row.email ?? undefined,
-      note: row.note ?? undefined,
-    });
     setModalOpen(true);
   }
 
@@ -100,7 +79,6 @@ export default function SuppliersPage() {
     {
       title: "Название",
       dataIndex: "name",
-      render: (_, row) => <Link to={`/suppliers/${row.supplier_id}`}>{row.name}</Link>,
     },
     { title: "ИНН/БИН", dataIndex: "tax_id", render: (v) => v ?? "—" },
     { title: "Телефон", dataIndex: "phone", render: (v) => v ?? "—" },
@@ -111,26 +89,6 @@ export default function SuppliersPage() {
       width: 110,
       render: (v: boolean) =>
         v ? <Tag color="green">Активен</Tag> : <Tag color="red">Неактивен</Tag>,
-    },
-    {
-      title: "",
-      width: 170,
-      render: (_, row) =>
-        canManage && (
-          <Space>
-            <a onClick={() => openEdit(row)}>Изменить</a>
-            {row.is_active && (
-              <Popconfirm
-                title="Деактивировать поставщика?"
-                okText="Да"
-                cancelText="Отмена"
-                onConfirm={() => remove.mutate(row.supplier_id)}
-              >
-                <a style={{ color: "#cf1322" }}>Удалить</a>
-              </Popconfirm>
-            )}
-          </Space>
-        ),
     },
   ];
 
@@ -167,6 +125,10 @@ export default function SuppliersPage() {
         dataSource={query.data?.items}
         pagination={tablePagination(query.data?.total)}
         columns={columns}
+        rowClassName={() => "row-clickable"}
+        onRow={(row) => ({
+          onClick: () => navigate(`/suppliers/${row.supplier_id}`),
+        })}
       />
       <Modal
         title={editing ? "Изменить поставщика" : "Новый поставщик"}

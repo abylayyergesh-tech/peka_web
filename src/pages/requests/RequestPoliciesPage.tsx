@@ -48,12 +48,6 @@ export default function RequestPoliciesPage() {
       render: (t: RequestPolicyOut["type"]) => REQUEST_TYPE_LABELS[t] ?? t,
     },
     { title: "Требуется одобрений", dataIndex: "required_approvals", width: 200 },
-    {
-      title: "",
-      key: "actions",
-      width: 100,
-      render: (_, row) => canManage && <a onClick={() => openEdit(row)}>Изменить</a>,
-    },
   ];
 
   return (
@@ -71,6 +65,8 @@ export default function RequestPoliciesPage() {
         dataSource={query.data}
         pagination={false}
         columns={columns}
+        rowClassName={() => (canManage ? "row-clickable" : "")}
+        onRow={(row) => ({ onClick: () => canManage && openEdit(row) })}
       />
       <Modal
         title={

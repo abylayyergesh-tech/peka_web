@@ -1,5 +1,16 @@
 import { PlusOutlined } from "@ant-design/icons";
-import { App, Button, Form, Input, Modal, Popconfirm, Space, Switch, Table, Tag } from "antd";
+import {
+  App,
+  Button,
+  Descriptions,
+  Form,
+  Input,
+  Popconfirm,
+  Space,
+  Switch,
+  Table,
+  Tag,
+} from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -13,6 +24,7 @@ import {
   type ExpenseCategoryOut,
 } from "@/api/finance";
 import { useCan } from "@/auth/store";
+import EntityCardDrawer from "@/components/EntityCardDrawer";
 
 interface CategoryForm {
   name: string;
@@ -23,8 +35,9 @@ export default function ExpenseCategoriesPage() {
   const { message } = App.useApp();
   const queryClient = useQueryClient();
   const canManage = useCan("finance.manage");
-  const [editing, setEditing] = useState<ExpenseCategoryOut | null>(null);
-  const [modalOpen, setModalOpen] = useState(false);
+  const [card, setCard] = useState<ExpenseCategoryOut | null>(null);
+  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
   const [form] = Form.useForm<CategoryForm>();
 
   const query = useQuery({
@@ -32,15 +45,22 @@ export default function ExpenseCategoriesPage() {
     queryFn: () => listExpenseCategories(),
   });
 
+  const fresh =
+    query.data?.find((r) => r.expense_category_id === card?.expense_category_id) ?? card;
+
   const save = useMutation({
     mutationFn: (values: CategoryForm) =>
-      editing
-        ? updateExpenseCategory(editing.expense_category_id, { name: values.name, is_active: values.is_active })
+      card
+        ? updateExpenseCategory(card.expense_category_id, {
+            name: values.name,
+            is_active: values.is_active,
+          })
         : createExpenseCategory({ name: values.name }),
-    onSuccess: () => {
-      message.success(editing ? "Сохранено" : "Создано");
-      setModalOpen(false);
+    onSuccess: (row) => {
+      message.success(card ? "Сохранено" : "Создано");
       queryClient.invalidateQueries({ queryKey: ["expense-categories"] });
+      setCard(row);
+      setEditing(false);
     },
     onError: (e) => message.error(errorMessage(e)),
   });
@@ -54,16 +74,29 @@ export default function ExpenseCategoriesPage() {
     onError: (e) => message.error(errorMessage(e)),
   });
 
+  function fillForm(row: ExpenseCategoryOut) {
+    form.setFieldsValue({ name: row.name, is_active: row.is_active });
+  }
+
+  function openCard(row: ExpenseCategoryOut) {
+    setCard(row);
+    fillForm(row);
+    setEditing(false);
+    setOpen(true);
+  }
+
   function openCreate() {
-    setEditing(null);
+    setCard(null);
     form.resetFields();
     form.setFieldsValue({ name: "", is_active: true });
-    setModalOpen(true);
+    setEditing(true);
+    setOpen(true);
   }
-  function openEdit(row: ExpenseCategoryOut) {
-    setEditing(row);
-    form.setFieldsValue({ name: row.name, is_active: row.is_active });
-    setModalOpen(true);
+
+  function closeCard() {
+    setOpen(false);
+    setEditing(false);
+    setCard(null);
   }
 
   const columns: ColumnsType<ExpenseCategoryOut> = [
@@ -74,26 +107,6 @@ export default function ExpenseCategoriesPage() {
       width: 130,
       render: (active: boolean) =>
         active ? <Tag color="green">Активна</Tag> : <Tag>Неактивна</Tag>,
-    },
-    {
-      title: "",
-      width: 200,
-      render: (_, row) =>
-        canManage && (
-          <Space>
-            <a onClick={() => openEdit(row)}>Изменить</a>
-            {row.is_active && (
-              <Popconfirm
-                title="Деактивировать статью?"
-                okText="Да"
-                cancelText="Нет"
-                onConfirm={() => deactivate.mutate(row.expense_category_id)}
-              >
-                <a>Деактивировать</a>
-              </Popconfirm>
-            )}
-          </Space>
-        ),
     },
   ];
 
@@ -114,32 +127,72 @@ export default function ExpenseCategoriesPage() {
         dataSource={query.data}
         pagination={false}
         columns={columns}
+        rowClassName={() => "row-clickable"}
+        onRow={(row) => ({ onClick: () => openCard(row) })}
       />
-      <Modal
-        title={editing ? "Изменить статью" : "Новая статья"}
-        open={modalOpen}
-        onCancel={() => setModalOpen(false)}
-        onOk={() => form.submit()}
-        okText="Сохранить"
-        cancelText="Отмена"
-        confirmLoading={save.isPending}
-        destroyOnClose
-      >
-        <Form form={form} layout="vertical" onFinish={(v) => save.mutate(v)}>
-          <Form.Item
-            name="name"
-            label="Название"
-            rules={[{ required: true, message: "Обязательное поле" }]}
-          >
-            <Input maxLength={256} />
-          </Form.Item>
-          {editing && (
-            <Form.Item name="is_active" label="Активна" valuePropName="checked">
-              <Switch />
+      <EntityCardDrawer
+        open={open}
+        onClose={closeCard}
+        title={fresh?.name ?? "Новая статья"}
+        canEdit={canManage && fresh != null}
+        editing={editing}
+        onStartEdit={() => {
+          if (fresh) fillForm(fresh);
+          setEditing(true);
+        }}
+        onCancelEdit={() => {
+          if (fresh) {
+            fillForm(fresh);
+            setEditing(false);
+          } else {
+            closeCard();
+          }
+        }}
+        onSave={() => form.submit()}
+        savePending={save.isPending}
+        extra={
+          fresh?.is_active && canManage ? (
+            <Popconfirm
+              title="Деактивировать статью?"
+              okText="Да"
+              cancelText="Нет"
+              onConfirm={() => deactivate.mutate(fresh.expense_category_id)}
+            >
+              <Button danger>Деактивировать</Button>
+            </Popconfirm>
+          ) : undefined
+        }
+        view={
+          fresh ? (
+            <Descriptions column={1} bordered size="small">
+              <Descriptions.Item label="Название">{fresh.name}</Descriptions.Item>
+              <Descriptions.Item label="Статус">
+                {fresh.is_active ? (
+                  <Tag color="green">Активна</Tag>
+                ) : (
+                  <Tag>Неактивна</Tag>
+                )}
+              </Descriptions.Item>
+            </Descriptions>
+          ) : null
+        }
+        form={
+          <Form form={form} layout="vertical" onFinish={(v) => save.mutate(v)}>
+            <Form.Item
+              name="name"
+              label="Название"
+              rules={[{ required: true, message: "Обязательное поле" }]}
+            >
+              <Input maxLength={256} />
             </Form.Item>
-          )}
-        </Form>
-      </Modal>
+            {card && (
+              <Form.Item name="is_active" label="Активна" valuePropName="checked">
+                <Switch />
+              </Form.Item>
+            )}
+          </Form>
+        }
+      />
     </div>
   );
 }
