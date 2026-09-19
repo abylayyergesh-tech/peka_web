@@ -1,5 +1,5 @@
 /** /employees/disciplinaries — журнал дисциплинарных взысканий. */
-import { Select, Space, Table, Typography } from "antd";
+import { Descriptions, Select, Space, Table, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -9,6 +9,7 @@ import {
   type DisciplinaryKind,
   type DisciplinaryOut,
 } from "@/api/staff";
+import EntityCardDrawer from "@/components/EntityCardDrawer";
 import { fmtDate } from "@/components/format";
 import { usePagination } from "@/components/usePagination";
 import { DISCIPLINARY_OPTIONS, DisciplinaryKindTag } from "@/pages/staff/shared";
@@ -16,6 +17,7 @@ import { DISCIPLINARY_OPTIONS, DisciplinaryKindTag } from "@/pages/staff/shared"
 export default function DisciplinariesPage() {
   const { limit, offset, tablePagination, reset } = usePagination();
   const [kind, setKind] = useState<DisciplinaryKind | undefined>();
+  const [card, setCard] = useState<DisciplinaryOut | null>(null);
 
   const query = useQuery({
     queryKey: ["disciplinaries-journal", { limit, offset, kind }],
@@ -67,6 +69,31 @@ export default function DisciplinariesPage() {
         dataSource={query.data?.items}
         columns={columns}
         pagination={tablePagination(query.data?.total)}
+        rowClassName={() => "row-clickable"}
+        onRow={(row) => ({ onClick: () => setCard(row) })}
+      />
+      <EntityCardDrawer
+        open={card != null}
+        onClose={() => setCard(null)}
+        title={card?.employee_name || (card ? `№${card.employee_id}` : "Взыскание")}
+        editing={false}
+        view={
+          card ? (
+            <Descriptions column={1} bordered size="small">
+              <Descriptions.Item label="Сотрудник">
+                {card.employee_name || `№${card.employee_id}`}
+              </Descriptions.Item>
+              <Descriptions.Item label="Вид">
+                <DisciplinaryKindTag kind={card.kind} />
+              </Descriptions.Item>
+              <Descriptions.Item label="Дата">{fmtDate(card.issued_on)}</Descriptions.Item>
+              <Descriptions.Item label="Основание">{card.reason || "—"}</Descriptions.Item>
+              <Descriptions.Item label="Кто внёс">
+                {card.issued_by_name || "—"}
+              </Descriptions.Item>
+            </Descriptions>
+          ) : null
+        }
       />
     </div>
   );

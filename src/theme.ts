@@ -32,11 +32,14 @@ export const theme: ThemeConfig = {
     // Крупнее базовых 14: интерфейс смотрят с расстояния, а таблицы плотные.
     // Остальные размеры antd выводит отсюда (SM = 14, LG = 18, заголовки).
     fontSize: 16,
-    // Шапки таблиц, заголовки и <strong> — заметно жирнее (было 600).
+    // Единый жирный: шапки, заголовки, выбранные пункты, strong.
     fontWeightStrong: 700,
+    // Рамка контролов и таблиц — 2px, иначе на кремовом фоне 1px пропадает.
+    lineWidth: 2,
+    colorBorder: BRAND.green,
+    colorBorderSecondary: "#1a5c50",
     // Segoe UI Variable Text первым: в Windows 11 это переменный шрифт, и
-    // промежуточный вес 500 (см. index.css) в нём настоящий. В статичном
-    // Segoe UI браузер округлил бы 500 до обычного, и «жирнее» не случилось бы.
+    // вес 700 в нём настоящий. В статичном Segoe UI браузер мог бы сгладить.
     fontFamily:
       "'Segoe UI Variable Text', 'Segoe UI', -apple-system, BlinkMacSystemFont, " +
       "Roboto, 'Helvetica Neue', Arial, sans-serif",
@@ -59,6 +62,40 @@ export const theme: ThemeConfig = {
     },
     Button: {
       primaryShadow: "none",
+      defaultBorderColor: BRAND.green,
+      defaultColor: BRAND.green,
+      fontWeight: 700,
+    },
+    Input: {
+      hoverBorderColor: BRAND.green,
+      activeBorderColor: BRAND.green,
+    },
+    Select: {
+      hoverBorderColor: BRAND.green,
+      activeBorderColor: BRAND.green,
+    },
+    Card: {
+      lineWidth: 2,
+    },
+    Table: {
+      // Жёлтое наведение как у /products/ingredients — токен, которым antd
+      // красит `.ant-table-cell-row-hover`. Без него штатный hover на креме
+      // не читается. CSS в index.css дублирует это с запасом специфичности.
+      rowHoverBg: "#e2ea75",
+      borderColor: BRAND.green,
+      headerColor: BRAND.green,
+      headerBg: "#ffffff",
+      headerBorderRadius: 12,
+      cellFontSize: 16,
+    },
+    Descriptions: {
+      labelColor: BRAND.green,
+    },
+    Drawer: {
+      lineWidth: 2,
+    },
+    Modal: {
+      lineWidth: 2,
     },
   },
 };

@@ -139,6 +139,38 @@ export async function listCompensationHistory(
   return data;
 }
 
+export interface MyEarningOut {
+  payroll_run_line_id: number;
+  payroll_run_id: number;
+  period_year: number;
+  period_month: number;
+  kind: RunKind;
+  status: RunStatus;
+  pay_type: PayType;
+  rate_amount: string;
+  shifts: string | null;
+  accrued: string;
+  bonus: string;
+  meal_deduction: string;
+  loan_deduction: string;
+  penalty: string;
+  total_to_pay: string | null;
+  to_pay: string | null;
+  paid_fact: string | null;
+  payout_method: PayoutMethod | null;
+}
+
+export async function listEmployeeEarnings(
+  employeeId: number,
+  params: PageParams = {},
+): Promise<Page<MyEarningOut>> {
+  const { data } = await api.get<Page<MyEarningOut>>(
+    `/payroll/employees/${employeeId}/earnings`,
+    { params },
+  );
+  return data;
+}
+
 // ==== табель ====
 export interface TimesheetOut {
   timesheet_id: number;

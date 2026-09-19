@@ -1,19 +1,15 @@
-/** /delivery/couriers — раздача готовых маршрутов. Второй этап диспетчера. */
+/** /delivery/couriers — раздача готовых шаблонов. Второй этап диспетчера. */
 import { CarOutlined, InboxOutlined, NodeIndexOutlined } from "@ant-design/icons";
 import {
   Alert,
   App,
   Card,
-  DatePicker,
   Empty,
   Select,
   Space,
   Tag,
-  Tooltip,
   Typography,
 } from "antd";
-import dayjs, { type Dayjs } from "dayjs";
-import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { errorMessage } from "@/api/client";
@@ -27,7 +23,7 @@ import {
 } from "@/api/delivery";
 
 const ROUTE_STATUS: Record<RouteStatus, { label: string; color: string }> = {
-  planned: { label: "Планируется", color: "default" },
+  planned: { label: "Активен", color: "default" },
   in_progress: { label: "В пути", color: "processing" },
   done: { label: "Завершён", color: "success" },
   cancelled: { label: "Отменён", color: "error" },
@@ -39,7 +35,7 @@ function courierLabel(c: CourierOut): string {
 
 function routeGist(route: DeliveryRouteOut): string {
   const addresses = route.stops
-    .map((s) => s.delivery_address)
+    .map((s) => (s.label ? `${s.label} · ${s.delivery_address ?? ""}` : s.delivery_address))
     .filter((a): a is string => Boolean(a));
   const unique = addresses.filter((a, i) => addresses.indexOf(a) === i);
   if (unique.length === 0) return "точек нет";
@@ -50,17 +46,15 @@ function routeGist(route: DeliveryRouteOut): string {
 export default function AssignCouriersPage() {
   const { message } = App.useApp();
   const queryClient = useQueryClient();
-  const [day, setDay] = useState<Dayjs>(dayjs().add(1, "day"));
 
-  const date = day.format("YYYY-MM-DD");
   const couriers = useQuery({
     queryKey: ["delivery", "couriers"],
     queryFn: listCouriers,
     staleTime: 60_000,
   });
   const routes = useQuery({
-    queryKey: ["delivery", "routes", date],
-    queryFn: () => listRoutes({ date }),
+    queryKey: ["delivery", "routes"],
+    queryFn: () => listRoutes(),
   });
 
   const assign = useMutation({
@@ -78,7 +72,7 @@ export default function AssignCouriersPage() {
     onError: (e) => message.error(errorMessage(e)),
   });
 
-  const all = routes.data ?? [];
+  const all = (routes.data ?? []).filter((r) => r.status !== "cancelled");
   const free = all.filter((r) => r.courier_employee_id == null);
   const taken = all.filter((r) => r.courier_employee_id != null);
 
@@ -102,16 +96,9 @@ export default function AssignCouriersPage() {
     <div>
       <Space wrap style={{ marginBottom: 4 }} align="center">
         <h2 style={{ margin: 0 }}>Курьеры</h2>
-        <DatePicker
-          value={day}
-          onChange={(v) => v && setDay(v)}
-          format="DD.MM.YYYY"
-          allowClear={false}
-        />
-        {day.isSame(dayjs().add(1, "day"), "day") && <Tag color="blue">завтра</Tag>}
       </Space>
       <Typography.Paragraph type="secondary" style={{ fontSize: 13 }}>
-        Кому какой маршрут. Сами маршруты собираются во вкладке «Маршруты».
+        Кому какой маршрут. Сами шаблоны собираются во вкладке «Маршруты».
       </Typography.Paragraph>
 
       {routes.isError && (
@@ -121,7 +108,7 @@ export default function AssignCouriersPage() {
       {!routes.isPending && all.length === 0 && (
         <Empty
           image={Empty.PRESENTED_IMAGE_SIMPLE}
-          description="На этот день маршрутов нет — сначала соберите их во вкладке «Маршруты»"
+          description="Маршрутов нет — сначала соберите их во вкладке «Маршруты»"
         />
       )}
 
@@ -154,7 +141,7 @@ export default function AssignCouriersPage() {
           type="success"
           showIcon
           style={{ marginTop: 16 }}
-          message="Вся развозка расписана"
+          message="Все маршруты разобраны"
         />
       )}
     </div>
@@ -175,8 +162,6 @@ function RouteAssignCard({
   onAssign: (courier: number | null) => void;
 }) {
   const status = ROUTE_STATUS[route.status];
-  const started = route.stops_delivered + route.stops_failed > 0;
-  const done = route.stops_delivered + route.stops_failed;
 
   return (
     <Card size="small">
@@ -187,30 +172,23 @@ function RouteAssignCard({
           <Tag color={status.color}>{status.label}</Tag>
           <Typography.Text type="secondary">
             точек: {route.stops_total}
-            {done > 0 ? ` · отмечено ${done}` : ""}
           </Typography.Text>
         </Space>
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
           {routeGist(route)}
         </Typography.Text>
-        <Tooltip
-          title={
-            started ? "По маршруту уже есть отметки — курьера сменить нельзя" : undefined
-          }
-        >
-          <Select
-            style={{ width: "100%", maxWidth: 420 }}
-            allowClear
-            showSearch
-            optionFilterProp="label"
-            placeholder="Выберите курьера"
-            loading={loading}
-            disabled={started || busy || route.status === "cancelled"}
-            value={route.courier_employee_id ?? undefined}
-            options={options}
-            onChange={(v) => onAssign(v ?? null)}
-          />
-        </Tooltip>
+        <Select
+          style={{ width: "100%", maxWidth: 420 }}
+          allowClear
+          showSearch
+          optionFilterProp="label"
+          placeholder="Выберите курьера"
+          loading={loading}
+          disabled={busy || route.status === "cancelled"}
+          value={route.courier_employee_id ?? undefined}
+          options={options}
+          onChange={(v) => onAssign(v ?? null)}
+        />
       </Space>
     </Card>
   );

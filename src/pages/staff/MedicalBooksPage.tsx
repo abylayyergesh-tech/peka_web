@@ -1,11 +1,12 @@
 /** /employees/medical-books — журнал медкнижек и сроки. */
-import { Select, Space, Table, Tag, Typography } from "antd";
+import { Descriptions, Select, Space, Table, Tag, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { Link } from "react-router-dom";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { listMedicalBooks, type MedicalAlert, type MedicalBookOut } from "@/api/staff";
+import EntityCardDrawer from "@/components/EntityCardDrawer";
 import { fmtDate } from "@/components/format";
 import { usePagination } from "@/components/usePagination";
 import { MedicalAlertTag } from "@/pages/staff/shared";
@@ -19,6 +20,7 @@ const ALERT_OPTIONS = [
 export default function MedicalBooksPage() {
   const { limit, offset, tablePagination, reset } = usePagination();
   const [alert, setAlert] = useState<"all" | "expired" | "expiring">("all");
+  const [card, setCard] = useState<MedicalBookOut | null>(null);
 
   const query = useQuery({
     queryKey: ["medical-books-journal", { limit, offset, alert }],
@@ -88,6 +90,38 @@ export default function MedicalBooksPage() {
         dataSource={query.data?.items}
         columns={columns}
         pagination={tablePagination(query.data?.total)}
+        rowClassName={() => "row-clickable"}
+        onRow={(row) => ({ onClick: () => setCard(row) })}
+      />
+      <EntityCardDrawer
+        open={card != null}
+        onClose={() => setCard(null)}
+        title={card?.title ?? "Медкнижка"}
+        editing={false}
+        extra={
+          card ? (
+            <Link to="/employees">Личное дело</Link>
+          ) : undefined
+        }
+        view={
+          card ? (
+            <Descriptions column={1} bordered size="small">
+              <Descriptions.Item label="Сотрудник">
+                {card.employee_name || `№${card.employee_id}`}
+              </Descriptions.Item>
+              <Descriptions.Item label="Документ">{card.title}</Descriptions.Item>
+              <Descriptions.Item label="Подпись">{fmtDate(card.signed_on)}</Descriptions.Item>
+              <Descriptions.Item label="Действует до">{fmtDate(card.expires_on)}</Descriptions.Item>
+              <Descriptions.Item label="Статус">
+                <Space>
+                  <MedicalAlertTag alert={card.alert} daysLeft={card.days_left} />
+                  {!card.is_active && <Tag>Снята</Tag>}
+                </Space>
+              </Descriptions.Item>
+              <Descriptions.Item label="Комментарий">{card.note || "—"}</Descriptions.Item>
+            </Descriptions>
+          ) : null
+        }
       />
     </div>
   );

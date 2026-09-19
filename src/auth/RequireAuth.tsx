@@ -4,7 +4,7 @@
  *   1. GET /auth/me       -> profile + my organizations (picks/validates active org)
  *   2. GET /me/capabilities -> capability set for the active org (menu gating)
  */
-import { Result, Spin } from "antd";
+import { Button, Result, Spin } from "antd";
 import { useEffect } from "react";
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 
@@ -49,8 +49,10 @@ export default function RequireAuth() {
     return <Navigate to="/login" replace state={{ from: location }} />;
   }
   if (meQuery.isError) {
-    return <Result status="error" title="Не удалось загрузить профиль" subTitle={errorMessage(meQuery.error)} />;
+    return <Result status="error" title="Не удалось загрузить профиль" subTitle={errorMessage(meQuery.error)} extra={<Button onClick={() => void meQuery.refetch()}>Повторить</Button>} />;
   }
+  if (capsQuery.isError) return <Result status="error" title="Не удалось загрузить права"
+    subTitle={errorMessage(capsQuery.error)} extra={<Button onClick={() => void capsQuery.refetch()}>Повторить</Button>} />;
   if (!me || (activeOrgId != null && !useAuthStore.getState().capsLoaded && capsQuery.isPending)) {
     return (
       <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>

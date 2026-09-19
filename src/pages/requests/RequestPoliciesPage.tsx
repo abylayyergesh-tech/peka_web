@@ -1,7 +1,7 @@
 /** /request-policies — пороги согласования M-из-N по типам заявлений
  * (cap request.policy.manage; GET тоже гейтится этим правом на бэкенде).
  * Порог снимается snapshot'ом при подаче — правка не влияет на заявления в полёте. */
-import { App, Form, InputNumber, Modal, Table, Typography } from "antd";
+import { App, Descriptions, Form, InputNumber, Table, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -11,13 +11,16 @@ import {
   listRequestPolicies, updateRequestPolicy, type RequestPolicyOut,
 } from "@/api/requests";
 import { useCan } from "@/auth/store";
+import EntityCardDrawer from "@/components/EntityCardDrawer";
 import { REQUEST_TYPE_LABELS } from "@/pages/requests/shared";
 
 export default function RequestPoliciesPage() {
   const { message } = App.useApp();
   const queryClient = useQueryClient();
   const canManage = useCan("request.policy.manage");
-  const [editing, setEditing] = useState<RequestPolicyOut | null>(null);
+  const [card, setCard] = useState<RequestPolicyOut | null>(null);
+  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
   const [form] = Form.useForm<{ required_approvals: number }>();
 
   const query = useQuery({
@@ -25,27 +28,45 @@ export default function RequestPoliciesPage() {
     queryFn: listRequestPolicies,
   });
 
+  const fresh =
+    query.data?.find((r) => r.request_policy_id === card?.request_policy_id) ?? card;
+
   const save = useMutation({
     mutationFn: (values: { required_approvals: number }) =>
-      updateRequestPolicy(editing!.type, values),
-    onSuccess: () => {
+      updateRequestPolicy(fresh!.type, values),
+    onSuccess: (row) => {
       message.success("Политика обновлена");
-      setEditing(null);
+      setCard(row);
+      setEditing(false);
       queryClient.invalidateQueries({ queryKey: ["request-policies"] });
     },
     onError: (e) => message.error(errorMessage(e)),
   });
 
-  function openEdit(row: RequestPolicyOut) {
+  function fillForm(row: RequestPolicyOut) {
     form.setFieldsValue({ required_approvals: row.required_approvals });
-    setEditing(row);
   }
+
+  function openCard(row: RequestPolicyOut) {
+    setCard(row);
+    fillForm(row);
+    setEditing(false);
+    setOpen(true);
+  }
+
+  function closeCard() {
+    setOpen(false);
+    setEditing(false);
+    setCard(null);
+  }
+
+  const typeLabel = (t: RequestPolicyOut["type"]) => REQUEST_TYPE_LABELS[t] ?? t;
 
   const columns: ColumnsType<RequestPolicyOut> = [
     {
       title: "Тип заявления",
       dataIndex: "type",
-      render: (t: RequestPolicyOut["type"]) => REQUEST_TYPE_LABELS[t] ?? t,
+      render: (t: RequestPolicyOut["type"]) => typeLabel(t),
     },
     { title: "Требуется одобрений", dataIndex: "required_approvals", width: 200 },
   ];
@@ -65,33 +86,53 @@ export default function RequestPoliciesPage() {
         dataSource={query.data}
         pagination={false}
         columns={columns}
-        rowClassName={() => (canManage ? "row-clickable" : "")}
-        onRow={(row) => ({ onClick: () => canManage && openEdit(row) })}
+        rowClassName={() => "row-clickable"}
+        onRow={(row) => ({ onClick: () => openCard(row) })}
       />
-      <Modal
-        title={
-          editing
-            ? `Порог согласования: ${REQUEST_TYPE_LABELS[editing.type] ?? editing.type}`
-            : "Порог согласования"
+      <EntityCardDrawer
+        open={open}
+        onClose={closeCard}
+        title={fresh ? typeLabel(fresh.type) : "Порог согласования"}
+        canEdit={canManage && fresh != null}
+        editing={editing}
+        onStartEdit={() => {
+          if (fresh) fillForm(fresh);
+          setEditing(true);
+        }}
+        onCancelEdit={() => {
+          if (fresh) {
+            fillForm(fresh);
+            setEditing(false);
+          } else {
+            closeCard();
+          }
+        }}
+        onSave={() => form.submit()}
+        savePending={save.isPending}
+        view={
+          fresh ? (
+            <Descriptions column={1} bordered size="small">
+              <Descriptions.Item label="Тип заявления">
+                {typeLabel(fresh.type)}
+              </Descriptions.Item>
+              <Descriptions.Item label="Требуется одобрений">
+                {fresh.required_approvals}
+              </Descriptions.Item>
+            </Descriptions>
+          ) : null
         }
-        open={editing != null}
-        onCancel={() => setEditing(null)}
-        onOk={() => form.submit()}
-        okText="Сохранить"
-        cancelText="Отмена"
-        confirmLoading={save.isPending}
-        destroyOnClose
-      >
-        <Form form={form} layout="vertical" onFinish={(v) => save.mutate(v)}>
-          <Form.Item
-            name="required_approvals"
-            label="Требуется одобрений"
-            rules={[{ required: true, message: "Укажите число одобрений" }]}
-          >
-            <InputNumber min={1} precision={0} style={{ width: "100%" }} />
-          </Form.Item>
-        </Form>
-      </Modal>
+        form={
+          <Form form={form} layout="vertical" onFinish={(v) => save.mutate(v)}>
+            <Form.Item
+              name="required_approvals"
+              label="Требуется одобрений"
+              rules={[{ required: true, message: "Укажите число одобрений" }]}
+            >
+              <InputNumber min={1} precision={0} style={{ width: "100%" }} />
+            </Form.Item>
+          </Form>
+        }
+      />
     </div>
   );
 }

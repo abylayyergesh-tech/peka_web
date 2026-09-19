@@ -6,7 +6,7 @@
  */
 import { PlusOutlined } from "@ant-design/icons";
 import {
-  App, Button, Card, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Switch,
+  App, Button, Card, Descriptions, Form, Input, InputNumber, Popconfirm, Select, Space, Switch,
   Table, Tag, Tooltip,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
@@ -21,6 +21,7 @@ import {
 import { errorMessage } from "@/api/client";
 import { listAllMenuItems } from "@/api/sales";
 import { useCan } from "@/auth/store";
+import EntityCardDrawer from "@/components/EntityCardDrawer";
 import { fmtDate } from "@/components/format";
 import { usePagination } from "@/components/usePagination";
 
@@ -32,7 +33,8 @@ export default function AnnouncementsPage() {
   const [activeFilter, setActiveFilter] = useState<"all" | "active" | "hidden">("all");
   const active = activeFilter === "all" ? undefined : activeFilter === "active";
   const [editing, setEditing] = useState<AnnouncementOut | null>(null);
-  const [modalOpen, setModalOpen] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
   const [form] = Form.useForm();
   const [extraForm] = Form.useForm<ExtraOrderTerms>();
 
@@ -82,9 +84,10 @@ export default function AnnouncementsPage() {
       editing
         ? updateAnnouncement(editing.announcement_id, values)
         : createAnnouncement(values),
-    onSuccess: () => {
+    onSuccess: (row) => {
       message.success(editing ? "Сохранено" : "Объявление опубликовано");
-      setModalOpen(false);
+      setEditing(row);
+      setIsEditing(false);
       invalidate();
     },
     onError: (e) => message.error(errorMessage(e)),
@@ -113,13 +116,25 @@ export default function AnnouncementsPage() {
   function openCreate() {
     setEditing(null);
     form.resetFields();
-    setModalOpen(true);
+    setIsEditing(true);
+    setOpen(true);
   }
 
-  function openEdit(row: AnnouncementOut) {
-    setEditing(row);
+  function fillForm(row: AnnouncementOut) {
     form.setFieldsValue(row);
-    setModalOpen(true);
+  }
+
+  function openCard(row: AnnouncementOut) {
+    setEditing(row);
+    fillForm(row);
+    setIsEditing(false);
+    setOpen(true);
+  }
+
+  function closeCard() {
+    setOpen(false);
+    setIsEditing(false);
+    setEditing(null);
   }
 
   const columns: ColumnsType<AnnouncementOut> = [
@@ -307,20 +322,61 @@ export default function AnnouncementsPage() {
         pagination={tablePagination(query.data?.total)}
         columns={columns}
         rowClassName={() => "row-clickable"}
-        onRow={(row) => ({ onClick: () => canManage && openEdit(row) })}
+        onRow={(row) => ({ onClick: () => openCard(row) })}
       />
 
-      <Modal
-        title={editing ? "Изменить объявление" : "Новое объявление"}
-        open={modalOpen}
-        onCancel={() => setModalOpen(false)}
-        onOk={() => form.submit()}
-        okText="Сохранить"
-        cancelText="Отмена"
-        confirmLoading={save.isPending}
+      <EntityCardDrawer
+        open={open}
+        onClose={closeCard}
+        title={editing?.title ?? "Новое объявление"}
         width={640}
-        destroyOnClose
-      >
+        canEdit={canManage && editing != null}
+        editing={isEditing}
+        onStartEdit={() => {
+          if (editing) fillForm(editing);
+          setIsEditing(true);
+        }}
+        onCancelEdit={() => {
+          if (editing) {
+            fillForm(editing);
+            setIsEditing(false);
+          } else {
+            closeCard();
+          }
+        }}
+        onSave={() => form.submit()}
+        savePending={save.isPending}
+        extra={
+          canManage && editing ? (
+            <Popconfirm
+              title="Удалить объявление?"
+              description="Текст будет потерян. Чтобы просто убрать его из ленты, выключите «Видно клиентам»."
+              okText="Удалить"
+              cancelText="Отмена"
+              okButtonProps={{ danger: true }}
+              onConfirm={() => remove.mutate(editing.announcement_id)}
+            >
+              <Button danger>Удалить</Button>
+            </Popconfirm>
+          ) : undefined
+        }
+        view={
+          editing ? (
+            <Descriptions column={1} bordered size="small">
+              <Descriptions.Item label="Заголовок">{editing.title}</Descriptions.Item>
+              <Descriptions.Item label="Текст">{editing.body || "—"}</Descriptions.Item>
+              <Descriptions.Item label="Позиция меню">
+                {itemName(editing.menu_item_id) ?? "—"}
+              </Descriptions.Item>
+              <Descriptions.Item label="Порядок">{editing.display_order}</Descriptions.Item>
+              <Descriptions.Item label="Видно клиентам">
+                {editing.is_active ? <Tag color="green">Да</Tag> : <Tag>Нет</Tag>}
+              </Descriptions.Item>
+              <Descriptions.Item label="Опубликовано">{fmtDate(editing.created_at)}</Descriptions.Item>
+            </Descriptions>
+          ) : null
+        }
+        form={
         <Form form={form} layout="vertical" onFinish={(v) => save.mutate(v)}>
           <Form.Item
             name="title"
@@ -375,7 +431,8 @@ export default function AnnouncementsPage() {
             </Form.Item>
           </Space>
         </Form>
-      </Modal>
+        }
+      />
     </div>
   );
 }

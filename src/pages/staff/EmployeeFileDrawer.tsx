@@ -1,9 +1,10 @@
-/** Личное дело в ящике: карточка, история должностей и ставок, отпуска,
- * займы, медкнижки, взыскания, файлы. Займы и ставки — те же контуры
- * payroll, не второй справочник. */
-import { DeleteOutlined, PlusOutlined } from "@ant-design/icons";
+/** Личное дело в ящике: фото, карточка, KPI, история должностей и ставок,
+ * заработок, отпуска, займы, медкнижки, взыскания, файлы. Займы, ставки и
+ * ведомости — те же контуры payroll, не второй справочник. KPI вводит HR. */
+import { DeleteOutlined, PlusOutlined, UploadOutlined, UserOutlined } from "@ant-design/icons";
 import {
   App,
+  Avatar,
   Button,
   Checkbox,
   DatePicker,
@@ -11,34 +12,51 @@ import {
   Empty,
   Form,
   Input,
+  InputNumber,
   Popconfirm,
+  Progress,
   Select,
   Space,
   Table,
   Tabs,
   Typography,
+  Upload,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import type { Dayjs } from "dayjs";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { errorMessage } from "@/api/client";
-import { listCompensationHistory, listLoans, type CompensationOut, type LoanOut } from "@/api/payroll";
+import { errorMessage, mediaSrc } from "@/api/client";
+import {
+  listCompensationHistory,
+  listEmployeeEarnings,
+  listLoans,
+  type CompensationOut,
+  type LoanOut,
+  type MyEarningOut,
+} from "@/api/payroll";
 import { listRequests, type RequestOut } from "@/api/requests";
 import {
   createDisciplinary,
+  createEmployeeKpi,
   createEmployeeLeave,
   createMedicalBook,
   deactivateMedicalBook,
   deleteDisciplinary,
+  deleteEmployeeKpi,
   deleteEmployeeLeave,
+  deleteEmployeePhoto,
   listEmployeeDisciplinaries,
+  listEmployeeKpis,
   listEmployeeLeave,
   listEmployeeMedicalBooks,
   listPositionHistory,
+  uploadEmployeePhoto,
   type DisciplinaryCreate,
   type DisciplinaryOut,
+  type EmployeeKpiCreate,
+  type EmployeeKpiOut,
   type EmployeeOut,
   type LeaveKind,
   type LeavePeriodCreate,
@@ -49,7 +67,8 @@ import {
 } from "@/api/staff";
 import AttachmentsPanel from "@/components/AttachmentsPanel";
 import { fmtDate, fmtDateTime } from "@/components/format";
-import { fmtTenge, PAY_TYPE_LABELS } from "@/pages/payroll/shared";
+import { HiddenMoney } from "@/components/HiddenMoney";
+import { MONTH_NAMES, PAY_TYPE_LABELS, RUN_KIND_LABELS, RunStatusTag } from "@/pages/payroll/shared";
 import {
   RequestStatusTags,
   RequestTypeTag,
@@ -69,12 +88,14 @@ export function EmployeeFileBody({
   canSeeRequests,
   canPayrollRead,
   onOpenRequest,
+  onEmployeePatched,
 }: {
   employee: EmployeeOut;
   canManage: boolean;
   canSeeRequests: boolean;
   canPayrollRead: boolean;
   onOpenRequest: (requestId: number) => void;
+  onEmployeePatched?: (row: EmployeeOut) => void;
 }) {
   const id = employee.employee_id;
   const boss =
@@ -90,28 +111,47 @@ export function EmployeeFileBody({
           key: "card",
           label: "Карточка",
           children: (
-            <Descriptions bordered size="small" column={1}>
-              <Descriptions.Item label="Табельный номер">
-                {employee.personnel_no || "—"}
-              </Descriptions.Item>
-              <Descriptions.Item label="Должность">{employee.position || "—"}</Descriptions.Item>
-              <Descriptions.Item label="Отдел">{employee.department_name || "—"}</Descriptions.Item>
-              <Descriptions.Item label="Руководитель">{boss || "—"}</Descriptions.Item>
-              {employee.manager_name && employee.department_head_name &&
-                employee.manager_id !== employee.department_head_id && (
-                  <Descriptions.Item label="Начальник отдела">
-                    {employee.department_head_name}
+            <Space direction="vertical" size={16} style={{ width: "100%" }}>
+              <PhotoBlock
+                employee={employee}
+                canManage={canManage}
+                onPatched={onEmployeePatched}
+              />
+              <Descriptions bordered size="small" column={1}>
+                <Descriptions.Item label="Табельный номер">
+                  {employee.personnel_no || "—"}
+                </Descriptions.Item>
+                <Descriptions.Item label="Должность">{employee.position || "—"}</Descriptions.Item>
+                <Descriptions.Item label="Отдел">{employee.department_name || "—"}</Descriptions.Item>
+                <Descriptions.Item label="Руководитель">{boss || "—"}</Descriptions.Item>
+                {employee.manager_name && employee.department_head_name &&
+                  employee.manager_id !== employee.department_head_id && (
+                    <Descriptions.Item label="Начальник отдела">
+                      {employee.department_head_name}
+                    </Descriptions.Item>
+                  )}
+                <Descriptions.Item label="Email">{employee.user_email || "—"}</Descriptions.Item>
+                <Descriptions.Item label="Телефон">{employee.phone || "—"}</Descriptions.Item>
+                <Descriptions.Item label="Принят">{fmtDate(employee.hire_date)}</Descriptions.Item>
+                {employee.status === "terminated" && (
+                  <Descriptions.Item label="Уволен">
+                    {fmtDate(employee.termination_date)}
                   </Descriptions.Item>
                 )}
-              <Descriptions.Item label="Email">{employee.user_email || "—"}</Descriptions.Item>
-              <Descriptions.Item label="Телефон">{employee.phone || "—"}</Descriptions.Item>
-              <Descriptions.Item label="Принят">{fmtDate(employee.hire_date)}</Descriptions.Item>
-              {employee.status === "terminated" && (
-                <Descriptions.Item label="Уволен">
-                  {fmtDate(employee.termination_date)}
+                <Descriptions.Item label="ИИН">{employee.iin || "—"}</Descriptions.Item>
+                <Descriptions.Item label="Дата рождения">
+                  {fmtDate(employee.birth_date)}
                 </Descriptions.Item>
-              )}
-            </Descriptions>
+                <Descriptions.Item label="Адрес">{employee.address || "—"}</Descriptions.Item>
+                <Descriptions.Item label="Экстренный контакт">
+                  {employee.emergency_contact_name || employee.emergency_contact_phone
+                    ? [employee.emergency_contact_name, employee.emergency_contact_phone]
+                        .filter(Boolean)
+                        .join(" · ")
+                    : "—"}
+                </Descriptions.Item>
+              </Descriptions>
+            </Space>
           ),
         },
         {
@@ -121,12 +161,26 @@ export function EmployeeFileBody({
         },
         {
           key: "rates",
-          label: "Ставки",
+          label: "Смена / оклад",
           children: canPayrollRead ? (
             <RatesTab employeeId={id} />
           ) : (
             <Typography.Text type="secondary">Нет права payroll.read</Typography.Text>
           ),
+        },
+        {
+          key: "earnings",
+          label: "Заработок",
+          children: canPayrollRead ? (
+            <EarningsTab employeeId={id} />
+          ) : (
+            <Typography.Text type="secondary">Нет права payroll.read</Typography.Text>
+          ),
+        },
+        {
+          key: "kpis",
+          label: "KPI",
+          children: <KpiTab employeeId={id} canManage={canManage} />,
         },
         {
           key: "leave",
@@ -180,6 +234,73 @@ export function EmployeeFileBody({
   );
 }
 
+function PhotoBlock({
+  employee,
+  canManage,
+  onPatched,
+}: {
+  employee: EmployeeOut;
+  canManage: boolean;
+  onPatched?: (row: EmployeeOut) => void;
+}) {
+  const { message } = App.useApp();
+  const queryClient = useQueryClient();
+  const src = mediaSrc(employee.photo_url);
+
+  const upload = useMutation({
+    mutationFn: (file: File) => uploadEmployeePhoto(employee.employee_id, file),
+    onSuccess: (row) => {
+      message.success("Фото сохранено");
+      onPatched?.(row);
+      queryClient.invalidateQueries({ queryKey: ["employees"] });
+    },
+    onError: (e) => message.error(errorMessage(e)),
+  });
+  const remove = useMutation({
+    mutationFn: () => deleteEmployeePhoto(employee.employee_id),
+    onSuccess: (row) => {
+      message.success("Фото удалено");
+      onPatched?.(row);
+      queryClient.invalidateQueries({ queryKey: ["employees"] });
+    },
+    onError: (e) => message.error(errorMessage(e)),
+  });
+
+  return (
+    <Space align="start" size={16}>
+      <Avatar size={96} src={src} icon={<UserOutlined />} />
+      {canManage && (
+        <Space direction="vertical" size={8}>
+          <Upload
+            accept="image/jpeg,image/png,image/webp"
+            showUploadList={false}
+            beforeUpload={(file) => {
+              upload.mutate(file);
+              return false;
+            }}
+          >
+            <Button icon={<UploadOutlined />} loading={upload.isPending}>
+              {employee.photo_url ? "Заменить фото" : "Загрузить фото"}
+            </Button>
+          </Upload>
+          {employee.photo_url && (
+            <Popconfirm
+              title="Удалить фото?"
+              okText="Удалить"
+              cancelText="Отмена"
+              onConfirm={() => remove.mutate()}
+            >
+              <Button danger loading={remove.isPending}>
+                Удалить фото
+              </Button>
+            </Popconfirm>
+          )}
+        </Space>
+      )}
+    </Space>
+  );
+}
+
 function PositionHistoryTab({ employeeId }: { employeeId: number }) {
   const query = useQuery({
     queryKey: ["position-history", employeeId],
@@ -224,8 +345,8 @@ function RatesTab({ employeeId }: { employeeId: number }) {
       width: 90,
       render: (v: CompensationOut["pay_type"]) => PAY_TYPE_LABELS[v] ?? v,
     },
-    { title: "Ставка", dataIndex: "rate_amount", render: (v) => fmtTenge(v) },
-    { title: "Офиц.", dataIndex: "official_amount", render: (v) => fmtTenge(v) },
+    { title: "Ставка", dataIndex: "rate_amount", render: (v) => <HiddenMoney value={v} /> },
+    { title: "Офиц.", dataIndex: "official_amount", render: (v) => <HiddenMoney value={v} /> },
     {
       title: "С",
       dataIndex: "effective_from",
@@ -269,7 +390,7 @@ function LoansTab({ employeeId }: { employeeId: number }) {
     queryFn: () => listLoans({ employee_id: employeeId, limit: 50, offset: 0 }),
   });
   const columns: ColumnsType<LoanOut> = [
-    { title: "Сумма", dataIndex: "principal_amount", render: (v) => fmtTenge(v) },
+    { title: "Сумма", dataIndex: "principal_amount", render: (v) => <HiddenMoney value={v} /> },
     { title: "Выдан", dataIndex: "issued_on", width: 110, render: (v) => fmtDate(v) },
     {
       title: "Статус",
@@ -277,7 +398,7 @@ function LoansTab({ employeeId }: { employeeId: number }) {
       width: 100,
       render: (v) => (v === "active" ? "Активен" : "Закрыт"),
     },
-    { title: "Удержано", dataIndex: "deducted_total", render: (v) => fmtTenge(v) },
+    { title: "Удержано", dataIndex: "deducted_total", render: (v) => <HiddenMoney value={v} /> },
   ];
   return (
     <Space direction="vertical" size={12} style={{ width: "100%" }}>
@@ -296,6 +417,207 @@ function LoansTab({ employeeId }: { employeeId: number }) {
         }}
       />
     </Space>
+  );
+}
+
+function kpiRatio(row: EmployeeKpiOut): number | null {
+  if (row.target == null || row.actual == null) return null;
+  const t = Number(row.target);
+  if (!t) return null;
+  return Math.round((Number(row.actual) / t) * 100);
+}
+
+function KpiTab({ employeeId, canManage }: { employeeId: number; canManage: boolean }) {
+  const { message } = App.useApp();
+  const queryClient = useQueryClient();
+  const [form] = Form.useForm<{
+    period: Dayjs;
+    title: string;
+    target?: number;
+    actual?: number;
+    unit?: string;
+    note?: string;
+  }>();
+
+  const query = useQuery({
+    queryKey: ["employee-kpis", employeeId],
+    queryFn: () => listEmployeeKpis(employeeId),
+  });
+
+  const create = useMutation({
+    mutationFn: (body: EmployeeKpiCreate) => createEmployeeKpi(employeeId, body),
+    onSuccess: () => {
+      message.success("KPI записан");
+      form.resetFields();
+      queryClient.invalidateQueries({ queryKey: ["employee-kpis", employeeId] });
+    },
+    onError: (e) => message.error(errorMessage(e)),
+  });
+  const remove = useMutation({
+    mutationFn: (id: number) => deleteEmployeeKpi(employeeId, id),
+    onSuccess: () => {
+      message.success("KPI удалён");
+      queryClient.invalidateQueries({ queryKey: ["employee-kpis", employeeId] });
+    },
+    onError: (e) => message.error(errorMessage(e)),
+  });
+
+  const columns: ColumnsType<EmployeeKpiOut> = [
+    {
+      title: "Период",
+      width: 140,
+      render: (_, row) => `${MONTH_NAMES[row.period_month - 1]} ${row.period_year}`,
+    },
+    { title: "Показатель", dataIndex: "title" },
+    {
+      title: "Факт / план",
+      render: (_, row) => {
+        const unit = row.unit ? ` ${row.unit}` : "";
+        const fact = row.actual == null ? "—" : `${Number(row.actual)}${unit}`;
+        const plan = row.target == null ? "—" : `${Number(row.target)}${unit}`;
+        const pct = kpiRatio(row);
+        return (
+          <Space direction="vertical" size={0} style={{ width: 180 }}>
+            <span>
+              {fact} / {plan}
+            </span>
+            {pct != null && <Progress percent={Math.min(pct, 100)} size="small" />}
+          </Space>
+        );
+      },
+    },
+    { title: "Комментарий", dataIndex: "note", render: (v) => v || "—" },
+    ...(canManage
+      ? [
+          {
+            title: "",
+            width: 50,
+            render: (_: unknown, row: EmployeeKpiOut) => (
+              <Popconfirm
+                title="Удалить KPI?"
+                okText="Удалить"
+                cancelText="Отмена"
+                onConfirm={() => remove.mutate(row.employee_kpi_id)}
+              >
+                <Button type="text" danger icon={<DeleteOutlined />} />
+              </Popconfirm>
+            ),
+          } as ColumnsType<EmployeeKpiOut>[number],
+        ]
+      : []),
+  ];
+
+  return (
+    <Space direction="vertical" size={16} style={{ width: "100%" }}>
+      {canManage && (
+        <Form
+          form={form}
+          layout="vertical"
+          onFinish={(v) =>
+            create.mutate({
+              period_year: v.period.year(),
+              period_month: v.period.month() + 1,
+              title: v.title.trim(),
+              target: v.target == null ? null : String(v.target),
+              actual: v.actual == null ? null : String(v.actual),
+              unit: v.unit?.trim() || null,
+              note: v.note?.trim() || null,
+            })
+          }
+        >
+          <Space wrap>
+            <Form.Item name="period" label="Месяц" rules={[{ required: true, message: "Месяц" }]}>
+              <DatePicker picker="month" format="MMMM YYYY" />
+            </Form.Item>
+            <Form.Item name="title" label="Показатель" rules={[{ required: true, message: "Название" }]}>
+              <Input placeholder="Выход, опоздания…" style={{ width: 220 }} />
+            </Form.Item>
+            <Form.Item name="target" label="План">
+              <InputNumber style={{ width: 110 }} />
+            </Form.Item>
+            <Form.Item name="actual" label="Факт">
+              <InputNumber style={{ width: 110 }} />
+            </Form.Item>
+            <Form.Item name="unit" label="Ед.">
+              <Input placeholder="%, шт" style={{ width: 80 }} />
+            </Form.Item>
+          </Space>
+          <Form.Item name="note" label="Комментарий">
+            <Input />
+          </Form.Item>
+          <Button type="primary" htmlType="submit" loading={create.isPending} icon={<PlusOutlined />}>
+            Записать KPI
+          </Button>
+        </Form>
+      )}
+      <Table<EmployeeKpiOut>
+        rowKey="employee_kpi_id"
+        size="small"
+        loading={query.isPending}
+        dataSource={query.data}
+        columns={columns}
+        pagination={false}
+        locale={{
+          emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="KPI ещё не задавали" />,
+        }}
+      />
+    </Space>
+  );
+}
+
+function EarningsTab({ employeeId }: { employeeId: number }) {
+  const query = useQuery({
+    queryKey: ["employee-earnings", employeeId],
+    queryFn: () => listEmployeeEarnings(employeeId, { limit: 50, offset: 0 }),
+  });
+  const columns: ColumnsType<MyEarningOut> = [
+    {
+      title: "Период",
+      width: 150,
+      render: (_, row) => `${MONTH_NAMES[row.period_month - 1]} ${row.period_year}`,
+    },
+    {
+      title: "Вид",
+      dataIndex: "kind",
+      width: 110,
+      render: (v: MyEarningOut["kind"]) => RUN_KIND_LABELS[v] ?? v,
+    },
+    {
+      title: "Статус",
+      dataIndex: "status",
+      width: 120,
+      render: (v: MyEarningOut["status"]) => <RunStatusTag status={v} />,
+    },
+    {
+      title: "Тип",
+      dataIndex: "pay_type",
+      width: 90,
+      render: (v: MyEarningOut["pay_type"]) => PAY_TYPE_LABELS[v] ?? v,
+    },
+    { title: "Начислено", dataIndex: "accrued", render: (v) => <HiddenMoney value={v} /> },
+    {
+      title: "К выплате",
+      render: (_, row) => <HiddenMoney value={row.total_to_pay ?? row.to_pay} />,
+    },
+    { title: "Выдано", dataIndex: "paid_fact", render: (v) => <HiddenMoney value={v} /> },
+  ];
+  return (
+    <Table<MyEarningOut>
+      rowKey="payroll_run_line_id"
+      size="small"
+      loading={query.isPending}
+      dataSource={query.data?.items}
+      columns={columns}
+      pagination={false}
+      locale={{
+        emptyText: (
+          <Empty
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+            description="Утверждённых ведомостей ещё нет"
+          />
+        ),
+      }}
+    />
   );
 }
 

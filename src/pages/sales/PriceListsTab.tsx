@@ -5,7 +5,7 @@
  * от базы, поэтому в колонке «Отклонений» у дефолтного всегда прочерк.
  */
 import { PlusOutlined } from "@ant-design/icons";
-import { App, Button, Form, Input, Modal, Popconfirm, Space, Switch, Table, Tag } from "antd";
+import { App, Button, Descriptions, Form, Input, Popconfirm, Space, Switch, Table, Tag } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useState } from "react";
 import { Link } from "react-router-dom";
@@ -22,13 +22,15 @@ import {
   type MenuOut,
 } from "@/api/sales";
 import { useCan } from "@/auth/store";
+import EntityCardDrawer from "@/components/EntityCardDrawer";
 
 export default function PriceListsTab() {
   const { message } = App.useApp();
   const queryClient = useQueryClient();
   const canManage = useCan("menu.manage");
   const [editing, setEditing] = useState<MenuOut | null>(null);
-  const [modalOpen, setModalOpen] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
   const [form] = Form.useForm();
 
   const query = useQuery({ queryKey: ["menus"], queryFn: () => listMenus() });
@@ -51,9 +53,10 @@ export default function PriceListsTab() {
   const save = useMutation({
     mutationFn: (values: MenuCreate & { is_active?: boolean }) =>
       editing ? updateMenu(editing.menu_id, values) : createMenu(values),
-    onSuccess: () => {
+    onSuccess: (row) => {
       message.success(editing ? "Сохранено" : "Меню создано");
-      setModalOpen(false);
+      setEditing(row);
+      setIsEditing(false);
       queryClient.invalidateQueries({ queryKey: ["menus"] });
     },
     onError: (e) => message.error(errorMessage(e)),
@@ -81,13 +84,25 @@ export default function PriceListsTab() {
   function openCreate() {
     setEditing(null);
     form.resetFields();
-    setModalOpen(true);
+    setIsEditing(true);
+    setOpen(true);
   }
 
-  function openEdit(row: MenuOut) {
-    setEditing(row);
+  function fillForm(row: MenuOut) {
     form.setFieldsValue(row);
-    setModalOpen(true);
+  }
+
+  function openCard(row: MenuOut) {
+    setEditing(row);
+    fillForm(row);
+    setIsEditing(false);
+    setOpen(true);
+  }
+
+  function closeCard() {
+    setOpen(false);
+    setIsEditing(false);
+    setEditing(null);
   }
 
   const columns: ColumnsType<MenuOut> = [
@@ -180,18 +195,48 @@ export default function PriceListsTab() {
         pagination={false}
         columns={columns}
         rowClassName={() => "row-clickable"}
-        onRow={(row) => ({ onClick: () => canManage && openEdit(row) })}
+        onRow={(row) => ({ onClick: () => openCard(row) })}
       />
-      <Modal
-        title={editing ? "Изменить меню" : "Новое меню"}
-        open={modalOpen}
-        onCancel={() => setModalOpen(false)}
-        onOk={() => form.submit()}
-        okText="Сохранить"
-        cancelText="Отмена"
-        confirmLoading={save.isPending}
-        destroyOnClose
-      >
+      <EntityCardDrawer
+        open={open}
+        onClose={closeCard}
+        title={editing?.name ?? "Новое меню"}
+        canEdit={canManage && editing != null}
+        editing={isEditing}
+        onStartEdit={() => {
+          if (editing) fillForm(editing);
+          setIsEditing(true);
+        }}
+        onCancelEdit={() => {
+          if (editing) {
+            fillForm(editing);
+            setIsEditing(false);
+          } else {
+            closeCard();
+          }
+        }}
+        onSave={() => form.submit()}
+        savePending={save.isPending}
+        extra={
+          editing && !editing.is_default ? (
+            <Link to={`/menus/${editing.menu_id}`}>Цены</Link>
+          ) : undefined
+        }
+        view={
+          editing ? (
+            <Descriptions column={1} bordered size="small">
+              <Descriptions.Item label="Меню">{editing.name}</Descriptions.Item>
+              <Descriptions.Item label="Код iiko">{editing.code ?? "—"}</Descriptions.Item>
+              <Descriptions.Item label="Основное">
+                {editing.is_default ? <Tag color="blue">Основное</Tag> : "Нет"}
+              </Descriptions.Item>
+              <Descriptions.Item label="Статус">
+                {editing.is_active ? <Tag color="green">Активно</Tag> : <Tag>Неактивно</Tag>}
+              </Descriptions.Item>
+            </Descriptions>
+          ) : null
+        }
+        form={
         <Form form={form} layout="vertical" onFinish={(v) => save.mutate(v)}>
           <Form.Item
             name="name"
@@ -213,7 +258,8 @@ export default function PriceListsTab() {
             </Form.Item>
           )}
         </Form>
-      </Modal>
+        }
+      />
     </div>
   );
 }

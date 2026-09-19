@@ -244,6 +244,10 @@ export default function CountSessionsPage() {
         columns={columns}
         pagination={tablePagination(query.data?.total)}
         locale={{ emptyText: "Сессий пока нет" }}
+        rowClassName={() => "row-clickable"}
+        onRow={(row) => ({
+          onClick: () => navigate(`/inventory-count/${row.inventory_count_session_id}`),
+        })}
       />
 
       <Modal

@@ -412,6 +412,7 @@ export default function RecipeEditorPage() {
   const draftCosts = preview?.costs ?? savedCosts;
 
   function cancelEdit() {
+    if (!recipe) return;
     setEditing(false);
     setPreview(null);
     setLines(linesFrom(recipe.items));
@@ -438,6 +439,7 @@ export default function RecipeEditorPage() {
   }, 0);
 
   function setLine(index: number, patch: Partial<LineForm>) {
+    if (!recipe) return;
     setLines((prev) => {
       const next = [...(prev ?? linesFrom(recipe.items))];
       next[index] = { ...next[index], ...patch };

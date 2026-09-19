@@ -5,7 +5,6 @@ import {
   Table, Tag, Tooltip,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import dayjs from "dayjs";
 import { useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -110,8 +109,8 @@ export default function CustomersPage() {
     staleTime: 60_000,
   });
   const assignments = useQuery({
-    queryKey: ["delivery-assignments", "tomorrow"],
-    queryFn: () => listAssignments(dayjs().add(1, "day").format("YYYY-MM-DD")),
+    queryKey: ["delivery-assignments"],
+    queryFn: listAssignments,
   });
   const couriersByCustomer = useMemo(() => {
     const map = new Map<number, string[]>();

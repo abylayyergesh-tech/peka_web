@@ -59,7 +59,7 @@ export default function DeliveryLogsPage() {
         dataIndex: "delivered_at",
         width: 160,
         render: (v: string | null, row) =>
-          v ? fmtDateTime(v) : dayjs(row.route_date).format("DD.MM.YYYY"),
+          v ? fmtDateTime(v) : (row.route_date ? dayjs(row.route_date).format("DD.MM.YYYY") : "—"),
       },
       {
         title: "Куда",

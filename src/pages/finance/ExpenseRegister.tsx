@@ -6,10 +6,10 @@ import {
   App,
   Button,
   DatePicker,
+  Descriptions,
   Form,
   Input,
   InputNumber,
-  Modal,
   Popconfirm,
   Select,
   Space,
@@ -35,6 +35,7 @@ import {
   type PaymentMethod,
 } from "@/api/finance";
 import { useCan } from "@/auth/store";
+import EntityCardDrawer from "@/components/EntityCardDrawer";
 import { fmtDate, fmtMoney, Money } from "@/components/format";
 import { usePagination } from "@/components/usePagination";
 import { PAYMENT_METHOD_OPTIONS, paymentMethodLabel } from "@/pages/finance/labels";
@@ -70,7 +71,8 @@ export default function ExpenseRegister({
   const [category, setCategory] = useState<number | undefined>();
   const [supplier, setSupplier] = useState<number | undefined>();
   const [editing, setEditing] = useState<ExpenseOut | null>(null);
-  const [modalOpen, setModalOpen] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [form] = Form.useForm<ExpenseFormValues>();
 
@@ -101,9 +103,10 @@ export default function ExpenseRegister({
   const save = useMutation({
     mutationFn: (body: ExpenseCreate) =>
       editing ? updateExpense(editing.expense_id, body) : createExpense(body),
-    onSuccess: () => {
+    onSuccess: (row) => {
       message.success(editing ? "Сохранено" : "Создано");
-      setModalOpen(false);
+      setEditing(row);
+      setIsEditing(false);
       queryClient.invalidateQueries({ queryKey: ["expenses"] });
     },
     onError: (e) => message.error(errorMessage(e)),
@@ -125,11 +128,11 @@ export default function ExpenseRegister({
       expense_date: dayjs(),
       accepted_date: dayjs(),
     });
-    setModalOpen(true);
+    setIsEditing(true);
+    setOpen(true);
   }
 
-  function openEdit(row: ExpenseOut) {
-    setEditing(row);
+  function fillForm(row: ExpenseOut) {
     form.setFieldsValue({
       expense_date: dayjs(row.expense_date),
       category_id: row.category_id,
@@ -143,7 +146,19 @@ export default function ExpenseRegister({
       paid_date: row.paid_date ? dayjs(row.paid_date) : null,
       note: row.note ?? undefined,
     });
-    setModalOpen(true);
+  }
+
+  function openCard(row: ExpenseOut) {
+    setEditing(row);
+    fillForm(row);
+    setIsEditing(false);
+    setOpen(true);
+  }
+
+  function closeCard() {
+    setOpen(false);
+    setIsEditing(false);
+    setEditing(null);
   }
 
   function submit(v: ExpenseFormValues) {
@@ -334,10 +349,10 @@ export default function ExpenseRegister({
         columns={columns}
         scroll={{ x: 1600 }}
         rowClassName={(row) =>
-          `${canManage ? "row-clickable" : ""} ${row.paid_date ? "" : "expense-unpaid"}`.trim()
+          `row-clickable ${row.paid_date ? "" : "expense-unpaid"}`.trim()
         }
         onRow={(row) => ({
-          onClick: () => canManage && openEdit(row),
+          onClick: () => openCard(row),
         })}
         summary={() =>
           query.data?.items?.length ? (
@@ -354,17 +369,63 @@ export default function ExpenseRegister({
         }
       />
 
-      <Modal
-        title={editing ? "Изменить расход" : "Новый расход"}
-        open={modalOpen}
-        onCancel={() => setModalOpen(false)}
-        onOk={() => form.submit()}
-        okText="Сохранить"
-        cancelText="Отмена"
-        confirmLoading={save.isPending}
-        destroyOnClose
+      <EntityCardDrawer
+        open={open}
+        onClose={closeCard}
+        title={
+          editing
+            ? `${editing.counterparty_name || "Расход"} · ${fmtMoney(editing.amount)}`
+            : "Новый расход"
+        }
         width={640}
-      >
+        canEdit={canManage && editing != null}
+        editing={isEditing}
+        onStartEdit={() => {
+          if (editing) fillForm(editing);
+          setIsEditing(true);
+        }}
+        onCancelEdit={() => {
+          if (editing) {
+            fillForm(editing);
+            setIsEditing(false);
+          } else {
+            closeCard();
+          }
+        }}
+        onSave={() => form.submit()}
+        savePending={save.isPending}
+        extra={
+          canManage && editing ? (
+            <Popconfirm
+              title="Удалить расход?"
+              okText="Да"
+              cancelText="Нет"
+              onConfirm={() => remove.mutate(editing.expense_id)}
+            >
+              <Button danger>Удалить</Button>
+            </Popconfirm>
+          ) : undefined
+        }
+        view={
+          editing ? (
+            <Descriptions column={1} bordered size="small">
+              <Descriptions.Item label="№">{editing.expense_id}</Descriptions.Item>
+              <Descriptions.Item label="Дата документа">{fmtDate(editing.expense_date)}</Descriptions.Item>
+              <Descriptions.Item label="Контрагент">{editing.counterparty_name || "—"}</Descriptions.Item>
+              <Descriptions.Item label="БИН">{editing.tax_id || "—"}</Descriptions.Item>
+              <Descriptions.Item label="Статья">
+                {editing.category_name || `#${editing.category_id}`}
+              </Descriptions.Item>
+              <Descriptions.Item label="Сумма"><Money value={editing.amount} /></Descriptions.Item>
+              <Descriptions.Item label="Оплата">{paymentMethodLabel(editing.payment_method)}</Descriptions.Item>
+              <Descriptions.Item label="Дата оплаты">
+                {editing.paid_date ? fmtDate(editing.paid_date) : "не оплачен"}
+              </Descriptions.Item>
+              <Descriptions.Item label="Подробности">{editing.note || "—"}</Descriptions.Item>
+            </Descriptions>
+          ) : null
+        }
+        form={
         <Form form={form} layout="vertical" onFinish={submit}>
           <Form.Item
             name="expense_date"
@@ -445,7 +506,8 @@ export default function ExpenseRegister({
             <Select allowClear placeholder="Не указан" options={PAYMENT_METHOD_OPTIONS} />
           </Form.Item>
         </Form>
-      </Modal>
+        }
+      />
     </div>
   );
 }

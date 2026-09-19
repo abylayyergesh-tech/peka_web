@@ -8,9 +8,8 @@
  * Удаление мягкое: на точку ссылаются прошлые заказы и чеки.
  */
 import { PlusOutlined } from "@ant-design/icons";
-import { App, Button, Form, Input, Modal, Popconfirm, Space, Switch, Table, Tag } from "antd";
+import { App, Button, Descriptions, Form, Input, Popconfirm, Space, Switch, Table, Tag } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import dayjs from "dayjs";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -25,13 +24,15 @@ import {
   type CustomerAddressOut,
 } from "@/api/sales";
 import { useCan } from "@/auth/store";
+import EntityCardDrawer from "@/components/EntityCardDrawer";
 
 export default function CustomerOutletsTab({ customerId }: { customerId: number }) {
   const { message } = App.useApp();
   const queryClient = useQueryClient();
   const canManage = useCan("customer.manage");
   const [editing, setEditing] = useState<CustomerAddressOut | null>(null);
-  const [modalOpen, setModalOpen] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
   const [form] = Form.useForm();
 
   const query = useQuery({
@@ -40,8 +41,8 @@ export default function CustomerOutletsTab({ customerId }: { customerId: number 
     enabled: Number.isFinite(customerId),
   });
   const assignments = useQuery({
-    queryKey: ["delivery-assignments", "tomorrow"],
-    queryFn: () => listAssignments(dayjs().add(1, "day").format("YYYY-MM-DD")),
+    queryKey: ["delivery-assignments"],
+    queryFn: listAssignments,
   });
   const courierByAddress = useMemo(() => {
     const map = new Map<number, string>();
@@ -62,9 +63,10 @@ export default function CustomerOutletsTab({ customerId }: { customerId: number 
       editing
         ? updateCustomerAddress(editing.customer_address_id, values)
         : createCustomerAddress(customerId, values),
-    onSuccess: () => {
+    onSuccess: (row) => {
       message.success(editing ? "Точка сохранена" : "Точка добавлена");
-      setModalOpen(false);
+      setEditing(row);
+      setIsEditing(false);
       invalidate();
     },
     onError: (e) => message.error(errorMessage(e)),
@@ -91,13 +93,25 @@ export default function CustomerOutletsTab({ customerId }: { customerId: number 
   function openCreate() {
     setEditing(null);
     form.resetFields();
-    setModalOpen(true);
+    setIsEditing(true);
+    setOpen(true);
   }
 
-  function openEdit(row: CustomerAddressOut) {
-    setEditing(row);
+  function fillForm(row: CustomerAddressOut) {
     form.setFieldsValue(row);
-    setModalOpen(true);
+  }
+
+  function openCard(row: CustomerAddressOut) {
+    setEditing(row);
+    fillForm(row);
+    setIsEditing(false);
+    setOpen(true);
+  }
+
+  function closeCard() {
+    setOpen(false);
+    setIsEditing(false);
+    setEditing(null);
   }
 
   const columns: ColumnsType<CustomerAddressOut> = [
@@ -192,18 +206,47 @@ export default function CustomerOutletsTab({ customerId }: { customerId: number 
         columns={columns}
         locale={{ emptyText: "Точек нет — добавьте адрес, иначе курьеру некуда везти" }}
         rowClassName={() => "row-clickable"}
-        onRow={(row) => ({ onClick: () => canManage && openEdit(row) })}
+        onRow={(row) => ({ onClick: () => openCard(row) })}
       />
-      <Modal
-        title={editing ? "Изменить точку" : "Новая точка"}
-        open={modalOpen}
-        onCancel={() => setModalOpen(false)}
-        onOk={() => form.submit()}
-        okText="Сохранить"
-        cancelText="Отмена"
-        confirmLoading={save.isPending}
-        destroyOnClose
-      >
+      <EntityCardDrawer
+        open={open}
+        onClose={closeCard}
+        title={editing?.label || editing?.address_line || "Новая точка"}
+        canEdit={canManage && editing != null}
+        editing={isEditing}
+        onStartEdit={() => {
+          if (editing) fillForm(editing);
+          setIsEditing(true);
+        }}
+        onCancelEdit={() => {
+          if (editing) {
+            fillForm(editing);
+            setIsEditing(false);
+          } else {
+            closeCard();
+          }
+        }}
+        onSave={() => form.submit()}
+        savePending={save.isPending}
+        view={
+          editing ? (
+            <Descriptions column={1} bordered size="small">
+              <Descriptions.Item label="Название">{editing.label || "—"}</Descriptions.Item>
+              <Descriptions.Item label="Адрес">{editing.address_line}</Descriptions.Item>
+              <Descriptions.Item label="Способ входа">{editing.comment || "—"}</Descriptions.Item>
+              <Descriptions.Item label="Контакт">
+                {[editing.contact_name, editing.contact_phone].filter(Boolean).join(" · ") || "—"}
+              </Descriptions.Item>
+              <Descriptions.Item label="Основная">
+                {editing.is_default ? <Tag color="blue">Основная</Tag> : "Нет"}
+              </Descriptions.Item>
+              <Descriptions.Item label="Статус">
+                {editing.is_active ? <Tag color="green">Активна</Tag> : <Tag>Закрыта</Tag>}
+              </Descriptions.Item>
+            </Descriptions>
+          ) : null
+        }
+        form={
         <Form form={form} layout="vertical" onFinish={(v) => save.mutate(v)}>
           <Form.Item
             name="address_line"
@@ -236,7 +279,8 @@ export default function CustomerOutletsTab({ customerId }: { customerId: number 
             <Switch />
           </Form.Item>
         </Form>
-      </Modal>
+        }
+      />
     </div>
   );
 }

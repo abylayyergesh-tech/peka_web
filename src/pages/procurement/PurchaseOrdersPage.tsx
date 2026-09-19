@@ -162,6 +162,10 @@ export default function PurchaseOrdersPage() {
         dataSource={query.data?.items}
         pagination={tablePagination(query.data?.total)}
         columns={columns}
+        rowClassName={() => "row-clickable"}
+        onRow={(row) => ({
+          onClick: () => navigate(`/purchase-orders/${row.purchase_order_id}`),
+        })}
       />
       <Modal
         title="Новый заказ поставщику"

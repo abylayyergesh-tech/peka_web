@@ -4,6 +4,7 @@ import {
   LockOutlined,
   LogoutOutlined,
   PlusOutlined,
+  QuestionCircleOutlined,
   ShopOutlined,
   TeamOutlined,
   UserOutlined,
@@ -11,7 +12,7 @@ import {
 } from "@ant-design/icons";
 import type { MenuProps } from "antd";
 import { App, Button, Dropdown, Form, Layout, Menu, Modal, Result, Select, Input } from "antd";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 
 import { changePassword, createOrganization, logoutApi } from "@/api/auth";
@@ -19,6 +20,7 @@ import { errorMessage } from "@/api/client";
 import { useAuthStore } from "@/auth/store";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import { visibleSections } from "@/layout/menu";
+import OnboardingTour from "@/layout/OnboardingTour";
 import { BRAND } from "@/theme";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -38,9 +40,11 @@ export default function AppLayout() {
   const location = useLocation();
   const { message } = App.useApp();
   const queryClient = useQueryClient();
-  const { me, activeOrgId, caps, refreshToken, setActiveOrg, setTokens, logout } =
+  const { me, activeOrgId, caps, refreshToken, setActiveOrg, rotateTokens, logout } =
     useAuthStore();
   const [collapsed, setCollapsed] = useState(false);
+  const [tourRestart, setTourRestart] = useState(0);
+  const prepareTour = useCallback(() => setCollapsed(false), []);
   const [orgModalOpen, setOrgModalOpen] = useState(false);
   const [newOrgName, setNewOrgName] = useState("");
   const [creatingOrg, setCreatingOrg] = useState(false);
@@ -60,7 +64,7 @@ export default function AppLayout() {
       ...sections.map((s) => ({
         key: s.key,
         icon: SECTION_ICONS[s.key],
-        label: s.label,
+        label: <span data-tour-section={s.key}>{s.label}</span>,
         children: s.items.map((i) => ({ key: i.path, label: i.label })),
       })),
     ];
@@ -112,6 +116,7 @@ export default function AppLayout() {
   const userMenu: MenuProps["items"] = [
     { key: "email", label: me?.email, disabled: true },
     { type: "divider" },
+    ...(hasAnyModule ? [{ key: "tour", icon: <QuestionCircleOutlined />, label: "Знакомство с системой" }] : []),
     { key: "change-password", icon: <LockOutlined />, label: "Сменить пароль" },
     { key: "logout", icon: <LogoutOutlined />, label: "Выйти", danger: true },
   ];
@@ -132,7 +137,7 @@ export default function AppLayout() {
     try {
       const out = await changePassword(values.current_password, values.new_password);
       // остальные сессии отозваны сервером; текущая живёт на новой паре
-      setTokens(out.access_token, out.refresh_token);
+      rotateTokens(out.access_token, out.refresh_token);
       message.success("Пароль изменён; остальные сессии завершены");
       setPwdModalOpen(false);
       pwdForm.resetFields();
@@ -203,6 +208,7 @@ export default function AppLayout() {
           }}
         >
           <Select
+            data-tour="organization"
             style={{ minWidth: 220 }}
             value={activeOrgId ?? undefined}
             onChange={switchOrg}
@@ -228,16 +234,17 @@ export default function AppLayout() {
               onClick: ({ key }) => {
                 if (key === "logout") handleLogout();
                 if (key === "change-password") setPwdModalOpen(true);
+                if (key === "tour") setTourRestart((value) => value + 1);
               },
             }}
           >
-            <span style={{ cursor: "pointer" }}>
+            <span data-tour="profile" style={{ cursor: "pointer" }}>
               <UserOutlined style={{ marginRight: 8 }} />
               {me?.full_name}
             </span>
           </Dropdown>
         </Layout.Header>
-        <Layout.Content style={{ padding: 24 }}>
+        <Layout.Content data-tour="workspace" style={{ padding: 24 }}>
           {hasAnyModule ? (
             // Ключ по адресу: сломавшаяся страница не должна оставаться
             // сломанной после перехода в другой раздел — граница пересоздаётся.
@@ -266,6 +273,9 @@ export default function AppLayout() {
           )}
         </Layout.Content>
       </Layout>
+      <OnboardingTour identity={`${me?.user_id}:${activeOrgId}`}
+        ready={!!me && activeOrgId != null && useAuthStore.getState().capsLoaded && hasAnyModule}
+        sections={sections} restart={tourRestart} prepare={prepareTour} />
       <Modal
         title="Новая организация"
         open={orgModalOpen}

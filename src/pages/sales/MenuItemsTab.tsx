@@ -10,11 +10,11 @@ import {
   UploadOutlined,
 } from "@ant-design/icons";
 import {
-  App, Button, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Switch,
-  Table, Tag, Upload,
+  App, Alert, Button, Descriptions, Form, Input, InputNumber, Popconfirm, Select, Space, Spin,
+  Switch, Table, Tag, Upload,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { errorMessage, mediaSrc } from "@/api/client";
@@ -22,16 +22,18 @@ import {
   createMenuItem,
   deleteMenuItem,
   deleteMenuItemImage,
+  getMenuItemNutrition,
   listMenuItems,
   listProductsLookup,
   listUnitsLookup,
   updateMenuItem,
   uploadMenuItemImage,
   type MenuItemCreate,
+  type MenuItemNutritionOut,
   type MenuItemOut,
 } from "@/api/sales";
 import { useCan } from "@/auth/store";
-import NutritionModal from "@/components/NutritionModal";
+import EntityCardDrawer from "@/components/EntityCardDrawer";
 import { Money, fmtQty } from "@/components/format";
 import { useListControls } from "@/components/useListControls";
 import { usePagination } from "@/components/usePagination";
@@ -49,9 +51,8 @@ export default function MenuItemsTab() {
     : activeFilter === "active";
   const stopped = activeFilter === "stopped" ? true : undefined;
   const [editing, setEditing] = useState<MenuItemOut | null>(null);
-  const [modalOpen, setModalOpen] = useState(false);
-  /** Позиция, для которой открыт расчёт КБЖУ порции. */
-  const [nutritionOf, setNutritionOf] = useState<MenuItemOut | null>(null);
+  const [open, setOpen] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
   /** Фото, выбранное для ЕЩЁ НЕ созданной позиции: загрузка требует id, поэтому
    *  файл ждёт здесь и уходит сразу после создания. */
   const [pendingFile, setPendingFile] = useState<File | null>(null);
@@ -90,11 +91,13 @@ export default function MenuItemsTab() {
       }
       return saved;
     },
-    onSuccess: () => {
+    onSuccess: (row) => {
       message.success(editing ? "Сохранено" : "Позиция создана");
       setPendingFile(null);
-      setModalOpen(false);
+      setEditing(row);
+      setIsEditing(false);
       queryClient.invalidateQueries({ queryKey: ["menu-items"] });
+      queryClient.invalidateQueries({ queryKey: ["nutrition", "menu-item", row.menu_item_id] });
     },
     onError: (e) => message.error(errorMessage(e)),
   });
@@ -128,6 +131,7 @@ export default function MenuItemsTab() {
     mutationFn: (id: number) => deleteMenuItem(id),
     onSuccess: () => {
       message.success("Позиция деактивирована");
+      closeCard();
       queryClient.invalidateQueries({ queryKey: ["menu-items"] });
     },
     onError: (e) => message.error(errorMessage(e)),
@@ -136,8 +140,11 @@ export default function MenuItemsTab() {
   const toggleStop = useMutation({
     mutationFn: ({ id, is_stopped }: { id: number; is_stopped: boolean }) =>
       updateMenuItem(id, { is_stopped }),
-    onSuccess: (_row, { is_stopped }) => {
+    onSuccess: (row, { is_stopped }) => {
       message.success(is_stopped ? "Позиция на стопе" : "Стоп снят");
+      setEditing((cur) =>
+        cur && cur.menu_item_id === row.menu_item_id ? row : cur,
+      );
       queryClient.invalidateQueries({ queryKey: ["menu-items"] });
     },
     onError: (e) => message.error(errorMessage(e)),
@@ -147,18 +154,31 @@ export default function MenuItemsTab() {
     setEditing(null);
     setPendingFile(null);
     form.resetFields();
-    setModalOpen(true);
+    setIsEditing(true);
+    setOpen(true);
   }
 
-  function openEdit(row: MenuItemOut) {
-    setEditing(row);
-    setPendingFile(null);
+  function fillForm(row: MenuItemOut) {
     form.setFieldsValue({
       ...row,
       portion_qty: Number(row.portion_qty),
       sale_price: Number(row.sale_price),
     });
-    setModalOpen(true);
+  }
+
+  function openCard(row: MenuItemOut) {
+    setEditing(row);
+    setPendingFile(null);
+    fillForm(row);
+    setIsEditing(false);
+    setOpen(true);
+  }
+
+  function closeCard() {
+    setOpen(false);
+    setIsEditing(false);
+    setEditing(null);
+    setPendingFile(null);
   }
 
   const productName = (id: number) =>
@@ -228,48 +248,6 @@ export default function MenuItemsTab() {
         return row.is_active ? <Tag color="green">Активна</Tag> : <Tag>Неактивна</Tag>;
       },
     },
-    {
-      title: "",
-      width: 300,
-      render: (_, row) => (
-        <Space>
-          <a onClick={(e) => { e.stopPropagation(); setNutritionOf(row); }}>КБЖУ</a>
-          {canManage && row.is_active && !row.is_stopped && (
-            <Popconfirm
-              title={`Поставить «${row.name}» на стоп?`}
-              description="Позиция пропадёт из кассы и клиентского меню, пока стоп не снимете."
-              okText="На стоп"
-              cancelText="Отмена"
-              okButtonProps={{ danger: true }}
-              onConfirm={() => toggleStop.mutate({ id: row.menu_item_id, is_stopped: true })}
-            >
-              <a onClick={(e) => e.stopPropagation()}>На стоп</a>
-            </Popconfirm>
-          )}
-          {canManage && row.is_stopped && (
-            <Popconfirm
-              title={`Снять «${row.name}» со стопа?`}
-              description="Позиция снова появится в кассе и у клиентов."
-              okText="Снять стоп"
-              cancelText="Отмена"
-              onConfirm={() => toggleStop.mutate({ id: row.menu_item_id, is_stopped: false })}
-            >
-              <a onClick={(e) => e.stopPropagation()}>Снять стоп</a>
-            </Popconfirm>
-          )}
-          {canManage && row.is_active && (
-            <Popconfirm
-              title="Деактивировать позицию?"
-              okText="Да"
-              cancelText="Нет"
-              onConfirm={() => remove.mutate(row.menu_item_id)}
-            >
-              <a onClick={(e) => e.stopPropagation()}>Деактивировать</a>
-            </Popconfirm>
-          )}
-        </Space>
-      ),
-    },
   ];
 
   return (
@@ -317,22 +295,100 @@ export default function MenuItemsTab() {
           `row-clickable${row.is_stopped ? " menu-item-stopped" : ""}`
         }
         onRow={(row) => ({
-          onClick: () => canManage && openEdit(row),
+          onClick: () => openCard(row),
         })}
       />
       <style>{`
         .menu-item-stopped td { background: #fff2f0; }
       `}</style>
-      <Modal
-        title={editing ? "Изменить позицию меню" : "Новая позиция меню"}
-        open={modalOpen}
-        onCancel={() => setModalOpen(false)}
-        onOk={() => form.submit()}
-        okText="Сохранить"
-        cancelText="Отмена"
-        confirmLoading={save.isPending}
-        destroyOnClose
-      >
+      <EntityCardDrawer
+        open={open}
+        onClose={closeCard}
+        title={editing?.name ?? "Новая позиция меню"}
+        width={560}
+        canEdit={canManage && editing != null}
+        editing={isEditing}
+        onStartEdit={() => {
+          if (editing) fillForm(editing);
+          setIsEditing(true);
+        }}
+        onCancelEdit={() => {
+          if (editing) {
+            fillForm(editing);
+            setIsEditing(false);
+          } else {
+            closeCard();
+          }
+        }}
+        onSave={() => form.submit()}
+        savePending={save.isPending}
+        view={
+          editing ? (
+            <Space direction="vertical" size={16} style={{ width: "100%" }}>
+              <Descriptions column={1} bordered size="small">
+                <Descriptions.Item label="Название">{editing.name}</Descriptions.Item>
+                <Descriptions.Item label="Категория">{editing.category ?? "—"}</Descriptions.Item>
+                <Descriptions.Item label="Продукт">{productName(editing.product_id)}</Descriptions.Item>
+                <Descriptions.Item label="Порция">
+                  {fmtQty(editing.portion_qty)} {unitName(editing.unit_id)}
+                </Descriptions.Item>
+                <Descriptions.Item label="Базовая цена">
+                  <Money value={editing.sale_price} />
+                </Descriptions.Item>
+                <Descriptions.Item label="Статус">
+                  {editing.is_stopped ? (
+                    <Tag color="red">Стоп</Tag>
+                  ) : editing.is_active ? (
+                    <Tag color="green">Активна</Tag>
+                  ) : (
+                    <Tag>Неактивна</Tag>
+                  )}
+                </Descriptions.Item>
+              </Descriptions>
+              <MenuItemNutrition itemId={editing.menu_item_id} />
+              <Space wrap>
+                {canManage && editing.is_active && !editing.is_stopped && (
+                  <Popconfirm
+                    title={`Поставить «${editing.name}» на стоп?`}
+                    description="Позиция пропадёт из кассы и клиентского меню, пока стоп не снимете."
+                    okText="На стоп"
+                    cancelText="Отмена"
+                    okButtonProps={{ danger: true }}
+                    onConfirm={() =>
+                      toggleStop.mutate({ id: editing.menu_item_id, is_stopped: true })
+                    }
+                  >
+                    <Button danger loading={toggleStop.isPending}>На стоп</Button>
+                  </Popconfirm>
+                )}
+                {canManage && editing.is_stopped && (
+                  <Popconfirm
+                    title={`Снять «${editing.name}» со стопа?`}
+                    description="Позиция снова появится в кассе и у клиентов."
+                    okText="Снять стоп"
+                    cancelText="Отмена"
+                    onConfirm={() =>
+                      toggleStop.mutate({ id: editing.menu_item_id, is_stopped: false })
+                    }
+                  >
+                    <Button loading={toggleStop.isPending}>Снять стоп</Button>
+                  </Popconfirm>
+                )}
+                {canManage && editing.is_active && (
+                  <Popconfirm
+                    title="Деактивировать позицию?"
+                    okText="Да"
+                    cancelText="Нет"
+                    onConfirm={() => remove.mutate(editing.menu_item_id)}
+                  >
+                    <Button danger loading={remove.isPending}>Деактивировать</Button>
+                  </Popconfirm>
+                )}
+              </Space>
+            </Space>
+          ) : null
+        }
+        form={
         <Form form={form} layout="vertical" onFinish={(v) => save.mutate(v)}>
           <Form.Item
             name="name"
@@ -424,14 +480,97 @@ export default function MenuItemsTab() {
             </Form.Item>
           )}
         </Form>
-      </Modal>
-
-      <NutritionModal
-        target={nutritionOf ? { kind: "menu-item", id: nutritionOf.menu_item_id } : null}
-        title={nutritionOf?.name ?? ""}
-        onClose={() => setNutritionOf(null)}
+        }
       />
     </div>
+  );
+}
+
+function NutriGrid({
+  value,
+}: {
+  value: MenuItemNutritionOut["per_portion"] | null;
+}) {
+  if (!value) return null;
+  return (
+    <div className="nutri-grid">
+      <div className="nutri-cell">
+        <strong>{fmtQty(value.energy_kcal)}</strong>
+        <span>ккал</span>
+      </div>
+      <div className="nutri-cell">
+        <strong>{fmtQty(value.protein)}</strong>
+        <span>белки</span>
+      </div>
+      <div className="nutri-cell">
+        <strong>{fmtQty(value.fat)}</strong>
+        <span>жиры</span>
+      </div>
+      <div className="nutri-cell">
+        <strong>{fmtQty(value.carbs)}</strong>
+        <span>углеводы</span>
+      </div>
+    </div>
+  );
+}
+
+/** КБЖУ порции сразу в карточке: без второй модалки поверх ящика. */
+function MenuItemNutrition({ itemId }: { itemId: number }) {
+  const query = useQuery({
+    queryKey: ["nutrition", "menu-item", itemId],
+    queryFn: () => getMenuItemNutrition(itemId),
+  });
+  const data = query.data;
+  const note: CSSProperties = { color: "#8c8c8c", fontSize: 12, margin: 0 };
+
+  return (
+    <Space direction="vertical" size={12} style={{ width: "100%" }}>
+      <div style={{ fontWeight: 600 }}>КБЖУ</div>
+      {query.isPending && <Spin size="small" />}
+      {query.isError && (
+        <Alert type="error" showIcon message={errorMessage(query.error)} />
+      )}
+      {data && (
+        <>
+          {!data.complete && (
+            <Alert
+              type="warning"
+              showIcon
+              message="Данные неполные — значения занижены"
+              description={
+                data.missing_product_names.length > 0
+                  ? `Не заполнено КБЖУ или вес единицы: ${data.missing_product_names.join(", ")}`
+                  : "У части компонентов не заполнено КБЖУ."
+              }
+            />
+          )}
+          {data.per_100g ? (
+            <>
+              <p style={note}>На 100 г</p>
+              <NutriGrid value={data.per_100g} />
+            </>
+          ) : (
+            <p style={note}>На 100 г неизвестно: нет веса порции</p>
+          )}
+          <p style={note}>На порцию</p>
+          <NutriGrid value={data.per_portion} />
+          <div>
+            {data.portion_weight_kg ? (
+              <Tag>
+                Вес порции: {(Number(data.portion_weight_kg) * 1000).toFixed(0)} г
+              </Tag>
+            ) : (
+              <Tag color="orange">Вес не задан — «на 100 г» посчитать нечем</Tag>
+            )}
+            {data.source === "own" ? (
+              <Tag color="blue">указано в карточке</Tag>
+            ) : (
+              data.complete && <Tag color="green">по тех-карте</Tag>
+            )}
+          </div>
+        </>
+      )}
+    </Space>
   );
 }
 

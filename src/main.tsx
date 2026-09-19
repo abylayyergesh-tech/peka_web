@@ -1,4 +1,7 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { installDiagnostics } from "@/telemetry";
+import { queryClient } from "@/session";
+import { useAuthStore } from "@/auth/store";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { App as AntApp, ConfigProvider } from "antd";
 import ruRU from "antd/locale/ru_RU";
 import dayjs from "dayjs";
@@ -16,14 +19,14 @@ import "@/index.css";
 
 dayjs.locale("ru");
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      retry: 1,
-      refetchOnWindowFocus: false,
-    },
-  },
-});
+
+
+function SessionRouter() {
+  const epoch = useAuthStore((state) => state.sessionEpoch);
+  return <RouterProvider key={epoch} router={router} />;
+}
+
+installDiagnostics();
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
@@ -33,7 +36,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
             маршрутизатор. Внутренняя (в AppLayout) сохраняет меню. */}
         <ErrorBoundary>
           <QueryClientProvider client={queryClient}>
-            <RouterProvider router={router} />
+            <SessionRouter />
           </QueryClientProvider>
         </ErrorBoundary>
       </AntApp>

@@ -1,7 +1,7 @@
-/** /delivery — конструктор маршрута: слева адреса заказов на день, справа цепочки.
+/** /delivery — конструктор шаблона: слева свободные точки, справа маршруты.
  *
- * Курьера здесь нет: маршрут собирают вечером на завтра, раздают во вкладке
- * «Курьеры». Точка = адрес, на который есть заказ; основной и доп. едут вместе. */
+ * Маршрут заводят один раз из точек клиента, хранят постоянно, правят и
+ * назначают курьеру во вкладке «Курьеры». Заказы дня в состав не входят. */
 import {
   ArrowDownOutlined,
   ArrowUpOutlined,
@@ -15,7 +15,6 @@ import {
   App,
   Button,
   Card,
-  DatePicker,
   Empty,
   Form,
   Input,
@@ -24,12 +23,10 @@ import {
   Popconfirm,
   Space,
   Tag,
-  Tooltip,
   Typography,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { Table } from "antd";
-import dayjs, { type Dayjs } from "dayjs";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -41,40 +38,27 @@ import {
   listRoutes,
   setRouteStops,
   updateRoute,
+  type DeliveryPointOut,
   type DeliveryRouteOut,
   type DeliveryStopOut,
   type RouteStatus,
 } from "@/api/delivery";
-import {
-  groupCandidates,
-  itemsLine,
-  orderIdsOfBlocks,
-  stopBlocks,
-  type DeliveryPoint,
-} from "@/pages/delivery/points";
+import { addressIdsOfStops, itemsLine } from "@/pages/delivery/points";
 
 const ROUTE_STATUS: Record<RouteStatus, { label: string; color: string }> = {
-  planned: { label: "Планируется", color: "default" },
+  planned: { label: "Активен", color: "default" },
   in_progress: { label: "В пути", color: "processing" },
   done: { label: "Завершён", color: "success" },
   cancelled: { label: "Отменён", color: "error" },
 };
 
-const STOP_STATUS: Record<string, { label: string; color: string }> = {
-  pending: { label: "Ждёт", color: "default" },
-  delivered: { label: "Доставлено", color: "success" },
-  failed: { label: "Не отдали", color: "error" },
-};
-
 export default function RoutesPage() {
   const { message } = App.useApp();
   const queryClient = useQueryClient();
-  const [day, setDay] = useState<Dayjs>(dayjs().add(1, "day"));
-  const [selected, setSelected] = useState<string[]>([]);
+  const [selected, setSelected] = useState<number[]>([]);
   const [creating, setCreating] = useState(false);
   const [form] = Form.useForm();
 
-  const date = day.format("YYYY-MM-DD");
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["delivery"] });
     queryClient.invalidateQueries({ queryKey: ["delivery-assignments"] });
@@ -82,30 +66,25 @@ export default function RoutesPage() {
   };
 
   const candidates = useQuery({
-    queryKey: ["delivery", "candidates", date],
-    queryFn: () => listCandidates(date),
+    queryKey: ["delivery", "candidates"],
+    queryFn: listCandidates,
   });
   const routes = useQuery({
-    queryKey: ["delivery", "routes", date],
-    queryFn: () => listRoutes({ date }),
+    queryKey: ["delivery", "routes"],
+    queryFn: () => listRoutes(),
   });
 
-  const points = groupCandidates(candidates.data ?? []);
   const fail = (e: unknown) => message.error(errorMessage(e));
-
-  const selectedOrderIds = points
-    .filter((p) => selected.includes(p.point_key))
-    .flatMap((p) => p.order_ids);
+  const points = candidates.data ?? [];
 
   const create = useMutation({
     mutationFn: (values: { name?: string }) =>
       createRoute({
-        route_date: date,
         name: values.name?.trim() || null,
-        order_ids: selectedOrderIds,
+        customer_address_ids: selected,
       }),
     onSuccess: (route) => {
-      message.success(`Маршрут «${route.name ?? "без названия"}» собран`);
+      message.success(`Маршрут «${route.name ?? "без названия"}» сохранён`);
       setCreating(false);
       form.resetFields();
       invalidate();
@@ -114,8 +93,8 @@ export default function RoutesPage() {
   });
 
   const stops = useMutation({
-    mutationFn: ({ id, orderIds }: { id: number; orderIds: number[] }) =>
-      setRouteStops(id, orderIds),
+    mutationFn: ({ id, addressIds }: { id: number; addressIds: number[] }) =>
+      setRouteStops(id, addressIds),
     onSuccess: invalidate,
     onError: fail,
   });
@@ -139,43 +118,32 @@ export default function RoutesPage() {
   const addSelected = (route: DeliveryRouteOut) =>
     stops.mutate({
       id: route.delivery_route_id,
-      orderIds: [...route.stops.map((s) => s.order_id), ...selectedOrderIds],
+      addressIds: [...addressIdsOfStops(route.stops), ...selected],
     });
 
-  const moveBlock = (route: DeliveryRouteOut, index: number, delta: number) => {
-    const blocks = stopBlocks(route.stops);
+  const moveStop = (route: DeliveryRouteOut, index: number, delta: number) => {
+    const ids = addressIdsOfStops(route.stops);
     const target = index + delta;
-    if (target < 0 || target >= blocks.length) return;
-    [blocks[index], blocks[target]] = [blocks[target], blocks[index]];
-    stops.mutate({
-      id: route.delivery_route_id,
-      orderIds: orderIdsOfBlocks(blocks),
-    });
+    if (target < 0 || target >= ids.length) return;
+    [ids[index], ids[target]] = [ids[target], ids[index]];
+    stops.mutate({ id: route.delivery_route_id, addressIds: ids });
   };
 
-  const dropBlock = (route: DeliveryRouteOut, pointKey: string) =>
+  const dropStop = (route: DeliveryRouteOut, addressId: number) =>
     stops.mutate({
       id: route.delivery_route_id,
-      orderIds: route.stops
-        .filter((s) => (s.point_key || `o:${s.order_id}`) !== pointKey)
-        .map((s) => s.order_id),
+      addressIds: addressIdsOfStops(route.stops).filter((id) => id !== addressId),
     });
 
-  const columns: ColumnsType<DeliveryPoint> = [
+  const columns: ColumnsType<DeliveryPointOut> = [
     {
-      title: "Адрес",
+      title: "Точка",
       dataIndex: "delivery_address",
-      render: (v: string | null, row) => (
+      render: (v: string, row) => (
         <>
-          <div>{v ?? "адрес не указан"}</div>
+          <div>{row.label ? `${row.label} · ${v}` : v}</div>
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            {row.customer_name ?? "—"}
-            {row.orders.length > 1
-              ? ` · заказов: ${row.orders.length}`
-              : row.orders[0]?.number != null
-                ? ` · №${row.orders[0].number}`
-                : ""}
-            {row.is_extra ? " · доп." : ""}
+            {row.customer_name}
           </Typography.Text>
           {row.entrance_comment && (
             <div style={{ fontSize: 12, color: "#8c8c8c" }}>
@@ -185,46 +153,30 @@ export default function RoutesPage() {
         </>
       ),
     },
-    {
-      title: "Что везти",
-      render: (_, row) => (
-        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-          {itemsLine(row.orders.flatMap((o) => o.items))}
-        </Typography.Text>
-      ),
-    },
   ];
+
+  const openRoutes = (routes.data ?? []).filter((r) => r.status !== "cancelled");
 
   return (
     <div>
       <Space wrap style={{ marginBottom: 16 }} align="center">
         <h2 style={{ margin: 0 }}>Маршруты</h2>
-        <DatePicker
-          value={day}
-          onChange={(v) => {
-            if (!v) return;
-            setDay(v);
-            setSelected([]);
-          }}
-          format="DD.MM.YYYY"
-          allowClear={false}
-        />
-        {day.isSame(dayjs().add(1, "day"), "day") && <Tag color="blue">завтра</Tag>}
         <Button
           type="primary"
           icon={<PlusOutlined />}
           disabled={selected.length === 0}
           onClick={() => setCreating(true)}
         >
-          Собрать маршрут
+          Создать маршрут
         </Button>
         {selected.length > 0 && (
           <Tag color="blue">выбрано точек: {selected.length}</Tag>
         )}
       </Space>
       <Typography.Paragraph type="secondary" style={{ fontSize: 13 }}>
-        Слева адреса, на которые есть заказ. Отметьте точки, соберите маршрут —
-        курьера привяжете во вкладке «Курьеры».
+        Слева точки клиентов, которые ещё ни на каком маршруте. Отметьте их,
+        назовите маршрут — курьера привяжете во вкладке «Курьеры». Шаблон
+        хранится постоянно, его можно править.
       </Typography.Paragraph>
 
       {(candidates.isError || routes.isError) && (
@@ -240,46 +192,46 @@ export default function RoutesPage() {
         <Card
           size="small"
           style={{ flex: "1 1 420px", minWidth: 380 }}
-          title="Адреса к доставке"
+          title="Свободные точки"
           extra={
             <Typography.Text type="secondary">
               {points.length} точ{points.length === 1 ? "ка" : "ек"}
             </Typography.Text>
           }
         >
-          <Table<DeliveryPoint>
-            rowKey="point_key"
+          <Table<DeliveryPointOut>
+            rowKey="customer_address_id"
             size="small"
             loading={candidates.isPending}
             dataSource={points}
             columns={columns}
             pagination={false}
             scroll={{ y: 480 }}
-            locale={{ emptyText: "На этот день все адреса разложены — или заказов нет" }}
+            locale={{ emptyText: "Все точки уже разложены по маршрутам — или точек нет" }}
             rowSelection={{
               selectedRowKeys: selected,
-              onChange: (keys) => setSelected(keys as string[]),
+              onChange: (keys) => setSelected(keys as number[]),
             }}
           />
         </Card>
 
         <div style={{ flex: "1 1 480px", minWidth: 420 }}>
-          {routes.data && routes.data.length === 0 && (
+          {openRoutes.length === 0 && !routes.isPending && (
             <Empty
-              description="На этот день маршрутов нет"
+              description="Маршрутов нет — соберите шаблон из точек слева"
               image={Empty.PRESENTED_IMAGE_SIMPLE}
             />
           )}
           <Space direction="vertical" size={16} style={{ width: "100%" }}>
-            {(routes.data ?? []).map((route) => (
+            {openRoutes.map((route) => (
               <RouteCard
                 key={route.delivery_route_id}
                 route={route}
                 canAdd={selected.length > 0}
                 busy={stops.isPending || patch.isPending}
                 onAdd={() => addSelected(route)}
-                onMove={(index, delta) => moveBlock(route, index, delta)}
-                onDrop={(pointKey) => dropBlock(route, pointKey)}
+                onMove={(index, delta) => moveStop(route, index, delta)}
+                onDrop={(addressId) => dropStop(route, addressId)}
                 onCancel={() =>
                   patch.mutate({
                     id: route.delivery_route_id,
@@ -335,13 +287,11 @@ function RouteCard({
   busy: boolean;
   onAdd: () => void;
   onMove: (index: number, delta: number) => void;
-  onDrop: (pointKey: string) => void;
+  onDrop: (addressId: number) => void;
   onCancel: () => void;
   onDelete: () => void;
 }) {
   const status = ROUTE_STATUS[route.status];
-  const done = route.stops_delivered + route.stops_failed;
-  const blocks = stopBlocks(route.stops);
   return (
     <Card
       size="small"
@@ -351,7 +301,7 @@ function RouteCard({
           <b>{route.name ?? "Без названия"}</b>
           <Tag color={status.color}>{status.label}</Tag>
           <Typography.Text type="secondary">
-            {done} из {route.stops_total}
+            точек: {route.stops_total}
           </Typography.Text>
         </Space>
       }
@@ -365,6 +315,7 @@ function RouteCard({
           {route.status !== "cancelled" && (
             <Popconfirm
               title="Отменить маршрут?"
+              description="Точки снова станут свободны для других маршрутов."
               okText="Отменить"
               cancelText="Нет"
               onConfirm={onCancel}
@@ -374,7 +325,6 @@ function RouteCard({
           )}
           <Popconfirm
             title="Удалить маршрут?"
-            description="Можно, пока в нём нет отметок."
             okText="Удалить"
             cancelText="Нет"
             onConfirm={onDelete}
@@ -391,18 +341,16 @@ function RouteCard({
       ) : (
         <Tag style={{ marginBottom: 8 }}>Курьер не назначен</Tag>
       )}
-      {blocks.length === 0 ? (
+      {route.stops.length === 0 ? (
         <Typography.Text type="secondary">
-          Пусто — отметьте адреса слева и добавьте их сюда.
+          Пусто — отметьте точки слева и добавьте их сюда.
         </Typography.Text>
       ) : (
         <List
           size="small"
-          dataSource={blocks}
-          renderItem={(block: DeliveryStopOut[], index: number) => {
-            const head = block[0];
-            const marked = block.some((s) => s.status !== "pending");
-            const key = head.point_key || `o:${head.order_id}`;
+          dataSource={route.stops}
+          renderItem={(stop: DeliveryStopOut, index: number) => {
+            const aid = stop.customer_address_id;
             return (
               <List.Item
                 actions={[
@@ -418,49 +366,37 @@ function RouteCard({
                     key="down"
                     size="small"
                     type="text"
-                    disabled={index === blocks.length - 1 || busy}
+                    disabled={index === route.stops.length - 1 || busy}
                     icon={<ArrowDownOutlined />}
                     onClick={() => onMove(index, 1)}
                   />,
-                  <Tooltip
+                  <Button
                     key="drop"
-                    title={marked ? "Точка уже отмечена" : "Убрать из маршрута"}
-                  >
-                    <Button
-                      size="small"
-                      type="text"
-                      danger
-                      disabled={marked || busy}
-                      icon={<CloseOutlined />}
-                      onClick={() => onDrop(key)}
-                    />
-                  </Tooltip>,
+                    size="small"
+                    type="text"
+                    danger
+                    disabled={busy || aid == null}
+                    icon={<CloseOutlined />}
+                    onClick={() => aid != null && onDrop(aid)}
+                  />,
                 ]}
               >
                 <Space direction="vertical" size={0} style={{ flex: 1 }}>
                   <Space size={6} wrap>
                     <b>{index + 1}.</b>
-                    <span>{head.delivery_address ?? "адрес не указан"}</span>
-                    {block.map((s) => {
-                      const st = STOP_STATUS[s.status];
-                      return s.status !== "pending" ? (
-                        <Tag key={s.delivery_stop_id} color={st.color}>
-                          {st.label}
-                        </Tag>
-                      ) : null;
-                    })}
+                    <span>
+                      {stop.label
+                        ? `${stop.label} · ${stop.delivery_address ?? ""}`
+                        : (stop.delivery_address ?? "адрес не указан")}
+                    </span>
                   </Space>
                   <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                    {head.customer_name ?? "—"}
-                    {block.map((s) =>
-                      s.order_number != null ? ` · №${s.order_number}` : "",
-                    ).join("")}
-                    {" · "}
-                    {itemsLine(block.flatMap((s) => s.items))}
+                    {stop.customer_name ?? "—"}
+                    {stop.items.length > 0 ? ` · ${itemsLine(stop.items)}` : ""}
                   </Typography.Text>
-                  {head.entrance_comment && (
+                  {stop.entrance_comment && (
                     <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                      Вход: {head.entrance_comment}
+                      Вход: {stop.entrance_comment}
                     </Typography.Text>
                   )}
                 </Space>

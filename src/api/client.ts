@@ -1,5 +1,7 @@
+import { reportClientError } from "@/telemetry";
+import { sessionEpoch, sessionSignal } from "@/session";
 /** Axios instance + shared API types. Every module api file imports from here. */
-import axios, { AxiosError } from "axios";
+import axios, { AxiosError, CanceledError } from "axios";
 
 import { useAuthStore } from "@/auth/store";
 
@@ -42,6 +44,7 @@ export async function fetchAllPages<T>(
 
 export const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || "/api",
+  timeout: 30_000,
 });
 
 /** Ссылка на файл, пригодная для `<img src>`.
@@ -57,49 +60,70 @@ export function mediaSrc(url: string | null | undefined): string | undefined {
   return `${base}${url.startsWith("/") ? "" : "/"}${url}`;
 }
 
+type SessionConfig = { _sessionEpoch?: number; _retried?: boolean };
 api.interceptors.request.use((config) => {
-  const { token, activeOrgId } = useAuthStore.getState();
-  if (token) config.headers.Authorization = `Bearer ${token}`;
-  if (activeOrgId != null) config.headers["X-Organization-Id"] = String(activeOrgId);
+  (config as typeof config & SessionConfig)._sessionEpoch = sessionEpoch();
+  config.signal ??= sessionSignal();
+  const state = useAuthStore.getState();
+  if (state.token) config.headers.Authorization = `Bearer ${state.token}`;
+  if (state.activeOrgId != null) config.headers["X-Organization-Id"] = String(state.activeOrgId);
   return config;
 });
 
-/** Single-flight refresh: concurrent 401s await the same rotation request. */
-let refreshInFlight: Promise<string | null> | null = null;
-
-async function tryRefresh(): Promise<string | null> {
+let refreshInFlight: { epoch: number; promise: Promise<string | null> } | null = null;
+async function tryRefresh(epoch: number): Promise<string | null> {
   const { refreshToken } = useAuthStore.getState();
   if (!refreshToken) return null;
-  try {
-    // Bare axios (not `api`): must not re-enter our own interceptors.
+  const rotate = async (): Promise<string | null> => {
+    // Re-read after obtaining the cross-tab lock: another tab may have rotated.
+    await useAuthStore.persist.rehydrate();
+    if (sessionEpoch() !== epoch) throw new CanceledError("Session changed");
+    if (useAuthStore.getState().refreshToken !== refreshToken)
+      return useAuthStore.getState().token;
+    try {
     const { data } = await axios.post<{ access_token: string; refresh_token: string | null }>(
       `${import.meta.env.VITE_API_URL || "/api"}/auth/refresh`,
-      { refresh_token: refreshToken },
-    );
-    useAuthStore.getState().setTokens(data.access_token, data.refresh_token);
+      { refresh_token: refreshToken }, { timeout: 15_000, signal: sessionSignal() });
+    if (sessionEpoch() !== epoch || useAuthStore.getState().refreshToken !== refreshToken)
+      throw new CanceledError("Session changed");
+    useAuthStore.getState().rotateTokens(data.access_token, data.refresh_token);
     return data.access_token;
-  } catch {
-    return null;
-  }
+  } catch (error) {
+    // A temporary failure must not destroy a valid refresh token or the cart.
+    if (axios.isAxiosError(error) && error.response?.status === 401) return null;
+    throw error;
+    }
+  };
+  // Secure-context Web Locks prevent two tabs consuming the same refresh token.
+  if (typeof navigator !== "undefined" && navigator.locks)
+    return navigator.locks.request("peka_web:refresh", rotate);
+  return rotate();
 }
 
-api.interceptors.response.use(undefined, async (error: AxiosError<ApiErrorBody>) => {
-  // Expired access token -> rotate via the refresh token and retry once;
-  // if rotation fails, drop the session (router redirects to /login).
-  // Auth endpoints are exempt so a wrong password doesn't "log out" the form.
-  const url = error.config?.url ?? "";
-  const cfg = error.config as (typeof error.config & { _retried?: boolean }) | undefined;
-  if (error.response?.status === 401 && !url.startsWith("/auth/")) {
-    if (cfg && !cfg._retried) {
-      refreshInFlight = refreshInFlight ?? tryRefresh().finally(() => {
-        refreshInFlight = null;
-      });
-      const newAccess = await refreshInFlight;
-      if (newAccess) {
-        cfg._retried = true;
-        // the request interceptor re-injects the (now updated) Authorization
-        return api.request(cfg);
+api.interceptors.response.use((response) => {
+  if ((response.config as typeof response.config & SessionConfig)._sessionEpoch !== sessionEpoch())
+    throw new CanceledError("Session changed");
+  return response;
+}, async (error: AxiosError<ApiErrorBody>) => {
+  if (error.code === "ERR_NETWORK" || error.code === "ECONNABORTED") reportClientError("network");
+  if (error.response && error.response.status >= 500)
+    reportClientError("server", error.response.status, error.response.headers["x-request-id"]);
+  const cfg = error.config as (typeof error.config & SessionConfig) | undefined;
+  if (!cfg) return Promise.reject(error);
+  const epoch = cfg._sessionEpoch;
+  if (epoch !== sessionEpoch()) throw new CanceledError("Session changed");
+  if (error.response?.status === 401 && !(cfg.url ?? "").startsWith("/auth/")) {
+    if (!cfg._retried) {
+      if (!refreshInFlight || refreshInFlight.epoch !== epoch) {
+        const flight = { epoch, promise: tryRefresh(epoch) };
+        refreshInFlight = flight;
+        void flight.promise.finally(() => {
+          if (refreshInFlight === flight) refreshInFlight = null;
+        }).catch(() => undefined);
       }
+      const access = await refreshInFlight.promise;
+      if (epoch !== sessionEpoch()) throw new CanceledError("Session changed");
+      if (access) { cfg._retried = true; return api.request(cfg); }
     }
     useAuthStore.getState().logout();
   }

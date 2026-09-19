@@ -3,6 +3,7 @@ import { PlusOutlined, DownloadOutlined, PrinterOutlined } from "@ant-design/ico
 import {
   App,
   Button,
+  Descriptions,
   Form,
   Input,
   Modal,
@@ -32,6 +33,7 @@ import {
 } from "@/api/requestTemplates";
 import type { RequestType } from "@/api/requests";
 import { useCan } from "@/auth/store";
+import EntityCardDrawer from "@/components/EntityCardDrawer";
 import { fmtDateTime } from "@/components/format";
 import RequestsSectionTabs from "@/pages/requests/RequestsSectionTabs";
 import { REQUEST_TYPE_LABELS, REQUEST_TYPE_OPTIONS } from "@/pages/requests/shared";
@@ -54,6 +56,7 @@ export default function RequestTemplatesPage() {
   const canManage = useCan("staff.manage");
   const [typeFilter, setTypeFilter] = useState<RequestType | undefined>();
   const [open, setOpen] = useState(false);
+  const [card, setCard] = useState<RequestTemplateOut | null>(null);
   const [form] = Form.useForm<UploadForm>();
 
   const query = useQuery({
@@ -204,6 +207,66 @@ export default function RequestTemplatesPage() {
         columns={columns}
         pagination={false}
         locale={{ emptyText: "Бланков пока нет" }}
+        rowClassName={() => "row-clickable"}
+        onRow={(row) => ({
+          onClick: (e) => {
+            if ((e.target as HTMLElement).closest("a,button")) return;
+            setCard(row);
+          },
+        })}
+      />
+
+      <EntityCardDrawer
+        open={card != null}
+        onClose={() => setCard(null)}
+        title={card?.title ?? "Бланк"}
+        editing={false}
+        extra={
+          card?.file ? (
+            <Space>
+              <Button
+                icon={<DownloadOutlined />}
+                onClick={() =>
+                  downloadAttachment(card.file!).catch((e) => message.error(errorMessage(e)))
+                }
+              >
+                Скачать
+              </Button>
+              {canPrintAttachment(card.file) && (
+                <Button
+                  icon={<PrinterOutlined />}
+                  onClick={() =>
+                    printAttachment(card.file!)
+                      .then((ok) => {
+                        if (!ok) message.warning("Разрешите всплывающие окна для печати");
+                      })
+                      .catch((e) => message.error(errorMessage(e)))
+                  }
+                >
+                  Печать
+                </Button>
+              )}
+            </Space>
+          ) : undefined
+        }
+        view={
+          card ? (
+            <Descriptions column={1} bordered size="small">
+              <Descriptions.Item label="Тип">
+                {card.request_type
+                  ? REQUEST_TYPE_LABELS[card.request_type] ?? card.request_type
+                  : "Общий бланк"}
+              </Descriptions.Item>
+              <Descriptions.Item label="Название">{card.title}</Descriptions.Item>
+              <Descriptions.Item label="Файл">
+                {card.file
+                  ? `${card.file.file_name} · ${fmtFileSize(card.file.size_bytes)}`
+                  : "—"}
+              </Descriptions.Item>
+              <Descriptions.Item label="Загружен">{fmtDateTime(card.created_at)}</Descriptions.Item>
+            </Descriptions>
+          ) : null
+        }
       />
 
       <Modal

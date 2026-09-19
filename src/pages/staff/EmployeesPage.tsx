@@ -17,10 +17,12 @@ import {
   PlusOutlined,
   SearchOutlined,
   UserDeleteOutlined,
+  UserOutlined,
 } from "@ant-design/icons";
 import {
   Alert,
   App,
+  Avatar,
   Button,
   Card,
   Col,
@@ -43,7 +45,7 @@ import type { Dayjs } from "dayjs";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { errorMessage } from "@/api/client";
+import { errorMessage, mediaSrc } from "@/api/client";
 import { getRequest } from "@/api/requests";
 import {
   createEmployee,
@@ -81,6 +83,11 @@ interface EmployeeFormValues {
   department_id?: number;
   manager_id?: number;
   personnel_no?: string;
+  iin?: string;
+  birth_date?: Dayjs;
+  address?: string;
+  emergency_contact_name?: string;
+  emergency_contact_phone?: string;
 }
 
 const STATUS_OPTIONS = [
@@ -208,6 +215,11 @@ export default function EmployeesPage() {
       department_id: row.department_id ?? undefined,
       manager_id: row.manager_id ?? undefined,
       personnel_no: row.personnel_no ?? undefined,
+      iin: row.iin ?? undefined,
+      birth_date: row.birth_date ? dayjs(row.birth_date) : undefined,
+      address: row.address ?? undefined,
+      emergency_contact_name: row.emergency_contact_name ?? undefined,
+      emergency_contact_phone: row.emergency_contact_phone ?? undefined,
     });
     setModalOpen(true);
   }
@@ -221,6 +233,11 @@ export default function EmployeesPage() {
       department_id: values.department_id ?? null,
       manager_id: values.manager_id ?? null,
       personnel_no: values.personnel_no || null,
+      iin: values.iin || null,
+      birth_date: values.birth_date ? values.birth_date.format("YYYY-MM-DD") : null,
+      address: values.address || null,
+      emergency_contact_name: values.emergency_contact_name || null,
+      emergency_contact_phone: values.emergency_contact_phone || null,
     };
     if (editing) {
       save.mutate(common);
@@ -246,6 +263,14 @@ export default function EmployeesPage() {
   }
 
   const columns: ColumnsType<EmployeeOut> = [
+    {
+      title: "",
+      dataIndex: "photo_url",
+      width: 56,
+      render: (_, row) => (
+        <Avatar src={mediaSrc(row.photo_url)} icon={<UserOutlined />} size={40} />
+      ),
+    },
     { title: "Таб. №", dataIndex: "personnel_no", width: 90, render: (v) => v || "—" },
     {
       title: "ФИО",
@@ -410,6 +435,7 @@ export default function EmployeesPage() {
           detail && (
             <Space direction="vertical" size={0}>
               <Space size={8}>
+                <Avatar src={mediaSrc(detail.photo_url)} icon={<UserOutlined />} />
                 <span>{detail.full_name}</span>
                 <EmployeeStatusTag status={detail.status} />
                 {detail.status === "active" && detail.presence !== "at_work" && (
@@ -474,6 +500,7 @@ export default function EmployeesPage() {
             canSeeRequests={canSeeRequests}
             canPayrollRead={canPayrollRead}
             onOpenRequest={(id) => setRequestId(id)}
+            onEmployeePatched={(row) => setDetailRow(row)}
           />
         )}
       </Drawer>
@@ -554,6 +581,25 @@ export default function EmployeesPage() {
             />
           </Form.Item>
           <Form.Item name="personnel_no" label="Табельный номер">
+            <Input />
+          </Form.Item>
+          <Form.Item
+            name="iin"
+            label="ИИН"
+            rules={[{ pattern: /^\d{12}$/, message: "12 цифр" }]}
+          >
+            <Input maxLength={12} placeholder="000000000000" />
+          </Form.Item>
+          <Form.Item name="birth_date" label="Дата рождения">
+            <DatePicker format="DD.MM.YYYY" style={{ width: "100%" }} />
+          </Form.Item>
+          <Form.Item name="address" label="Адрес">
+            <Input />
+          </Form.Item>
+          <Form.Item name="emergency_contact_name" label="Экстренный контакт">
+            <Input placeholder="ФИО" />
+          </Form.Item>
+          <Form.Item name="emergency_contact_phone" label="Телефон экстренного контакта">
             <Input />
           </Form.Item>
         </Form>

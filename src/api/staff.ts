@@ -52,6 +52,12 @@ export interface EmployeeOut {
   presence_until: string | null;
   termination_date: string | null;
   personnel_no: string | null;
+  photo_url: string | null;
+  iin: string | null;
+  birth_date: string | null;
+  address: string | null;
+  emergency_contact_name: string | null;
+  emergency_contact_phone: string | null;
   created_at: string;
 }
 
@@ -68,6 +74,11 @@ export interface EmployeeCreate {
   department_id?: number | null;
   manager_id?: number | null;
   personnel_no?: string | null;
+  iin?: string | null;
+  birth_date?: string | null;
+  address?: string | null;
+  emergency_contact_name?: string | null;
+  emergency_contact_phone?: string | null;
 }
 
 export interface EmployeeUpdate {
@@ -78,6 +89,11 @@ export interface EmployeeUpdate {
   department_id?: number | null;
   manager_id?: number | null;
   personnel_no?: string | null;
+  iin?: string | null;
+  birth_date?: string | null;
+  address?: string | null;
+  emergency_contact_name?: string | null;
+  emergency_contact_phone?: string | null;
 }
 
 export interface DepartmentListParams extends PageParams {
@@ -356,6 +372,84 @@ export async function deleteDisciplinary(
   disciplinaryId: number,
 ): Promise<void> {
   await api.delete(`/employees/${employeeId}/disciplinaries/${disciplinaryId}`);
+}
+
+export interface EmployeeKpiOut {
+  employee_kpi_id: number;
+  organization_id: number;
+  employee_id: number;
+  period_year: number;
+  period_month: number;
+  title: string;
+  target: string | null;
+  actual: string | null;
+  unit: string | null;
+  note: string | null;
+  created_at: string;
+}
+
+export interface EmployeeKpiCreate {
+  period_year: number;
+  period_month: number;
+  title: string;
+  target?: string | null;
+  actual?: string | null;
+  unit?: string | null;
+  note?: string | null;
+}
+
+export interface EmployeeKpiUpdate {
+  period_year?: number;
+  period_month?: number;
+  title?: string;
+  target?: string | null;
+  actual?: string | null;
+  unit?: string | null;
+  note?: string | null;
+}
+
+export async function listEmployeeKpis(employeeId: number): Promise<EmployeeKpiOut[]> {
+  const { data } = await api.get<EmployeeKpiOut[]>(`/employees/${employeeId}/kpis`);
+  return data;
+}
+
+export async function createEmployeeKpi(
+  employeeId: number,
+  body: EmployeeKpiCreate,
+): Promise<EmployeeKpiOut> {
+  const { data } = await api.post<EmployeeKpiOut>(`/employees/${employeeId}/kpis`, body);
+  return data;
+}
+
+export async function updateEmployeeKpi(
+  employeeId: number,
+  kpiId: number,
+  body: EmployeeKpiUpdate,
+): Promise<EmployeeKpiOut> {
+  const { data } = await api.patch<EmployeeKpiOut>(
+    `/employees/${employeeId}/kpis/${kpiId}`,
+    body,
+  );
+  return data;
+}
+
+export async function deleteEmployeeKpi(employeeId: number, kpiId: number): Promise<void> {
+  await api.delete(`/employees/${employeeId}/kpis/${kpiId}`);
+}
+
+export async function uploadEmployeePhoto(
+  employeeId: number,
+  file: File,
+): Promise<EmployeeOut> {
+  const form = new FormData();
+  form.append("file", file);
+  const { data } = await api.post<EmployeeOut>(`/employees/${employeeId}/photo`, form);
+  return data;
+}
+
+export async function deleteEmployeePhoto(employeeId: number): Promise<EmployeeOut> {
+  const { data } = await api.delete<EmployeeOut>(`/employees/${employeeId}/photo`);
+  return data;
 }
 
 export async function listDisciplinaries(params: {

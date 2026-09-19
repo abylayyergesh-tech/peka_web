@@ -36,8 +36,9 @@ export default function EntityCardDrawer({
   /** Доп. действия в шапке (деактивировать, удалить) — только в просмотре. */
   extra?: ReactNode;
   view: ReactNode;
-  form: ReactNode;
+  form?: ReactNode;
 }) {
+  const showEdit = Boolean(canEdit && form && onStartEdit);
   return (
     <Drawer
       open={open}
@@ -48,12 +49,12 @@ export default function EntityCardDrawer({
       extra={
         <Space>
           {!editing && extra}
-          {canEdit && !editing && onStartEdit && (
+          {showEdit && !editing && (
             <Button type="primary" icon={<EditOutlined />} onClick={onStartEdit}>
               Редактировать
             </Button>
           )}
-          {editing && (
+          {editing && form && (
             <>
               <Button onClick={onCancelEdit ?? onClose}>Отмена</Button>
               <Button type="primary" loading={savePending} onClick={onSave}>
@@ -64,7 +65,7 @@ export default function EntityCardDrawer({
         </Space>
       }
     >
-      {editing ? form : view}
+      {editing && form ? form : view}
     </Drawer>
   );
 }

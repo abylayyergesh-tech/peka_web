@@ -1,7 +1,7 @@
 /** Роли организации: список, создание/редактирование (имя + чекбоксы прав),
  * удаление не-встроенных ролей. Вся страница требует role.manage. */
 import { PlusOutlined } from "@ant-design/icons";
-import { App, Button, Checkbox, Form, Input, Modal, Popconfirm, Space, Table, Tag, Typography } from "antd";
+import { App, Button, Checkbox, Descriptions, Form, Input, Popconfirm, Space, Table, Tag, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -16,6 +16,7 @@ import {
 } from "@/api/admin";
 import { errorMessage } from "@/api/client";
 import { useCan } from "@/auth/store";
+import EntityCardDrawer from "@/components/EntityCardDrawer";
 import { capLabel, groupByPrefix, groupTitle, roleLabel } from "@/pages/admin/labels";
 
 interface RoleFormValues {
@@ -29,7 +30,8 @@ export default function RolesPage() {
   const queryClient = useQueryClient();
   const canRole = useCan("role.manage");
   const [editing, setEditing] = useState<RoleOut | null>(null);
-  const [modalOpen, setModalOpen] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
   const [form] = Form.useForm();
 
   const rolesQuery = useQuery({ queryKey: ["roles"], queryFn: listRoles });
@@ -48,9 +50,10 @@ export default function RolesPage() {
       };
       return editing ? updateRole(editing.role_id, body) : createRole(body);
     },
-    onSuccess: () => {
+    onSuccess: (row) => {
       message.success(editing ? "Роль сохранена" : "Роль создана");
-      setModalOpen(false);
+      setEditing(row);
+      setIsEditing(false);
       queryClient.invalidateQueries({ queryKey: ["roles"] });
       queryClient.invalidateQueries({ queryKey: ["member-capabilities"] });
     },
@@ -70,17 +73,29 @@ export default function RolesPage() {
   function openCreate() {
     setEditing(null);
     form.resetFields();
-    setModalOpen(true);
+    setIsEditing(true);
+    setOpen(true);
   }
 
-  function openEdit(row: RoleOut) {
-    setEditing(row);
+  function fillForm(row: RoleOut) {
     form.setFieldsValue({
       name: row.name,
       description: row.description ?? undefined,
       capabilities: row.capabilities,
     });
-    setModalOpen(true);
+  }
+
+  function openCard(row: RoleOut) {
+    setEditing(row);
+    fillForm(row);
+    setIsEditing(false);
+    setOpen(true);
+  }
+
+  function closeCard() {
+    setOpen(false);
+    setIsEditing(false);
+    setEditing(null);
   }
 
   // Встроенная роль owner обязана сохранять полный набор прав — чекбоксы блокируем.
@@ -139,19 +154,67 @@ export default function RolesPage() {
         pagination={false}
         columns={columns}
         rowClassName={() => "row-clickable"}
-        onRow={(row) => ({ onClick: () => canRole && openEdit(row) })}
+        onRow={(row) => ({ onClick: () => openCard(row) })}
       />
-      <Modal
-        title={editing ? "Изменить роль" : "Новая роль"}
-        open={modalOpen}
-        onCancel={() => setModalOpen(false)}
-        onOk={() => form.submit()}
-        okText="Сохранить"
-        cancelText="Отмена"
-        confirmLoading={save.isPending}
-        destroyOnClose
+      <EntityCardDrawer
+        open={open}
+        onClose={closeCard}
+        title={editing ? roleLabel(editing.name) : "Новая роль"}
         width={640}
-      >
+        canEdit={canRole && editing != null}
+        editing={isEditing}
+        onStartEdit={() => {
+          if (editing) fillForm(editing);
+          setIsEditing(true);
+        }}
+        onCancelEdit={() => {
+          if (editing) {
+            fillForm(editing);
+            setIsEditing(false);
+          } else {
+            closeCard();
+          }
+        }}
+        onSave={() => form.submit()}
+        savePending={save.isPending}
+        extra={
+          canRole && editing && !editing.is_builtin ? (
+            <Popconfirm
+              title="Удалить роль?"
+              okText="Удалить"
+              cancelText="Отмена"
+              onConfirm={() => remove.mutate(editing.role_id)}
+            >
+              <Button danger>Удалить</Button>
+            </Popconfirm>
+          ) : undefined
+        }
+        view={
+          editing ? (
+            <Descriptions column={1} bordered size="small">
+              <Descriptions.Item label="Название">
+                <Space>
+                  {roleLabel(editing.name)}
+                  {editing.is_builtin && <Tag color="blue">встроенная</Tag>}
+                </Space>
+              </Descriptions.Item>
+              <Descriptions.Item label="Описание">
+                {editing.description || "—"}
+              </Descriptions.Item>
+              <Descriptions.Item label="Права">
+                {editing.capabilities.length
+                  ? editing.capabilities
+                      .map((key) => {
+                        const cap = capsQuery.data?.find((c) => c.key === key);
+                        return cap ? capLabel(cap) : key;
+                      })
+                      .join(", ")
+                  : "—"}
+              </Descriptions.Item>
+            </Descriptions>
+          ) : null
+        }
+        form={
         <Form form={form} layout="vertical" onFinish={(v) => save.mutate(v)}>
           <Form.Item
             name="name"
@@ -188,7 +251,8 @@ export default function RolesPage() {
             </Typography.Text>
           )}
         </Form>
-      </Modal>
+        }
+      />
     </div>
   );
 }

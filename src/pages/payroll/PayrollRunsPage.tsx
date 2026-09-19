@@ -4,7 +4,7 @@ import { PlusOutlined } from "@ant-design/icons";
 import { App, Button, Form, InputNumber, Modal, Select, Space, Table, Tag } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { errorMessage } from "@/api/client";
@@ -29,6 +29,7 @@ import {
 
 export default function PayrollRunsPage() {
   const { message } = App.useApp();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const canManage = useCan("payroll.manage");
   const { limit, offset, tablePagination, reset } = usePagination(20);
@@ -155,6 +156,10 @@ export default function PayrollRunsPage() {
         dataSource={query.data?.items ?? []}
         columns={columns}
         pagination={tablePagination(query.data?.total)}
+        rowClassName={() => "row-clickable"}
+        onRow={(row) => ({
+          onClick: () => navigate(`/payroll/runs/${row.payroll_run_id}`),
+        })}
       />
 
       <Modal

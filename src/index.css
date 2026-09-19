@@ -78,9 +78,9 @@
   padding: 14px 16px;
   border-radius: 14px;
   background: #fff;
-  border: 1px solid var(--brand-green-soft);
+  border: 2px solid var(--brand-green);
   color: var(--brand-green);
-  font-weight: 600;
+  font-weight: 700;
   font-size: 15px;
   letter-spacing: -0.02em;
   line-height: 1.25;
@@ -129,11 +129,35 @@
   white-space: nowrap;
 }
 
-/* Насыщенность текста. Размер задаётся токеном `fontSize` в theme.ts, а веса
-   в antd нет — только `fontWeightStrong` для заголовков и шапок таблиц.
-   Компоненты antd вес не задают и наследуют его отсюда. */
-body {
-  font-weight: 500;
+/* Единый жирный шрифт на всём админском UI. Размер — токен `fontSize` в
+   theme.ts; веса у antd почти нет, компоненты наследуют отсюда. 700, а не 500:
+   на кремовом фоне и в плотных таблицах 500 читается как «серый обычный». */
+body,
+.ant-typography,
+.ant-btn,
+.ant-input,
+.ant-input-affix-wrapper,
+.ant-input-number,
+.ant-select,
+.ant-select-item,
+.ant-picker,
+.ant-form-item-label > label,
+.ant-table,
+.ant-table-thead > tr > th,
+.ant-table-tbody > tr > td,
+.ant-descriptions-item-label,
+.ant-descriptions-item-content,
+.ant-tag,
+.ant-menu,
+.ant-dropdown-menu-title-content {
+  font-weight: 700;
+}
+
+.page-lead,
+.row-card-meta,
+.ant-form-item-explain,
+.ant-typography-secondary {
+  font-weight: 600;
 }
 
 /* Раздел, внутри которого открыт текущий экран, должен быть виден на сайдбаре.
@@ -166,59 +190,107 @@ body {
   color: var(--brand-lime);
 }
 
-/* Строка-кнопка: там, где по строке щёлкают (список товаров, сотрудников,
-   заявления в карточке), она должна на это намекать. Курсор — потому что у antd
-   строки он остаётся текстовым, а подсветка своя, потому что штатная на кремовом
-   фоне почти не видна: разница между #fafafa и #ffffff на глаз не читается.
+/* Таблицы: каждая строка — карточка, как на /products/ingredients.
+   Жёлтое наведение на ВСЕХ строках данных, не только `.row-product`:
+   зелёный `.row-clickable` на креме сливался с фоном и выглядел «другим UI».
 
-   ДВА селектора и продублированный класс — не перестраховка. antd красит фон не
-   по `:hover`, а классом, который навешивает на ЯЧЕЙКУ скриптом
-   (`.ant-table-cell-row-hover`), и его селектор весит четыре класса — больше, чем
-   `tr.row-clickable:hover > td`. Одного правила с `:hover` не хватало, и своя
-   подсветка просто не показывалась. Дубль класса добавляет вес без `!important`
-   (тот же приём, что в правиле меню выше), а второй селектор перебивает и родной
-   механизм antd — какой бы из них ни сработал. */
-.ant-table-tbody > tr.row-clickable,
-.ant-table-tbody > tr.row-product {
-  cursor: pointer;
+   Рамки 2px зелёные. `border-collapse: separate` + `border-spacing`, иначе
+   соседние 2px слипаются в 1px и «жирный бордер» пропадает.
+
+   Два селектора на hover: antd красит не `:hover` у `tr`, а класс
+   `.ant-table-cell-row-hover` на ЯЧЕЙКЕ. Без второго правила заливка
+   не показывалась. `!important` бьёт и css-in-js antd, и локальные
+   `.expense-unpaid td` / `.menu-item-stopped td`. */
+.ant-table-wrapper .ant-table table {
+  border-collapse: separate;
+  border-spacing: 0 8px;
 }
 
-.ant-table-tbody > tr.row-clickable > td,
-.ant-table-tbody > tr.row-product > td {
-  padding-top: 14px;
-  padding-bottom: 14px;
-  border-top: none;
-  border-bottom: 8px solid var(--brand-cream);
-  transition: background 0.12s ease;
+.ant-table-wrapper .ant-table-thead > tr > th {
+  border-top: 2px solid var(--brand-green);
+  border-bottom: 2px solid var(--brand-green);
+  font-weight: 700;
+  color: var(--brand-green);
 }
 
-.ant-table-tbody > tr.row-clickable > td:first-child,
-.ant-table-tbody > tr.row-product > td:first-child {
+.ant-table-wrapper .ant-table-thead > tr > th:first-child {
+  border-left: 2px solid var(--brand-green);
   border-top-left-radius: 12px;
   border-bottom-left-radius: 12px;
 }
 
-.ant-table-tbody > tr.row-clickable > td:last-child,
-.ant-table-tbody > tr.row-product > td:last-child {
+.ant-table-wrapper .ant-table-thead > tr > th:last-child {
+  border-right: 2px solid var(--brand-green);
   border-top-right-radius: 12px;
   border-bottom-right-radius: 12px;
 }
 
-.ant-table-tbody > tr.row-clickable.row-clickable:hover > td,
-.ant-table-tbody > tr.row-clickable.row-clickable > td.ant-table-cell-row-hover {
-  background: var(--brand-green-soft);
+.ant-table-wrapper .ant-table-thead > tr > th:not(:first-child) {
+  border-left: none;
 }
 
-/* Строка ТОВАРА — в списке продуктов и в составе тех-карты. Жёлтая, а не
-   зелёная как прочие строки-кнопки: у товара наведение работает и как «сюда
-   можно щёлкнуть», и как отбивка строки от соседних — в списке на 20 позиций
-   глаз иначе теряет, на какой он строке. Один класс на оба места намеренно: и
-   там и там под курсором товар, и разный цвет читался бы как разный смысл.
+.ant-table-tbody > tr.ant-table-row {
+  cursor: default;
+}
 
-   Про два селектора и дубль класса — см. `.row-clickable` выше. */
-.ant-table-tbody > tr.row-product.row-product:hover > td,
-.ant-table-tbody > tr.row-product.row-product > td.ant-table-cell-row-hover {
-  background: var(--brand-lime-hover);
+.ant-table-tbody > tr.ant-table-row.row-clickable,
+.ant-table-tbody > tr.ant-table-row.row-product {
+  cursor: pointer;
+}
+
+.ant-table-tbody > tr.ant-table-row > td {
+  padding-top: 14px;
+  padding-bottom: 14px;
+  border-top: 2px solid var(--brand-green);
+  border-bottom: 2px solid var(--brand-green);
+  font-weight: 700;
+  transition: background 0.12s ease;
+}
+
+.ant-table-tbody > tr.ant-table-row > td:first-child {
+  border-left: 2px solid var(--brand-green);
+  border-top-left-radius: 12px;
+  border-bottom-left-radius: 12px;
+}
+
+.ant-table-tbody > tr.ant-table-row > td:last-child {
+  border-right: 2px solid var(--brand-green);
+  border-top-right-radius: 12px;
+  border-bottom-right-radius: 12px;
+}
+
+.ant-table-tbody > tr.ant-table-row > td:not(:first-child) {
+  border-left: none;
+}
+
+.ant-table-tbody > tr.ant-table-row:hover > td,
+.ant-table-tbody > tr.ant-table-row > td.ant-table-cell-row-hover {
+  background: var(--brand-lime-hover) !important;
+}
+
+.ant-table-tbody > tr.ant-table-placeholder > td,
+.ant-table-tbody > tr.ant-table-measure-row > td {
+  border: none;
+  cursor: default;
+  background: transparent !important;
+}
+
+/* Контролы и карточки — та же 2px зелёная рамка, что у строк таблицы.
+   Дубль класса: css-in-js antd вставляет стили после нашего файла. */
+.ant-input.ant-input,
+.ant-input-affix-wrapper.ant-input-affix-wrapper,
+.ant-input-number.ant-input-number,
+.ant-picker.ant-picker,
+.ant-select-selector,
+.ant-btn.ant-btn:not(.ant-btn-text):not(.ant-btn-link),
+.ant-card.ant-card,
+.ant-modal-content,
+.ant-drawer-content,
+.ant-descriptions-view,
+.ant-tag.ant-tag {
+  border-width: 2px;
+  border-style: solid;
+  border-color: var(--brand-green);
 }
 
 /* Личное дело: секции — плитки той же формы, что строки списка. */
@@ -270,7 +342,7 @@ body {
 
 .dossier-block {
   background: #fff;
-  border: 1px solid var(--brand-green-soft);
+  border: 2px solid var(--brand-green);
   border-radius: 14px;
   padding: 16px 18px;
 }

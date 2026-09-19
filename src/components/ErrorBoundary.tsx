@@ -1,3 +1,4 @@
+import { reportClientError } from "@/telemetry";
 /** Ловушка ошибок отрисовки: вместо белого экрана — понятный экран.
  *
  * React при ошибке в render размонтирует всё дерево, и без границы пользователь
@@ -31,8 +32,7 @@ export default class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo): void {
-    // В консоль — единственное место, где текст ошибки доступен поддержке:
-    // сборщика ошибок в проекте пока нет.
+    reportClientError("render");
     console.error("Необработанная ошибка отрисовки:", error, info.componentStack);
   }
 

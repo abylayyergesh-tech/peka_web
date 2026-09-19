@@ -1,4 +1,4 @@
-import { App, DatePicker, Form, Modal, Select, Space, Table, Tag, Typography } from "antd";
+import { App, DatePicker, Descriptions, Form, Modal, Select, Space, Table, Tag, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import dayjs from "dayjs";
 import type { Dayjs } from "dayjs";
@@ -16,6 +16,7 @@ import {
 } from "@/api/attendance";
 import { listEmployees } from "@/api/staff";
 import { fmtDateTime } from "@/components/format";
+import EntityCardDrawer from "@/components/EntityCardDrawer";
 import { usePagination } from "@/components/usePagination";
 import { fmtDuration, ShiftStatusTag } from "@/pages/staff/shared";
 
@@ -46,7 +47,9 @@ export default function AttendancePage() {
   const [statusFilter, setStatusFilter] = useState<string | undefined>();
   const [range, setRange] = useState<[Dayjs, Dayjs] | null>(null);
 
-  const [editing, setEditing] = useState<AttendanceShiftOut | null>(null);
+  const [card, setCard] = useState<AttendanceShiftOut | null>(null);
+  const [open, setOpen] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
   const [closing, setClosing] = useState<AttendanceShiftOut | null>(null);
   const [editForm] = Form.useForm<EditFormValues>();
   const [closeForm] = Form.useForm<CloseFormValues>();
@@ -86,14 +89,15 @@ export default function AttendancePage() {
 
   const saveEdit = useMutation({
     mutationFn: (values: EditFormValues) =>
-      updateShift(editing!.attendance_shift_id, {
+      updateShift(card!.attendance_shift_id, {
         work_location_id: values.work_location_id,
         clock_in_at: values.clock_in_at.toISOString(),
         clock_out_at: values.clock_out_at ? values.clock_out_at.toISOString() : null,
       }),
-    onSuccess: () => {
+    onSuccess: (row) => {
       message.success("Смена скорректирована");
-      setEditing(null);
+      setCard(row);
+      setIsEditing(false);
       queryClient.invalidateQueries({ queryKey: ["shifts"] });
     },
     onError: (e) => message.error(errorMessage(e)),
@@ -110,13 +114,25 @@ export default function AttendancePage() {
     onError: (e) => message.error(errorMessage(e)),
   });
 
-  function openEdit(row: AttendanceShiftOut) {
-    setEditing(row);
+  function fillForm(row: AttendanceShiftOut) {
     editForm.setFieldsValue({
       work_location_id: row.work_location_id,
       clock_in_at: dayjs(row.clock_in_at),
       clock_out_at: row.clock_out_at ? dayjs(row.clock_out_at) : undefined,
     });
+  }
+
+  function openCard(row: AttendanceShiftOut) {
+    setCard(row);
+    fillForm(row);
+    setIsEditing(false);
+    setOpen(true);
+  }
+
+  function closeCard() {
+    setOpen(false);
+    setIsEditing(false);
+    setCard(null);
   }
 
   function openClose(row: AttendanceShiftOut) {
@@ -243,19 +259,65 @@ export default function AttendancePage() {
         columns={columns}
         scroll={{ x: 900 }}
         rowClassName={() => "row-clickable"}
-        onRow={(row) => ({ onClick: () => openEdit(row) })}
+        onRow={(row) => ({ onClick: () => openCard(row) })}
       />
 
-      <Modal
-        title="Корректировка смены"
-        open={editing != null}
-        onCancel={() => setEditing(null)}
-        onOk={() => editForm.submit()}
-        okText="Сохранить"
-        cancelText="Отмена"
-        confirmLoading={saveEdit.isPending}
-        destroyOnClose
-      >
+      <EntityCardDrawer
+        open={open}
+        onClose={closeCard}
+        title={card?.employee_name || (card ? `#${card.employee_id}` : "Смена")}
+        canEdit={card != null}
+        editing={isEditing}
+        onStartEdit={() => {
+          if (card) fillForm(card);
+          setIsEditing(true);
+        }}
+        onCancelEdit={() => {
+          if (card) {
+            fillForm(card);
+            setIsEditing(false);
+          } else {
+            closeCard();
+          }
+        }}
+        onSave={() => editForm.submit()}
+        savePending={saveEdit.isPending}
+        extra={
+          card?.status === "open" ? (
+            <a
+              onClick={() => {
+                closeCard();
+                openClose(card);
+              }}
+            >
+              Закрыть смену
+            </a>
+          ) : undefined
+        }
+        view={
+          card ? (
+            <Descriptions column={1} bordered size="small">
+              <Descriptions.Item label="Сотрудник">
+                {card.employee_name || `#${card.employee_id}`}
+              </Descriptions.Item>
+              <Descriptions.Item label="Локация">
+                {card.work_location_name || `#${card.work_location_id}`}
+              </Descriptions.Item>
+              <Descriptions.Item label="Начало">{fmtDateTime(card.clock_in_at)}</Descriptions.Item>
+              <Descriptions.Item label="Конец">{fmtDateTime(card.clock_out_at)}</Descriptions.Item>
+              <Descriptions.Item label="Длительность">
+                {fmtDuration(card.worked_minutes)}
+              </Descriptions.Item>
+              <Descriptions.Item label="Статус">
+                <Space size={4}>
+                  <ShiftStatusTag status={card.status} />
+                  {card.is_edited && <Tag color="warning">изменена</Tag>}
+                </Space>
+              </Descriptions.Item>
+            </Descriptions>
+          ) : null
+        }
+        form={
         <Form
           form={editForm}
           layout="vertical"
@@ -287,7 +349,8 @@ export default function AttendancePage() {
             />
           </Form.Item>
         </Form>
-      </Modal>
+        }
+      />
 
       <Modal
         title="Закрытие смены"

@@ -2,10 +2,10 @@ import { PlusOutlined } from "@ant-design/icons";
 import {
   App,
   Button,
+  Descriptions,
   Form,
   Input,
   InputNumber,
-  Modal,
   Select,
   Space,
   Table,
@@ -18,6 +18,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { errorMessage } from "@/api/client";
 import { createUnit, listUnits, type Dimension, type UnitOut } from "@/api/catalog";
 import { useCan } from "@/auth/store";
+import EntityCardDrawer from "@/components/EntityCardDrawer";
 import { fmtDate, fmtQty } from "@/components/format";
 import { usePagination } from "@/components/usePagination";
 import { DIMENSION_LABELS, DIMENSION_OPTIONS } from "@/pages/catalog/labels";
@@ -37,7 +38,9 @@ export default function UnitsPage() {
   const { limit, offset, tablePagination } = usePagination();
   const units = useUnitOptions();
 
-  const [modalOpen, setModalOpen] = useState(false);
+  const [card, setCard] = useState<UnitOut | null>(null);
+  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
   const [form] = Form.useForm<UnitFormValues>();
   // A base unit (base_unit_id=null) must keep factor_to_base=1; the input is
   // only meaningful for derived units.
@@ -57,18 +60,33 @@ export default function UnitsPage() {
         factor_to_base:
           values.base_unit_id == null ? "1" : values.factor_to_base,
       }),
-    onSuccess: () => {
+    onSuccess: (row) => {
       message.success("Создано");
-      setModalOpen(false);
+      setCard(row);
+      setEditing(false);
       queryClient.invalidateQueries({ queryKey: ["units"] });
     },
     onError: (e) => message.error(errorMessage(e)),
   });
 
+  function openCard(row: UnitOut) {
+    setCard(row);
+    setEditing(false);
+    setOpen(true);
+  }
+
   function openCreate() {
+    setCard(null);
     form.resetFields();
     form.setFieldsValue({ factor_to_base: "1" });
-    setModalOpen(true);
+    setEditing(true);
+    setOpen(true);
+  }
+
+  function closeCard() {
+    setOpen(false);
+    setEditing(false);
+    setCard(null);
   }
 
   const columns: ColumnsType<UnitOut> = [
@@ -119,18 +137,36 @@ export default function UnitsPage() {
         dataSource={query.data?.items}
         pagination={tablePagination(query.data?.total)}
         columns={columns}
+        rowClassName={() => "row-clickable"}
+        onRow={(row) => ({ onClick: () => openCard(row) })}
       />
 
-      <Modal
-        title="Новая единица"
-        open={modalOpen}
-        onCancel={() => setModalOpen(false)}
-        onOk={() => form.submit()}
-        okText="Сохранить"
-        cancelText="Отмена"
-        confirmLoading={save.isPending}
-        destroyOnClose
-      >
+      <EntityCardDrawer
+        open={open}
+        onClose={closeCard}
+        title={card?.name ?? "Новая единица"}
+        editing={editing}
+        onCancelEdit={closeCard}
+        onSave={() => form.submit()}
+        savePending={save.isPending}
+        view={
+          card ? (
+            <Descriptions column={1} bordered size="small">
+              <Descriptions.Item label="Название">{card.name}</Descriptions.Item>
+              <Descriptions.Item label="Размерность">
+                <Tag>{DIMENSION_LABELS[card.dimension]}</Tag>
+              </Descriptions.Item>
+              <Descriptions.Item label="Базовая ед.">
+                {units.nameOf(card.base_unit_id)}
+              </Descriptions.Item>
+              <Descriptions.Item label="Коэффициент">
+                {fmtQty(card.factor_to_base)}
+              </Descriptions.Item>
+              <Descriptions.Item label="Создана">{fmtDate(card.created_at)}</Descriptions.Item>
+            </Descriptions>
+          ) : null
+        }
+        form={
         <Form
           form={form}
           layout="vertical"
@@ -186,7 +222,8 @@ export default function UnitsPage() {
             />
           </Form.Item>
         </Form>
-      </Modal>
+        }
+      />
     </div>
   );
 }

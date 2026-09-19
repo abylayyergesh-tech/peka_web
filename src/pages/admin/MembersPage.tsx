@@ -45,6 +45,7 @@ import {
   type InviteOut,
 } from "@/api/invites";
 import { useAuthStore, useCan } from "@/auth/store";
+import EntityCardDrawer from "@/components/EntityCardDrawer";
 import { fmtDateTime } from "@/components/format";
 import MemberCapabilitiesDrawer from "@/pages/admin/MemberCapabilitiesDrawer";
 import { roleLabel } from "@/pages/admin/labels";
@@ -68,6 +69,7 @@ export default function MembersPage() {
   const [roleTarget, setRoleTarget] = useState<MemberOut | null>(null);
   const [drawerMember, setDrawerMember] = useState<MemberOut | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [card, setCard] = useState<MemberOut | null>(null);
   /** Выданный пароль: показывается один раз, поэтому живёт в модалке. */
   const [issued, setIssued] = useState<MemberPasswordOut | null>(null);
   const [addForm] = Form.useForm();
@@ -236,7 +238,7 @@ export default function MembersPage() {
       width: 330,
       render: (_, row) => (
         <Space size="middle">
-          {canMember && <a onClick={() => openChangeRole(row)}>Сменить роль</a>}
+          {canMember && <a onClick={(e) => { e.stopPropagation(); openChangeRole(row); }}>Сменить роль</a>}
           {canMember && (
             <Popconfirm
               title="Выдать новый пароль?"
@@ -245,10 +247,10 @@ export default function MembersPage() {
               cancelText="Отмена"
               onConfirm={() => passwordReset.mutate(row)}
             >
-              <a>Пароль</a>
+              <a onClick={(e) => e.stopPropagation()}>Пароль</a>
             </Popconfirm>
           )}
-          {canRole && <a onClick={() => openDrawer(row)}>Права</a>}
+          {canRole && <a onClick={(e) => { e.stopPropagation(); openDrawer(row); }}>Права</a>}
           {canMember && (
             <Popconfirm
               title="Удалить участника?"
@@ -256,7 +258,7 @@ export default function MembersPage() {
               cancelText="Отмена"
               onConfirm={() => remove.mutate(row.membership_id)}
             >
-              <a>Удалить</a>
+              <a onClick={(e) => e.stopPropagation()}>Удалить</a>
             </Popconfirm>
           )}
         </Space>
@@ -333,6 +335,8 @@ export default function MembersPage() {
         dataSource={membersQuery.data}
         pagination={{ pageSize: 20, hideOnSinglePage: true }}
         columns={columns}
+        rowClassName={() => "row-clickable"}
+        onRow={(row) => ({ onClick: () => setCard(row) })}
       />
 
       {canMember && (
@@ -349,6 +353,29 @@ export default function MembersPage() {
           />
         </>
       )}
+
+      <EntityCardDrawer
+        open={card != null}
+        onClose={() => setCard(null)}
+        title={card?.full_name || card?.email || "Участник"}
+        editing={false}
+        extra={
+          card && canRole ? (
+            <Button onClick={() => { setCard(null); openDrawer(card); }}>Права</Button>
+          ) : undefined
+        }
+        view={
+          card ? (
+            <Descriptions column={1} bordered size="small">
+              <Descriptions.Item label="Имя">{card.full_name || "—"}</Descriptions.Item>
+              <Descriptions.Item label="Email">{card.email || "—"}</Descriptions.Item>
+              <Descriptions.Item label="Роль">
+                <Tag>{roleLabel(card.role)}</Tag>
+              </Descriptions.Item>
+            </Descriptions>
+          ) : null
+        }
+      />
 
       <Modal
         title="Добавить участника"

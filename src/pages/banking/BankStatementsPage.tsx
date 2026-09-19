@@ -8,7 +8,7 @@ import { InboxOutlined, WarningOutlined } from "@ant-design/icons";
 import { Alert, App, Space, Table, Tag, Tooltip, Upload } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { errorCode, errorMessage } from "@/api/client";
@@ -19,6 +19,7 @@ import { usePagination } from "@/components/usePagination";
 
 export default function BankStatementsPage() {
   const { message } = App.useApp();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const canManage = useCan("payment.manage");
   const { limit, offset, tablePagination } = usePagination();
@@ -185,6 +186,10 @@ export default function BankStatementsPage() {
         pagination={tablePagination(query.data?.total)}
         columns={columns}
         locale={{ emptyText: "Выписок пока нет" }}
+        rowClassName={() => "row-clickable"}
+        onRow={(row) => ({
+          onClick: () => navigate(`/bank-statements/${row.bank_statement_id}`),
+        })}
       />
     </div>
   );
