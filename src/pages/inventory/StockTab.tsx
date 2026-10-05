@@ -7,7 +7,7 @@
  */
 import { SearchOutlined } from "@ant-design/icons";
 import {
-  Card, Col, Input, Row, Select, Space, Statistic, Switch, Table, Tag, Tooltip,
+  Card, Col, Input, Row, Select, Space, Switch, Table, Tag, Tooltip,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useMemo, useState } from "react";
@@ -18,6 +18,7 @@ import { listUnits } from "@/api/catalog";
 import { fetchAllPages } from "@/api/client";
 import { getStock, type StockRow } from "@/api/reports";
 import { fmtMoney, fmtQty } from "@/components/format";
+import Stat from "@/components/Stat";
 import {
   nameOf,
   pickMainWarehouse,
@@ -219,17 +220,17 @@ export default function StockTab() {
       <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
         <Col xs={12} md={8}>
           <Card size="small" loading={query.isPending}>
-            <Statistic title="Позиций" value={totals.positions} />
+            <Stat title="Позиций" value={totals.positions} />
           </Card>
         </Col>
         <Col xs={12} md={8}>
           <Card size="small" loading={query.isPending}>
-            <Statistic title="Стоимость запасов" value={fmtMoney(totals.value)} />
+            <Stat title="Стоимость запасов" value={totals.value} format="money" />
           </Card>
         </Col>
         <Col xs={12} md={8}>
           <Card size="small" loading={query.isPending}>
-            <Statistic
+            <Stat
               title="Минусовых остатков"
               value={totals.negatives}
               valueStyle={totals.negatives > 0 ? { color: "#cf1322" } : undefined}

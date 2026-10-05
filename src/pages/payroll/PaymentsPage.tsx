@@ -15,7 +15,6 @@ import {
   Row,
   Select,
   Space,
-  Statistic,
   Table,
   Tag,
 } from "antd";
@@ -37,6 +36,7 @@ import { listEmployees } from "@/api/staff";
 import { useCan } from "@/auth/store";
 import { fmtDate } from "@/components/format";
 import { usePagination } from "@/components/usePagination";
+import Stat from "@/components/Stat";
 import {
   PAYMENT_KIND_LABELS,
   PAYMENT_KIND_OPTIONS,
@@ -205,17 +205,17 @@ export default function PaymentsPage() {
       <Row gutter={16} style={{ marginBottom: 16 }}>
         <Col>
           <Card size="small">
-            <Statistic title="Всего на странице" value={fmtTenge(pageTotal)} />
+            <Stat title="Всего на странице" value={pageTotal} format="whole" />
           </Card>
         </Col>
         <Col>
           <Card size="small">
-            <Statistic title="На карту" value={fmtTenge(cardTotal)} />
+            <Stat title="На карту" value={cardTotal} format="whole" />
           </Card>
         </Col>
         <Col>
           <Card size="small">
-            <Statistic title="Наличными" value={fmtTenge(cashTotal)} />
+            <Stat title="Наличными" value={cashTotal} format="whole" />
           </Card>
         </Col>
       </Row>

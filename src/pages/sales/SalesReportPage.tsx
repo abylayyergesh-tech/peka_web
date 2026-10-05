@@ -1,7 +1,7 @@
 /** /reports/sales — sales report for a period (cap report.read):
  * totals + payment-method breakdown from SalesReport. */
 import { QuestionCircleOutlined } from "@ant-design/icons";
-import { Card, Col, DatePicker, Result, Row, Space, Statistic, Table, Tooltip } from "antd";
+import { Card, Col, DatePicker, Result, Row, Space, Table, Tooltip } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import dayjs, { type Dayjs } from "dayjs";
 import { useState } from "react";
@@ -10,7 +10,8 @@ import { useQuery } from "@tanstack/react-query";
 import { errorMessage } from "@/api/client";
 import { reportSales } from "@/api/sales";
 import { useCan } from "@/auth/store";
-import { Money, fmtMoney } from "@/components/format";
+import { Money } from "@/components/format";
+import Stat from "@/components/Stat";
 import { paymentMethodLabel } from "@/pages/sales/statusTags";
 
 const { RangePicker } = DatePicker;
@@ -103,27 +104,27 @@ export default function SalesReportPage() {
       <Row gutter={16} style={{ marginBottom: 16 }}>
         <Col xs={12} md={6}>
           <Card size="small" loading={query.isPending}>
-            <Statistic title="Чеков" value={query.data?.check_count ?? 0} />
+            <Stat title="Чеков" value={query.data?.check_count ?? 0} />
           </Card>
         </Col>
         <Col xs={12} md={6}>
           <Card size="small" loading={query.isPending}>
-            <Statistic title="Продажи (до скидок)" value={fmtMoney(query.data?.gross)} />
+            <Stat title="Продажи (до скидок)" value={query.data?.gross} format="money" />
           </Card>
         </Col>
         <Col xs={12} md={6}>
           <Card size="small" loading={query.isPending}>
-            <Statistic title="Скидки" value={fmtMoney(query.data?.discount_total)} />
+            <Stat title="Скидки" value={query.data?.discount_total} format="money" />
           </Card>
         </Col>
         <Col xs={12} md={6}>
           <Card size="small" loading={query.isPending}>
-            <Statistic title="Доставка (услуга)" value={fmtMoney(query.data?.delivery_total)} />
+            <Stat title="Доставка (услуга)" value={query.data?.delivery_total} format="money" />
           </Card>
         </Col>
         <Col xs={12} md={6}>
           <Card size="small" loading={query.isPending}>
-            <Statistic title="Выручка" value={fmtMoney(query.data?.revenue)} />
+            <Stat title="Выручка" value={query.data?.revenue} format="money" />
           </Card>
         </Col>
       </Row>

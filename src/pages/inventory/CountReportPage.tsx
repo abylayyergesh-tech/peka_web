@@ -20,7 +20,7 @@
  *  У ЗАКРЫТОЙ сессии расхождения берутся из проводок, а не пересчитываются по
  *  листу: после закрытия остатки уже равны факту, и «факт минус остаток» дал бы
  *  нули. Столбец «учёт был» тоже поэтому берётся из журнала. */
-import { Alert, Card, Col, Descriptions, Row, Segmented, Space, Statistic, Table, Tag, Tooltip } from "antd";
+import { Alert, Card, Col, Descriptions, Row, Segmented, Space, Table, Tag, Tooltip } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
@@ -34,6 +34,7 @@ import {
   type CountReportWarehouse,
 } from "@/api/counting";
 import { Money, fmtDate, fmtDateTime, fmtQty } from "@/components/format";
+import Stat from "@/components/Stat";
 import {
   RowStatusTag, SessionStatusTag, movementsHint, signed,
 } from "@/pages/inventory/countShared";
@@ -373,7 +374,7 @@ export default function CountReportPage() {
           <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
             <Col xs={12} md={6}>
               <Card size="small">
-                <Statistic
+                <Stat
                   title="Посчитано"
                   value={`${report.totals.counted} / ${report.totals.lines_total}`}
                 />
@@ -381,10 +382,10 @@ export default function CountReportPage() {
             </Col>
             <Col xs={12} md={6}>
               <Card size="small">
-                <Statistic
+                <Stat
                   title="Недостача"
-                  formatter={() => <Money value={report.totals.shortage_value} />}
                   value={report.totals.shortage_value}
+                  format="money"
                   valueStyle={{ color: "#cf1322" }}
                   suffix={
                     <span style={{ fontSize: 13, color: "#999" }}>
@@ -396,10 +397,10 @@ export default function CountReportPage() {
             </Col>
             <Col xs={12} md={6}>
               <Card size="small">
-                <Statistic
+                <Stat
                   title="Излишек"
-                  formatter={() => <Money value={report.totals.surplus_value} />}
                   value={report.totals.surplus_value}
+                  format="money"
                   valueStyle={{ color: "#389e0d" }}
                   suffix={
                     <span style={{ fontSize: 13, color: "#999" }}>
@@ -411,10 +412,10 @@ export default function CountReportPage() {
             </Col>
             <Col xs={12} md={6}>
               <Card size="small">
-                <Statistic
+                <Stat
                   title="Итог по деньгам"
-                  formatter={() => <Money value={report.totals.net_value} />}
                   value={report.totals.net_value}
+                  format="money"
                 />
               </Card>
             </Col>

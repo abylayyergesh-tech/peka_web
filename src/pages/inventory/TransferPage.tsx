@@ -24,7 +24,7 @@
 import { ReloadOutlined, SearchOutlined, SwapOutlined } from "@ant-design/icons";
 import {
   Alert, App, Button, Card, Col, DatePicker, Input, InputNumber, Modal,
-  Popconfirm, Row, Select, Space, Statistic, Switch, Table, Typography,
+  Popconfirm, Row, Select, Space, Switch, Table, Typography,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import dayjs, { type Dayjs } from "dayjs";
@@ -42,6 +42,7 @@ import { useCan } from "@/auth/store";
 import { fmtQty } from "@/components/format";
 import { nameOf, useProductsLookup, useWarehousesLookup } from "@/pages/inventory/shared";
 import { useUnsavedChanges } from "@/components/useUnsavedChanges";
+import Stat from "@/components/Stat";
 
 /** Введённое по строке: сколько увезти. null — строку не трогали. */
 type Moving = Record<number, number | null>;
@@ -328,12 +329,12 @@ export default function TransferPage() {
           <Row gutter={16} style={{ marginBottom: 16 }}>
             <Col xs={12} md={6}>
               <Card size="small">
-                <Statistic title="Позиций к перемещению" value={picked.length} />
+                <Stat title="Позиций к перемещению" value={picked.length} />
               </Card>
             </Col>
             <Col xs={12} md={6}>
               <Card size="small">
-                <Statistic
+                <Stat
                   title="Куда"
                   value={
                     targetId == null ? "не выбрано" : nameOf(warehouses.byId, targetId)

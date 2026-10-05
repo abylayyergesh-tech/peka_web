@@ -13,7 +13,7 @@ import { useQuery } from "@tanstack/react-query";
 import { listProductCategories } from "@/api/catalog";
 import { errorMessage } from "@/api/client";
 import { getTrialBalance, type TrialBalanceRow } from "@/api/reports";
-import { fmtMoney, fmtQty } from "@/components/format";
+import { NumText, fmtMoney, fmtQty } from "@/components/format";
 import { ReportRangePicker, useReportRange } from "@/pages/finance/reportRange";
 import { useWarehousesLookup } from "@/pages/inventory/shared";
 
@@ -70,8 +70,8 @@ function signedQty(value: string | undefined) {
   if (isZero(value)) return "";
   const n = Number(value);
   return (
-    <span style={{ color: n < 0 ? "#cf1322" : undefined, whiteSpace: "nowrap" }}>
-      {fmtQty(value)}
+    <span className="num" style={{ color: n < 0 ? "#cf1322" : undefined }}>
+      <NumText text={fmtQty(value)} />
     </span>
   );
 }
@@ -80,8 +80,8 @@ function signedMoney(value: string | undefined) {
   if (isZero(value)) return "";
   const n = Number(value);
   return (
-    <span style={{ color: n < 0 ? "#cf1322" : undefined, whiteSpace: "nowrap" }}>
-      {fmtMoney(value)}
+    <span className="num" style={{ color: n < 0 ? "#cf1322" : undefined }}>
+      <NumText text={fmtMoney(value)} />
     </span>
   );
 }

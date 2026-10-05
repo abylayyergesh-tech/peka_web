@@ -16,7 +16,7 @@
 import { CheckCircleOutlined, DeleteOutlined, PlusOutlined, ReloadOutlined, SaveOutlined } from "@ant-design/icons";
 import {
   Alert, App, Button, Card, Col, DatePicker, Input, InputNumber, Popconfirm, Row,
-  Select, Space, Statistic, Table, Tabs, Tag, Typography,
+  Select, Space, Table, Tabs, Tag, Typography,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import dayjs, { type Dayjs } from "dayjs";
@@ -33,6 +33,7 @@ import { useTabParam } from "@/components/useTabParam";
 import { fmtQty } from "@/components/format";
 import { useProductsLookup, useWarehousesLookup } from "@/pages/inventory/shared";
 import { useUnsavedChanges } from "@/components/useUnsavedChanges";
+import Stat from "@/components/Stat";
 
 const RAW_WH_KEY = "peka.productionPlan.warehouseId";
 const FIN_WH_KEY = "peka.productionPlan.targetWarehouseId";
@@ -526,22 +527,22 @@ function DayTab() {
       <Row gutter={16} style={{ marginBottom: 16 }}>
         <Col xs={12} md={6}>
           <Card size="small">
-            <Statistic title="Позиций в листе" value={totals.positions} />
+            <Stat title="Позиций в листе" value={totals.positions} />
           </Card>
         </Col>
         <Col xs={12} md={6}>
           <Card size="small">
-            <Statistic title="С прогнозом" value={totals.withPlan} />
+            <Stat title="С прогнозом" value={totals.withPlan} />
           </Card>
         </Col>
         <Col xs={12} md={6}>
           <Card size="small">
-            <Statistic title="С фактом" value={totals.withActual} />
+            <Stat title="С фактом" value={totals.withActual} />
           </Card>
         </Col>
         <Col xs={12} md={6}>
           <Card size="small">
-            <Statistic
+            <Stat
               title="Отклонений"
               value={totals.off}
               valueStyle={totals.off ? { color: "#cf1322" } : undefined}

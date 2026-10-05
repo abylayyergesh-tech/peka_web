@@ -9,7 +9,7 @@ import {
 } from "@ant-design/icons";
 import {
   Alert, App, Button, Card, Col, Popconfirm, Row, Segmented, Select, Space,
-  Statistic, Table, Tag, Tooltip, Typography,
+  Table, Tag, Tooltip, Typography,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useState } from "react";
@@ -27,6 +27,7 @@ import { useCan } from "@/auth/store";
 import AttachmentsPanel from "@/components/AttachmentsPanel";
 import { Money, fmtDate, fmtDateTime } from "@/components/format";
 import { usePagination } from "@/components/usePagination";
+import Stat from "@/components/Stat";
 import { useSupplierRefs } from "@/pages/procurement/refData";
 
 const STATUS_LABELS: Record<TxStatus, string> = {
@@ -308,22 +309,22 @@ export default function BankStatementDetailPage() {
       <Row gutter={16} style={{ marginBottom: 16 }}>
         <Col xs={12} md={6}>
           <Card size="small" loading={summary.isPending}>
-            <Statistic title="На разбор" value={bucket("new")?.count ?? 0} />
+            <Stat title="На разбор" value={bucket("new")?.count ?? 0} />
           </Card>
         </Col>
         <Col xs={12} md={6}>
           <Card size="small" loading={summary.isPending}>
-            <Statistic title="Разнесено" value={bucket("matched")?.count ?? 0} />
+            <Stat title="Разнесено" value={bucket("matched")?.count ?? 0} />
           </Card>
         </Col>
         <Col xs={12} md={6}>
           <Card size="small" loading={statement.isPending}>
-            <Statistic title="Списано всего" value={st?.debit_total ?? "0"} />
+            <Stat title="Списано всего" value={st?.debit_total ?? "0"} format="money" />
           </Card>
         </Col>
         <Col xs={12} md={6}>
           <Card size="small" loading={statement.isPending}>
-            <Statistic title="Поступило всего" value={st?.credit_total ?? "0"} />
+            <Stat title="Поступило всего" value={st?.credit_total ?? "0"} format="money" />
           </Card>
         </Col>
       </Row>

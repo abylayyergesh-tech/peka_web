@@ -2,6 +2,8 @@
  * смен и месяцев. */
 import { Tag, Tooltip } from "antd";
 
+import { NumText } from "@/components/format";
+
 import type {
   LegalKind,
   PayType,
@@ -184,21 +186,21 @@ export function WarningTag({ warning }: { warning: string | null }) {
   return <Tag color={isIp ? "default" : "red"}>{warning}</Tag>;
 }
 
-/** Отрицательные суммы (перерасход по авансу) — красным, как в шаблоне. */
+/** Отрицательные суммы (перерасход по авансу) — красным, как в шаблоне.
+ *  Класс `num`: в широкой ведомости (фиксированные колонки) крупная сумма
+ *  переносится по разрядам, а не ложится на соседнюю колонку. */
 export function SignedMoney({ value }: { value: string | null | undefined }) {
   const n = Number(value ?? 0);
   const negative = n < 0;
   return (
-    <span
-      style={{
-        whiteSpace: "nowrap",
-        fontVariantNumeric: "tabular-nums",
-        color: negative ? "#cf1322" : undefined,
-      }}
-    >
-      {value == null || value === ""
-        ? "—"
-        : n.toLocaleString("ru-RU", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+    <span className="num" style={{ color: negative ? "#cf1322" : undefined }}>
+      {value == null || value === "" ? (
+        "—"
+      ) : (
+        <NumText
+          text={n.toLocaleString("ru-RU", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+        />
+      )}
     </span>
   );
 }

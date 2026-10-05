@@ -35,7 +35,8 @@ import { useCan } from "@/auth/store";
 import { errorMessage } from "@/api/client";
 import { getProduct, getProductNutrition, type ProductOut } from "@/api/catalog";
 import { getStock, getTechCard, type TechCardRow } from "@/api/reports";
-import { Money, fmtDate, fmtQty } from "@/components/format";
+import { FitNumber } from "@/components/FitNumber";
+import { Money, fmtDate, fmtMoney, fmtQty } from "@/components/format";
 import {
   ITEM_TYPE_COLORS,
   ITEM_TYPE_LABELS,
@@ -278,15 +279,15 @@ export default function ProductCardDrawer({
             <div className="dossier-stat-grid">
               <div className="dossier-stat">
                 <span className="dossier-stat-label">Средняя по остатку</span>
-                <div className="dossier-stat-value">
-                  <Money value={card.avg_cost ?? "0"} />
-                </div>
+                <FitNumber className="dossier-stat-value">
+                  {fmtMoney(card.avg_cost ?? "0")}
+                </FitNumber>
               </div>
               <div className="dossier-stat">
                 <span className="dossier-stat-label">Последний приход</span>
-                <div className="dossier-stat-value">
-                  <Money value={card.last_cost_price ?? null} />
-                </div>
+                <FitNumber className="dossier-stat-value">
+                  {fmtMoney(card.last_cost_price ?? null)}
+                </FitNumber>
               </div>
               {isComposite && (
                 <>
@@ -294,13 +295,13 @@ export default function ProductCardDrawer({
                     <span className="dossier-stat-label">
                       Тех-карта / 1 {unitName(card.base_unit_id)}
                     </span>
-                    <div className="dossier-stat-value">
-                      {card.recipe_cost != null ? (
-                        <Money value={card.recipe_cost} />
-                      ) : (
-                        <span style={{ color: "#bfbfbf" }}>—</span>
-                      )}
-                    </div>
+                    {card.recipe_cost != null ? (
+                      <FitNumber className="dossier-stat-value">
+                        {fmtMoney(card.recipe_cost)}
+                      </FitNumber>
+                    ) : (
+                      <div className="dossier-stat-value" style={{ color: "#bfbfbf" }}>—</div>
+                    )}
                   </div>
                   <div className="dossier-stat">
                     <span className="dossier-stat-label">
@@ -312,7 +313,7 @@ export default function ProductCardDrawer({
                       {techCard.isPending ? (
                         <Spin size="small" />
                       ) : techCard.data?.totals.cost != null ? (
-                        <Money value={techCard.data.totals.cost} />
+                        <FitNumber>{fmtMoney(techCard.data.totals.cost)}</FitNumber>
                       ) : (
                         <span style={{ color: "#bfbfbf" }}>—</span>
                       )}

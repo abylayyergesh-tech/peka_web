@@ -21,7 +21,6 @@ import {
   Result,
   Row,
   Space,
-  Statistic,
   Table,
   Tag,
   Tooltip,
@@ -40,6 +39,7 @@ import {
 } from "@/api/companies";
 import { useCan } from "@/auth/store";
 import { Money } from "@/components/format";
+import Stat from "@/components/Stat";
 import { NO_ENTITY_FILTER } from "@/pages/finance/companyEntities";
 
 /** Значение фильтра для ссылок «провалиться»: id юрлица либо `none`. */
@@ -227,31 +227,27 @@ export default function CompanyMoneyPage() {
       <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
         <Col xs={24} md={8}>
           <Card size="small">
-            <Statistic
+            <Stat
               title="Должны мы (кредиторка)"
-              valueRender={() => (
-                <Money value={query.data?.total_payables ?? "0"} />
-              )}
-              value={0}
+              value={query.data?.total_payables ?? "0"}
+              format="money"
               valueStyle={{ color: "#cf1322" }}
             />
           </Card>
         </Col>
         <Col xs={24} md={8}>
           <Card size="small">
-            <Statistic
+            <Stat
               title="Должны нам (дебиторка)"
-              valueRender={() => (
-                <Money value={query.data?.total_receivables ?? "0"} />
-              )}
-              value={0}
+              value={query.data?.total_receivables ?? "0"}
+              format="money"
               valueStyle={{ color: "#389e0d" }}
             />
           </Card>
         </Col>
         <Col xs={24} md={8}>
           <Card size="small">
-            <Statistic
+            <Stat
               title="Юр. лиц в отчёте"
               value={rows.filter((r) => r.company_entity_id != null).length}
             />

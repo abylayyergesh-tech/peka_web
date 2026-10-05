@@ -22,7 +22,7 @@ import {
 } from "@ant-design/icons";
 import {
   Alert, App, Button, Card, Checkbox, Col, Descriptions, Input, InputNumber, Modal,
-  Popconfirm, Row, Segmented, Select, Space, Statistic, Table, Tag, Tooltip,
+  Popconfirm, Row, Segmented, Select, Space, Table, Tag, Tooltip,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -44,6 +44,7 @@ import { Money, fmtDate, fmtQty } from "@/components/format";
 import { RowStatusTag, SessionStatusTag, signed } from "@/pages/inventory/countShared";
 import { useProductsLookup } from "@/pages/inventory/shared";
 import { useUnsavedChanges } from "@/components/useUnsavedChanges";
+import Stat from "@/components/Stat";
 
 type Filter = "all" | "todo" | "diff";
 
@@ -452,7 +453,7 @@ export default function CountSessionPage() {
       <Row gutter={16} style={{ marginBottom: 16 }}>
         <Col xs={12} md={6}>
           <Card size="small">
-            <Statistic
+            <Stat
               title="Посчитано"
               value={`${stats.counted} / ${stats.total}`}
               valueStyle={
@@ -465,7 +466,7 @@ export default function CountSessionPage() {
         </Col>
         <Col xs={12} md={6}>
           <Card size="small">
-            <Statistic
+            <Stat
               title="Нестыковок"
               value={stats.diffs}
               valueStyle={stats.diffs ? { color: "#cf1322" } : undefined}
@@ -474,16 +475,16 @@ export default function CountSessionPage() {
         </Col>
         <Col xs={12} md={6}>
           <Card size="small">
-            <Statistic
+            <Stat
               title="Итог по деньгам"
-              formatter={() => <Money value={String(stats.value)} />}
               value={stats.value}
+              format="money"
             />
           </Card>
         </Col>
         <Col xs={12} md={6}>
           <Card size="small">
-            <Statistic
+            <Stat
               title="Не сохранено"
               value={dirty}
               valueStyle={dirty ? { color: "#d46b08" } : { color: "#389e0d" }}

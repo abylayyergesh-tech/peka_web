@@ -1,10 +1,10 @@
 import { ArrowDownOutlined, ArrowUpOutlined, ReloadOutlined } from "@ant-design/icons";
-import { Alert, Button, Card, Col, Row, Space, Statistic, Typography } from "antd";
+import { Alert, Button, Card, Col, Row, Space, Typography } from "antd";
 import { useQuery } from "@tanstack/react-query";
 
 import { errorMessage } from "@/api/client";
 import { fetchFinancialSummary } from "@/api/finance";
-import { fmtMoney } from "@/components/format";
+import Stat from "@/components/Stat";
 
 export default function FinancialSummaryPage() {
   const query = useQuery({
@@ -37,9 +37,10 @@ export default function FinancialSummaryPage() {
       <Row gutter={[16, 16]}>
         <Col xs={24} sm={12}>
           <Card loading={query.isPending}>
-            <Statistic
+            <Stat
               title="Кредиторская задолженность (мы должны поставщикам)"
-              value={query.data ? fmtMoney(query.data.ap_total) : "—"}
+              value={query.data?.ap_total}
+              format="money"
               valueStyle={{ color: "#cf1322" }}
               prefix={<ArrowUpOutlined />}
             />
@@ -47,9 +48,10 @@ export default function FinancialSummaryPage() {
         </Col>
         <Col xs={24} sm={12}>
           <Card loading={query.isPending}>
-            <Statistic
+            <Stat
               title="Дебиторская задолженность (нам должны клиенты)"
-              value={query.data ? fmtMoney(query.data.ar_total) : "—"}
+              value={query.data?.ar_total}
+              format="money"
               valueStyle={{ color: "#3f8600" }}
               prefix={<ArrowDownOutlined />}
             />

@@ -22,7 +22,6 @@ import {
   Row,
   Select,
   Space,
-  Statistic,
   Table,
   Typography,
 } from "antd";
@@ -45,6 +44,7 @@ import {
 } from "@/api/payroll";
 import { listActiveExpenseCategories } from "@/api/requests";
 import { useCan } from "@/auth/store";
+import Stat from "@/components/Stat";
 import {
   PAY_TYPE_LABELS,
   PayoutMethodTag,
@@ -477,22 +477,22 @@ export default function PayrollRunDetailPage() {
             <>
               <Col>
                 <Card size="small">
-                  <Statistic title="Начислено" value={fmtTenge(totals.accrued)} />
+                  <Stat title="Начислено" value={totals.accrued} format="whole" />
                 </Card>
               </Col>
               <Col>
                 <Card size="small">
-                  <Statistic title="Запрошено" value={fmtTenge(totals.requested)} />
+                  <Stat title="Запрошено" value={totals.requested} format="whole" />
                 </Card>
               </Col>
               <Col>
                 <Card size="small">
-                  <Statistic title="К выплате" value={fmtTenge(totals.to_pay)} />
+                  <Stat title="К выплате" value={totals.to_pay} format="whole" />
                 </Card>
               </Col>
               <Col>
                 <Card size="small">
-                  <Statistic title="Выдано факт" value={fmtTenge(totals.paid_fact)} />
+                  <Stat title="Выдано факт" value={totals.paid_fact} format="whole" />
                 </Card>
               </Col>
             </>
@@ -500,27 +500,27 @@ export default function PayrollRunDetailPage() {
             <>
               <Col>
                 <Card size="small">
-                  <Statistic title="Итого начислено" value={fmtTenge(totals.total_accrued)} />
+                  <Stat title="Итого начислено" value={totals.total_accrued} format="whole" />
                 </Card>
               </Col>
               <Col>
                 <Card size="small">
-                  <Statistic title="Удержано займов" value={fmtTenge(totals.loan_deduction)} />
+                  <Stat title="Удержано займов" value={totals.loan_deduction} format="whole" />
                 </Card>
               </Col>
               <Col>
                 <Card size="small">
-                  <Statistic title="К выплате" value={fmtTenge(totals.total_to_pay)} />
+                  <Stat title="К выплате" value={totals.total_to_pay} format="whole" />
                 </Card>
               </Col>
               <Col>
                 <Card size="small">
-                  <Statistic title="На карту" value={fmtTenge(totals.to_card)} />
+                  <Stat title="На карту" value={totals.to_card} format="whole" />
                 </Card>
               </Col>
               <Col>
                 <Card size="small">
-                  <Statistic title="Наличными" value={fmtTenge(totals.to_cash)} />
+                  <Stat title="Наличными" value={totals.to_cash} format="whole" />
                 </Card>
               </Col>
             </>

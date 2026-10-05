@@ -129,6 +129,84 @@
   white-space: nowrap;
 }
 
+/* Числа. Разряды в ru-RU разделены НЕРАЗРЫВНЫМ пробелом, поэтому длинная
+   сумма для браузера — одно слово: не влезая, она ложилась поверх соседней
+   ячейки или плашки. NumText ставит после каждого разряда <wbr> — место, где
+   строку МОЖНО перенести, — но по умолчанию эти места выключены: Chrome
+   переносит на <wbr> даже под `white-space: nowrap`, и сумма в обычной
+   таблице ломалась бы вместо того, чтобы раздвинуть колонку. Включаются
+   (`display: inline`) только там, где раздвинуться нельзя. */
+.num {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.num wbr,
+.num-fit-text wbr {
+  display: none;
+}
+
+/* Таблица с закреплённой шапкой или колонками раскладывается ФИКСИРОВАННО:
+   ширина колонки берётся из `width` и под сумму не растёт. Здесь число
+   переносится по разрядам — вместо наезда на соседнюю колонку. Класс
+   `-layout-fixed` antd ставит только при явном `tableLayout`, поэтому
+   перечислены и причины такой раскладки. */
+.ant-table-fixed-header .num,
+.ant-table-fixed-column .num,
+.ant-table-layout-fixed .num {
+  white-space: normal;
+}
+
+.ant-table-fixed-header .num wbr,
+.ant-table-fixed-column .num wbr,
+.ant-table-layout-fixed .num wbr {
+  display: inline;
+}
+
+/* FitNumber: сперва ужать шрифт до ширины ячейки, потом — перенос. */
+.num-fit {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.num-fit-text {
+  display: inline-block;
+  max-width: 100%;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  vertical-align: top;
+}
+
+.num-fit-text.is-wrapped,
+.num-fit-text.is-wrapped .num {
+  white-space: normal;
+}
+
+.num-fit-text.is-wrapped wbr {
+  display: inline;
+}
+
+/* Те же отступы, что у antd Statistic: prefix/suffix теперь внутри строки. */
+.stat-prefix {
+  margin-inline-end: 4px;
+}
+
+.stat-suffix {
+  margin-inline-start: 4px;
+}
+
+/* Страховка для antd Statistic, выведенного мимо <Stat>: значение у него
+   inline-block без переноса и вылезало за карточку. Ломается некрасиво
+   (где придётся), зато не налезает. Плашки итогов — через <Stat>. */
+.ant-statistic {
+  min-width: 0;
+}
+
+.ant-statistic-content {
+  overflow-wrap: anywhere;
+}
+
 /* Единый жирный шрифт на всём админском UI. Размер — токен `fontSize` в
    theme.ts; веса у antd почти нет, компоненты наследуют отсюда. 700, а не 500:
    на кремовом фоне и в плотных таблицах 500 читается как «серый обычный». */
@@ -362,7 +440,10 @@ body,
   gap: 8px;
 }
 
+/* min-width: 0 — иначе элемент сетки раздувается под длинную сумму и
+   выталкивает соседей за край; сумму ужимает FitNumber. */
 .dossier-stat {
+  min-width: 0;
   padding: 12px 14px;
   border-radius: 12px;
   background: var(--brand-green-soft);
@@ -418,6 +499,8 @@ body,
 }
 
 .nutri-cell {
+  min-width: 0;
+  overflow-wrap: anywhere;
   padding: 12px 8px;
   border-radius: 12px;
   background: var(--brand-green-soft);
@@ -439,4 +522,157 @@ body,
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: #8c8c8c;
+}
+
+/* Знакомство с системой (layout/OnboardingTour.tsx). Шаг подробный — список
+   экранов или инструкция, — поэтому тело прокручивается, а не вытягивает
+   панель за край экрана. */
+.tour-body {
+  max-height: min(55vh, 460px);
+  overflow-y: auto;
+  padding-right: 4px;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.tour-text {
+  margin: 0 0 10px;
+}
+
+.tour-items {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 10px;
+}
+
+.tour-items > div {
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--brand-green-soft);
+}
+
+.tour-items dt {
+  font-weight: 700;
+  color: var(--brand-green);
+}
+
+.tour-items dd {
+  margin: 2px 0 0;
+  font-weight: 500;
+  color: #595959;
+}
+
+.tour-howto {
+  margin: 0 0 10px;
+  padding-left: 22px;
+}
+
+.tour-howto li {
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+
+.tour-tip {
+  display: flex;
+  gap: 8px;
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border-left: 4px solid var(--brand-lime);
+  border-radius: 6px;
+  background: var(--brand-cream);
+  font-weight: 600;
+}
+
+.tour-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.tour-counter {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #8c8c8c;
+}
+
+/* Невидимая рамка видимой части рабочей области — цель шага «Рабочая
+   область». Липкая и высотой в экран (минус шапка 64px), а отрицательные поля
+   возвращают всё остальное на место: на раскладку не влияет. */
+.tour-workspace-frame {
+  position: sticky;
+  top: 0;
+  height: calc(100vh - 64px);
+  margin: -24px -24px calc(88px - 100vh);
+  pointer-events: none;
+}
+
+/* Пункты меню, о которых говорит текущий шаг тура: лаймовая черта слева.
+   Выбранный пункт уже на лаймовой плашке — его не трогаем. */
+.ant-menu-dark.ant-menu-dark .ant-menu-item.menu-tour-spot:not(.ant-menu-item-selected) {
+  background: rgba(211, 223, 42, 0.22);
+  box-shadow: inset 4px 0 0 var(--brand-lime);
+  color: #fff;
+}
+
+/* Оглавление глав — плитки, как на дашборде. */
+.tour-picker-lead {
+  margin: 0 0 14px;
+  font-weight: 600;
+  line-height: 1.45;
+  color: #8c8c8c;
+}
+
+.tour-chapters {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 10px;
+}
+
+.tour-chapter {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 2px solid var(--brand-green);
+  border-radius: 14px;
+  background: #fff;
+  color: var(--brand-green);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.tour-chapter:hover,
+.tour-chapter:focus-visible {
+  background: var(--brand-lime-hover);
+}
+
+.tour-chapter-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.tour-chapter-summary {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: #595959;
+}
+
+.tour-chapter-meta {
+  font-size: 12px;
+  font-weight: 700;
+  color: #8c8c8c;
+}
+
+.tour-chapter-done {
+  color: #389e0d;
 }

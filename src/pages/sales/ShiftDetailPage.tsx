@@ -3,7 +3,7 @@
 import { ArrowLeftOutlined, CopyOutlined, PrinterOutlined } from "@ant-design/icons";
 import {
   Alert, App, Button, Card, Col, Descriptions, Modal, Popconfirm, Result, Row,
-  Segmented, Space, Spin, Statistic,
+  Segmented, Space, Spin,
 } from "antd";
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
@@ -12,7 +12,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { errorMessage } from "@/api/client";
 import { closeShift, getShift, getShiftReceipt, listWarehousesLookup } from "@/api/sales";
 import { useCan } from "@/auth/store";
-import { Money, fmtDateTime, fmtMoney } from "@/components/format";
+import { Money, fmtDateTime } from "@/components/format";
+import Stat from "@/components/Stat";
 import { ShiftStatusTag, paymentMethodLabel } from "@/pages/sales/statusTags";
 
 export default function ShiftDetailPage() {
@@ -113,32 +114,32 @@ export default function ShiftDetailPage() {
       <Row gutter={16} style={{ marginBottom: 16 }}>
         <Col xs={12} md={4}>
           <Card size="small">
-            <Statistic title="Чеков" value={totals.check_count} />
+            <Stat title="Чеков" value={totals.check_count} />
           </Card>
         </Col>
         <Col xs={12} md={5}>
           <Card size="small">
-            <Statistic title="Продажи (до скидок)" value={fmtMoney(totals.gross)} />
+            <Stat title="Продажи (до скидок)" value={totals.gross} format="money" />
           </Card>
         </Col>
         <Col xs={12} md={5}>
           <Card size="small">
-            <Statistic title="Скидки" value={fmtMoney(totals.discount_total)} />
+            <Stat title="Скидки" value={totals.discount_total} format="money" />
           </Card>
         </Col>
         <Col xs={12} md={5}>
           <Card size="small">
-            <Statistic title="Доставка (услуга)" value={fmtMoney(totals.delivery_total)} />
+            <Stat title="Доставка (услуга)" value={totals.delivery_total} format="money" />
           </Card>
         </Col>
         <Col xs={12} md={5}>
           <Card size="small">
-            <Statistic title="Выручка" value={fmtMoney(totals.revenue)} />
+            <Stat title="Выручка" value={totals.revenue} format="money" />
           </Card>
         </Col>
         <Col xs={12} md={5}>
           <Card size="small">
-            <Statistic title="Наличные в кассе (расчёт)" value={fmtMoney(totals.expected_cash)} />
+            <Stat title="Наличные в кассе (расчёт)" value={totals.expected_cash} format="money" />
           </Card>
         </Col>
       </Row>

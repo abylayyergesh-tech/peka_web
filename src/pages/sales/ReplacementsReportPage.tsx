@@ -8,7 +8,7 @@
  * выдачи). Себестоимость замены здесь не показывается: она выводится через
  * складской документ чека, у которого своя страница.
  */
-import { Card, Col, DatePicker, Result, Row, Select, Space, Statistic, Table } from "antd";
+import { Card, Col, DatePicker, Result, Row, Select, Space, Table } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import dayjs, { type Dayjs } from "dayjs";
 import { useState } from "react";
@@ -23,8 +23,9 @@ import {
   type ReplacementRow,
 } from "@/api/sales";
 import { useCan } from "@/auth/store";
-import { Money, fmtDate, fmtMoney, fmtQty } from "@/components/format";
+import { Money, fmtDate, fmtQty } from "@/components/format";
 import { usePagination } from "@/components/usePagination";
+import Stat from "@/components/Stat";
 
 const { RangePicker } = DatePicker;
 
@@ -148,19 +149,20 @@ export default function ReplacementsReportPage() {
       <Row gutter={16} style={{ marginBottom: 16 }}>
         <Col xs={12} md={8}>
           <Card size="small" loading={summary.isPending}>
-            <Statistic title="Замен выдано" value={summary.data?.count ?? 0} />
+            <Stat title="Замен выдано" value={summary.data?.count ?? 0} />
           </Card>
         </Col>
         <Col xs={12} md={8}>
           <Card size="small" loading={summary.isPending}>
-            <Statistic title="Позиций" value={fmtQty(summary.data?.total_quantity)} />
+            <Stat title="Позиций" value={summary.data?.total_quantity} format="qty" />
           </Card>
         </Col>
         <Col xs={12} md={8}>
           <Card size="small" loading={summary.isPending}>
-            <Statistic
+            <Stat
               title="Недополучено выручки"
-              value={fmtMoney(summary.data?.total_waived)}
+              value={summary.data?.total_waived}
+              format="money"
             />
           </Card>
         </Col>
