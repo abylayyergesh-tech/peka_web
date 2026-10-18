@@ -11,6 +11,7 @@ import MedicalBooksPage from "@/pages/staff/MedicalBooksPage";
 import PositionsPage from "@/pages/staff/PositionsPage";
 import SchedulePage from "@/pages/staff/SchedulePage";
 import ShiftTemplatesPage from "@/pages/staff/ShiftTemplatesPage";
+import TeamTodayPage from "@/pages/staff/TeamTodayPage";
 import WorkLocationsPage from "@/pages/staff/WorkLocationsPage";
 
 export const staffRoutes: RouteObject[] = [
@@ -21,6 +22,7 @@ export const staffRoutes: RouteObject[] = [
   { path: "/employees/disciplinaries", element: <DisciplinariesPage /> },
   { path: "/departments", element: <DepartmentsPage /> },
   { path: "/attendance", element: <AttendancePage /> },
+  { path: "/team/today", element: <TeamTodayPage /> },
   { path: "/work-locations", element: <WorkLocationsPage /> },
   { path: "/positions", element: <PositionsPage /> },
   { path: "/device-requests", element: <DeviceRequestsPage /> },

@@ -123,7 +123,19 @@ export function EmployeeFileBody({
                   {employee.personnel_no || "—"}
                 </Descriptions.Item>
                 <Descriptions.Item label="Должность">{employee.position || "—"}</Descriptions.Item>
-                <Descriptions.Item label="Отдел">{employee.department_name || "—"}</Descriptions.Item>
+                <Descriptions.Item label="Отдел">
+                  {employee.workshops.length > 1
+                    ? employee.workshops.map((w) => w.name).join(", ")
+                    : employee.department_name || "—"}
+                </Descriptions.Item>
+                {employee.grade && (
+                  <Descriptions.Item label="Разряд">{employee.grade}</Descriptions.Item>
+                )}
+                <Descriptions.Item label="Инструктаж на рабочем месте">
+                  {employee.workplace_briefing_at
+                    ? fmtDateTime(employee.workplace_briefing_at)
+                    : "не подтверждён"}
+                </Descriptions.Item>
                 <Descriptions.Item label="Руководитель">{boss || "—"}</Descriptions.Item>
                 {employee.manager_name && employee.department_head_name &&
                   employee.manager_id !== employee.department_head_id && (

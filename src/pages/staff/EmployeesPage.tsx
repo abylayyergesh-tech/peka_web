@@ -90,6 +90,8 @@ interface EmployeeFormValues {
   address?: string;
   emergency_contact_name?: string;
   emergency_contact_phone?: string;
+  grade?: string;
+  extra_department_ids?: number[];
 }
 
 const STATUS_OPTIONS = [
@@ -231,6 +233,8 @@ export default function EmployeesPage() {
       address: row.address ?? undefined,
       emergency_contact_name: row.emergency_contact_name ?? undefined,
       emergency_contact_phone: row.emergency_contact_phone ?? undefined,
+      grade: row.grade ?? undefined,
+      extra_department_ids: row.extra_department_ids,
     });
     setModalOpen(true);
   }
@@ -249,6 +253,8 @@ export default function EmployeesPage() {
       address: values.address || null,
       emergency_contact_name: values.emergency_contact_name || null,
       emergency_contact_phone: values.emergency_contact_phone || null,
+      grade: values.grade?.trim() || null,
+      extra_department_ids: values.extra_department_ids ?? [],
     };
     if (editing) {
       save.mutate(common);
@@ -593,6 +599,23 @@ export default function EmployeesPage() {
               optionFilterProp="label"
               placeholder="Без отдела"
             />
+          </Form.Item>
+          <Form.Item
+            name="extra_department_ids"
+            label="Дополнительные цеха"
+            extra="Если человек работает в нескольких цехах: его видят их руководители, в приложении — площадки всех его цехов"
+          >
+            <Select
+              mode="multiple"
+              allowClear
+              options={deptOptions}
+              showSearch
+              optionFilterProp="label"
+              placeholder="Только основной"
+            />
+          </Form.Item>
+          <Form.Item name="grade" label="Разряд" extra="Показывается в профиле приложения, например «4 разряд»">
+            <Input maxLength={64} />
           </Form.Item>
           <Form.Item name="manager_id" label="Руководитель">
             <Select

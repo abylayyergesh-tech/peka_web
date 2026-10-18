@@ -16,6 +16,8 @@ export interface DepartmentOut {
   name: string;
   head_employee_id: number | null;
   head_employee_name: string | null;
+  /** Руководители цеха сверх начальника (шеф, су-шеф) — ведут «Мой цех». */
+  managers: { employee_id: number; full_name: string }[];
   is_active: boolean;
   created_at: string;
 }
@@ -23,11 +25,13 @@ export interface DepartmentOut {
 export interface DepartmentCreate {
   name: string;
   head_employee_id?: number | null;
+  manager_employee_ids?: number[];
 }
 
 export interface DepartmentUpdate {
   name?: string;
   head_employee_id?: number | null;
+  manager_employee_ids?: number[];
   is_active?: boolean;
 }
 
@@ -55,6 +59,13 @@ export interface EmployeeOut {
   photo_url: string | null;
   /** Без привязки телефона (тестовый аккаунт App Store и т. п.). */
   device_binding_exempt: boolean;
+  /** Разряд («4 разряд»). */
+  grade: string | null;
+  /** Все цеха — основной и дополнительные. */
+  workshops: { workshop_id: number; name: string }[];
+  extra_department_ids: number[];
+  /** Инструктаж на рабочем месте подтверждён (в «Моём цехе»). */
+  workplace_briefing_at: string | null;
   iin: string | null;
   birth_date: string | null;
   address: string | null;
@@ -81,6 +92,8 @@ export interface EmployeeCreate {
   address?: string | null;
   emergency_contact_name?: string | null;
   emergency_contact_phone?: string | null;
+  grade?: string | null;
+  extra_department_ids?: number[];
 }
 
 export interface EmployeeUpdate {
@@ -97,6 +110,9 @@ export interface EmployeeUpdate {
   emergency_contact_name?: string | null;
   emergency_contact_phone?: string | null;
   device_binding_exempt?: boolean;
+  grade?: string | null;
+  /** Передан — заменяет список дополнительных цехов целиком. */
+  extra_department_ids?: number[];
 }
 
 export interface DepartmentListParams extends PageParams {
