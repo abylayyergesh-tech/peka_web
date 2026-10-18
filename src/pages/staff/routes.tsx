@@ -10,11 +10,13 @@ import EmployeesPage from "@/pages/staff/EmployeesPage";
 import MedicalBooksPage from "@/pages/staff/MedicalBooksPage";
 import PositionsPage from "@/pages/staff/PositionsPage";
 import SchedulePage from "@/pages/staff/SchedulePage";
+import ShiftTemplatesPage from "@/pages/staff/ShiftTemplatesPage";
 import WorkLocationsPage from "@/pages/staff/WorkLocationsPage";
 
 export const staffRoutes: RouteObject[] = [
   { path: "/employees", element: <EmployeesPage /> },
   { path: "/employees/schedule", element: <SchedulePage /> },
+  { path: "/shift-templates", element: <ShiftTemplatesPage /> },
   { path: "/employees/medical-books", element: <MedicalBooksPage /> },
   { path: "/employees/disciplinaries", element: <DisciplinariesPage /> },
   { path: "/departments", element: <DepartmentsPage /> },

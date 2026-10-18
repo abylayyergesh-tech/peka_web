@@ -474,6 +474,9 @@ export interface ScheduleCellOut {
   shifts: string | null;
   note: string | null;
   leave_kind: LeaveKind | null;
+  /** Время смены (шаблон) и площадка — от них считаются опоздание и неявка. */
+  shift_template_id: number | null;
+  work_location_id: number | null;
 }
 
 export interface ScheduleRowOut {
@@ -500,6 +503,8 @@ export interface ScheduleDayPut {
   kind?: ScheduleKind | null;
   shifts?: string | null;
   note?: string | null;
+  shift_template_id?: number | null;
+  work_location_id?: number | null;
 }
 
 export interface ScheduleColleagueOut {

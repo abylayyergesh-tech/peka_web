@@ -118,3 +118,31 @@ export function getPosition(): Promise<{ latitude: number; longitude: number }> 
     );
   });
 }
+
+// ---- отметки из приложения: споры и переработки ----
+export const DISPUTE_REASON_LABELS: Record<string, string> = {
+  out_of_zone: "вне зоны",
+  mock_location: "подмена GPS",
+  rooted_device: "root / jailbreak",
+  out_of_schedule: "вне графика",
+  new_device: "новый телефон",
+};
+
+export function DisputeTag({ status }: { status: string | null }) {
+  if (status === "pending") return <Tag color="orange">спорная</Tag>;
+  if (status === "accepted") return <Tag color="green">принята</Tag>;
+  if (status === "rejected") return <Tag color="red">отклонена</Tag>;
+  return null;
+}
+
+export function OvertimeTag({ status }: { status: string | null }) {
+  if (status === "pending") return <Tag color="gold">переработка ждёт решения</Tag>;
+  if (status === "approved") return <Tag color="green">переработка принята</Tag>;
+  if (status === "rejected") return <Tag>переработка не принята</Tag>;
+  return null;
+}
+
+/** "08:00:00" → "08:00". */
+export function hhmm(time: string | null | undefined): string {
+  return time ? time.slice(0, 5) : "—";
+}
