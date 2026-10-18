@@ -13,6 +13,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { decideMark, decideOvertime, resolveAbsence } from "@/api/attendance";
 import { errorMessage } from "@/api/client";
+import { ONBOARDING_STEP_LABELS } from "@/api/onboarding";
 import { decideDeviceRequest, listDepartments } from "@/api/staff";
 import {
   confirmWorkplaceBriefing,
@@ -195,10 +196,20 @@ export default function TeamTodayPage() {
             <Space direction="vertical" size={12} style={{ width: "100%" }}>
               {ov!.disputed.map((d) => (
                 <div key={d.mark_id} style={{ display: "flex", gap: 12 }}>
-                  {d.photo_url ? (
-                    <Image src={d.photo_url} width={72} height={96} style={{ objectFit: "cover" }} />
-                  ) : (
-                    <div style={{ width: 72, height: 96, background: "#f5f5f5" }} />
+                  <Space direction="vertical" size={2} align="center">
+                    {d.photo_url ? (
+                      <Image src={d.photo_url} width={72} height={96} style={{ objectFit: "cover" }} />
+                    ) : (
+                      <div style={{ width: 72, height: 96, background: "#f5f5f5" }} />
+                    )}
+                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>селфи</Typography.Text>
+                  </Space>
+                  {d.reference_photo_url && (
+                    // Эталон из онбординга — сверить, тот ли человек на селфи.
+                    <Space direction="vertical" size={2} align="center">
+                      <Image src={d.reference_photo_url} width={72} height={96} style={{ objectFit: "cover" }} />
+                      <Typography.Text type="secondary" style={{ fontSize: 12 }}>эталон</Typography.Text>
+                    </Space>
                   )}
                   <div style={{ flex: 1 }}>
                     <Typography.Text strong>{d.full_name}</Typography.Text>{" "}
@@ -319,6 +330,35 @@ export default function TeamTodayPage() {
                           <a onClick={() => overtimeM.mutate({ id: r.attendance_shift_id, decision: "reject" })}>Не принимать</a>
                         </Space>
                       ) : null,
+                  },
+                ]}
+              />
+            </Card>
+          </Col>
+          <Col xs={24} lg={12}>
+            <Card size="small" title="Не прошли онбординг" extra={<Link to="/onboarding">Онбординг →</Link>}>
+              <Table
+                rowKey="employee_id"
+                size="small"
+                pagination={false}
+                dataSource={ov?.onboarding_pending}
+                locale={{ emptyText: "Все прошли (или онбординг не запущен)" }}
+                columns={[
+                  { title: "Сотрудник", dataIndex: "full_name" },
+                  {
+                    title: "Шаг",
+                    dataIndex: "onboarding_step",
+                    width: 140,
+                    render: (v: string | null) => ONBOARDING_STEP_LABELS[v ?? ""] ?? "не начинал",
+                  },
+                  {
+                    title: "Отметка",
+                    dataIndex: "grace_until",
+                    width: 150,
+                    render: (v: string | null) =>
+                      v && dayjs(v).isAfter(dayjs())
+                        ? <Tag color="gold">открыта до {fmtDate(v)}</Tag>
+                        : <Tag color="red">закрыта</Tag>,
                   },
                 ]}
               />

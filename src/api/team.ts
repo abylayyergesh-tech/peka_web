@@ -55,7 +55,13 @@ export interface TeamOverview {
     hired_at: string | null;
     first_shift_date: string | null;
   }[];
-  onboarding_pending: { employee_id: number; full_name: string; onboarding_step: string | null }[];
+  onboarding_pending: {
+    employee_id: number;
+    full_name: string;
+    onboarding_step: string | null;
+    /** До этого момента отметка открыта (работал до запуска онбординга). */
+    grace_until: string | null;
+  }[];
   device_requests: {
     request_id: number;
     employee_id: number;
