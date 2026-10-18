@@ -1,10 +1,11 @@
 /** Справочник ставок — лист «Сотрудники» рабочего шаблона: тип оплаты,
  * ставка/оклад, официальная часть, оформление, каспи. «Серая часть» и «доля
  * офиц.» считает бэкенд. */
-import { EditOutlined } from "@ant-design/icons";
+import { EditOutlined, PlusOutlined } from "@ant-design/icons";
 import {
   App,
   Alert,
+  Button,
   Form,
   Input,
   InputNumber,
@@ -27,7 +28,7 @@ import {
   type CompensationOut,
   type PayType,
 } from "@/api/payroll";
-import { listDepartments } from "@/api/staff";
+import { listDepartments, listEmployees } from "@/api/staff";
 import { useCan } from "@/auth/store";
 import { usePagination } from "@/components/usePagination";
 import {
@@ -39,6 +40,8 @@ import {
 } from "@/pages/payroll/shared";
 
 interface FormValues {
+  /** Только у новой карточки: кому назначаем ставку. */
+  employee_id?: number;
   pay_type: PayType;
   rate_amount: number;
   official_amount: number;
@@ -55,7 +58,11 @@ export default function CompensationsPage() {
   const [departmentId, setDepartmentId] = useState<number | undefined>();
   const [payType, setPayType] = useState<PayType | undefined>();
   const [search, setSearch] = useState("");
-  const [editing, setEditing] = useState<CompensationOut | null>(null);
+  // employeeId == null — новая карточка: сотрудник выбирается в форме. Без
+  // этого принятого через «Сотрудники → Добавить» сюда не завести: список
+  // показывает только тех, у кого карточка уже есть.
+  const [editing, setEditing] = useState<{ employeeId: number | null; name: string } | null>(null);
+  const [employeeSearch, setEmployeeSearch] = useState("");
   const [form] = Form.useForm<FormValues>();
 
   const query = useQuery({
@@ -82,9 +89,17 @@ export default function CompensationsPage() {
     staleTime: 60_000,
   });
 
+  const employees = useQuery({
+    queryKey: ["employees-options", employeeSearch],
+    queryFn: () =>
+      listEmployees({ status: "active", q: employeeSearch || undefined, limit: 50, offset: 0 }),
+    enabled: editing != null && editing.employeeId == null,
+    staleTime: 30_000,
+  });
+
   const save = useMutation({
     mutationFn: (values: FormValues) =>
-      upsertCompensation(editing!.employee_id, {
+      upsertCompensation(editing?.employeeId ?? values.employee_id!, {
         pay_type: values.pay_type,
         rate_amount: String(values.rate_amount),
         official_amount: String(values.official_amount ?? 0),
@@ -100,8 +115,15 @@ export default function CompensationsPage() {
     onError: (e) => message.error(errorMessage(e)),
   });
 
+  function openNew() {
+    setEditing({ employeeId: null, name: "" });
+    setEmployeeSearch("");
+    form.resetFields();
+    form.setFieldsValue({ pay_type: "shift", official_amount: 0 });
+  }
+
   function openEdit(row: CompensationOut) {
-    setEditing(row);
+    setEditing({ employeeId: row.employee_id, name: row.employee_name ?? "" });
     form.setFieldsValue({
       pay_type: row.pay_type,
       rate_amount: Number(row.rate_amount),
@@ -198,6 +220,11 @@ export default function CompensationsPage() {
     <div>
       <Space style={{ marginBottom: 16, justifyContent: "space-between", width: "100%" }}>
         <h2 style={{ margin: 0 }}>Справочник ставок</h2>
+        {canManage && (
+          <Button type="primary" icon={<PlusOutlined />} onClick={openNew}>
+            Назначить ставку
+          </Button>
+        )}
       </Space>
 
       <Space wrap style={{ marginBottom: 16 }}>
@@ -249,7 +276,7 @@ export default function CompensationsPage() {
 
       <Modal
         open={editing != null}
-        title={`Оплата — ${editing?.employee_name ?? ""}`}
+        title={editing?.employeeId == null ? "Назначить ставку" : `Оплата — ${editing.name}`}
         okText="Сохранить"
         cancelText="Отмена"
         confirmLoading={save.isPending}
@@ -264,6 +291,26 @@ export default function CompensationsPage() {
           message="Смена ставки, официальной части или оформления закрывает прежнюю карточку и создаёт новую — ведомости прошлых месяцев не поедут."
         />
         <Form form={form} layout="vertical" onFinish={(v) => save.mutate(v)}>
+          {editing?.employeeId == null && (
+            <Form.Item
+              name="employee_id"
+              label="Сотрудник"
+              rules={[{ required: true }]}
+              extra="Если ставка у человека уже есть, новая заменит её с сегодняшнего дня."
+            >
+              <Select
+                showSearch
+                filterOption={false}
+                onSearch={setEmployeeSearch}
+                loading={employees.isFetching}
+                placeholder="Начните вводить ФИО"
+                options={(employees.data?.items ?? []).map((e) => ({
+                  value: e.employee_id,
+                  label: e.department_name ? `${e.full_name} · ${e.department_name}` : e.full_name,
+                }))}
+              />
+            </Form.Item>
+          )}
           <Form.Item name="pay_type" label="Тип оплаты" rules={[{ required: true }]}>
             <Select options={PAY_TYPE_OPTIONS} />
           </Form.Item>

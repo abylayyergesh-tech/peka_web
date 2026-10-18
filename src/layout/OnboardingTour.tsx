@@ -251,8 +251,9 @@ export default function OnboardingTour({ identity, ready, sections, openChapters
         onCancel={() => setPickerOpen(false)}
       >
         <p className="tour-picker-lead">
-          Выберите главу. В каждой — экраны раздела с подсветкой в меню и пошаговые
-          инструкции с точными названиями кнопок. Закрыть главу можно в любой момент.
+          Выберите главу. В каждой — несколько экранов раздела с подсветкой в меню и
+          пошаговые инструкции к ним с точными названиями кнопок. Закрыть главу можно
+          в любой момент.
         </p>
         <div className="tour-chapters">
           {chapters.map((chapter) => {
