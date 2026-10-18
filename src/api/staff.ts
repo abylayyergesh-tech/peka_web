@@ -53,6 +53,8 @@ export interface EmployeeOut {
   termination_date: string | null;
   personnel_no: string | null;
   photo_url: string | null;
+  /** Без привязки телефона (тестовый аккаунт App Store и т. п.). */
+  device_binding_exempt: boolean;
   iin: string | null;
   birth_date: string | null;
   address: string | null;
@@ -94,6 +96,7 @@ export interface EmployeeUpdate {
   address?: string | null;
   emergency_contact_name?: string | null;
   emergency_contact_phone?: string | null;
+  device_binding_exempt?: boolean;
 }
 
 export interface DepartmentListParams extends PageParams {
@@ -539,4 +542,72 @@ export async function getScheduleSwapPreview(params: {
     params,
   });
   return data;
+}
+
+// ---- телефон сотрудника: «один аккаунт — один телефон» (app/staff/devices_router.py) ----
+export interface DeviceOut {
+  employee_device_id: number;
+  device_id: string;
+  platform: string | null;
+  model: string | null;
+  os: string | null;
+  app_version: string | null;
+  bound_at: string;
+  last_seen_at: string | null;
+  is_active: boolean;
+  deactivated_at: string | null;
+  /** replaced — одобрен новый телефон; reset — HR сбросил привязку. */
+  deactivation_reason: string | null;
+}
+
+export type DeviceRequestStatus = "pending" | "approved" | "rejected" | "cancelled";
+
+export interface DeviceRequestOut {
+  request_id: number;
+  employee_id: number;
+  full_name: string | null;
+  department_name: string | null;
+  device_id: string;
+  platform: string | null;
+  device_model: string | null;
+  os: string | null;
+  app_version: string | null;
+  current_device_model: string | null;
+  requested_at: string;
+  status: DeviceRequestStatus;
+  decided_at: string | null;
+  decision_comment: string | null;
+}
+
+export interface EmployeeDevicesOut {
+  active: DeviceOut | null;
+  pending: DeviceRequestOut | null;
+  history: DeviceOut[];
+  device_binding_exempt: boolean;
+}
+
+export async function getEmployeeDevices(employeeId: number): Promise<EmployeeDevicesOut> {
+  const { data } = await api.get<EmployeeDevicesOut>(`/employees/${employeeId}/devices`);
+  return data;
+}
+
+/** Сбросить телефон: следующий вход из приложения станет первой привязкой. */
+export async function resetEmployeeDevice(employeeId: number): Promise<EmployeeDevicesOut> {
+  const { data } = await api.post<EmployeeDevicesOut>(`/employees/${employeeId}/devices/reset`);
+  return data;
+}
+
+export async function listDeviceRequests(
+  status: DeviceRequestStatus = "pending",
+): Promise<DeviceRequestOut[]> {
+  const { data } = await api.get<DeviceRequestOut[]>("/device-requests", { params: { status } });
+  return data;
+}
+
+export async function decideDeviceRequest(
+  requestId: number,
+  decision: "approve" | "reject",
+  comment?: string,
+): Promise<void> {
+  await api.post(`/team/device-requests/${requestId}/${decision}`, comment ? { comment } : {});
 }

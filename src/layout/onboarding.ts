@@ -97,6 +97,7 @@ export const ITEM_HINTS: Record<string, string> = {
   "/departments": "Отделы (цеха) и их руководители.",
   "/work-locations": "Точки на карте и радиус, в котором сотрудник может отметить приход.",
   "/positions": "Должности и вкладки приложения сотрудника, которые они открывают.",
+  "/device-requests": "Входы в приложение с нового телефона: подтвердить или отклонить.",
   "/attendance/settings": "Пороги опоздания, ухода, переработки и окно отметки прихода.",
   "/payroll/runs": "Расчёт аванса и зарплаты по табелю; утверждение и выплата.",
   "/payroll/compensations": "Оплата каждого сотрудника: за смену или оклад.",
@@ -256,7 +257,8 @@ export const SECTION_GUIDES: Record<string, SectionGuide> = {
   hr: {
     summary: "Люди, графики и табели, заявления и зарплата.",
     groups: [
-      { title: "Люди", paths: ["/employees", "/departments", "/positions", "/work-locations",
+      { title: "Люди", paths: ["/employees", "/departments", "/positions", "/device-requests",
+        "/work-locations",
         "/employees/medical-books", "/employees/disciplinaries"] },
       { title: "Смены и табель", intro: "График — план, отметки — факт, табель — итог месяца для зарплаты.",
         paths: ["/employees/schedule", "/attendance", "/attendance/settings", "/payroll/timesheet"] },

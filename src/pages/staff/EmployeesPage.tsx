@@ -472,6 +472,9 @@ export default function EmployeesPage() {
                   title="Уволить сотрудника?"
                   description={
                     <div style={{ marginTop: 8 }}>
+                      <div style={{ marginBottom: 8, maxWidth: 260 }}>
+                        Вход в приложение и кабинет закроется сразу, сессии погаснут.
+                      </div>
                       <DatePicker
                         value={terminationDate}
                         onChange={setTerminationDate}

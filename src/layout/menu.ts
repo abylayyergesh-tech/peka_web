@@ -99,6 +99,8 @@ export const NAV_SECTIONS: NavSection[] = [
       { path: "/departments", label: "Отделы (цеха)", cap: "staff.manage" },
       // Права приложения сотрудника раздаются по должностям (ТЗ, §16.2).
       { path: "/positions", label: "Должности и права", cap: "staff.manage" },
+      // «Один аккаунт — один телефон»: входы с нового телефона ждут решения.
+      { path: "/device-requests", label: "Смена телефона", cap: "staff.manage" },
       { path: "/work-locations", label: "Рабочие локации", cap: "attendance.manage" },
       { path: "/attendance/settings", label: "Правила учёта", cap: "attendance.manage" },
       { path: "/payroll/runs", label: "Ведомости", cap: "payroll.read" },
