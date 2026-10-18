@@ -97,7 +97,10 @@ export const NAV_SECTIONS: NavSection[] = [
       { path: "/employees/medical-books", label: "Медкнижки", cap: "staff.manage" },
       { path: "/employees/disciplinaries", label: "Взыскания", cap: "staff.manage" },
       { path: "/departments", label: "Отделы (цеха)", cap: "staff.manage" },
+      // Права приложения сотрудника раздаются по должностям (ТЗ, §16.2).
+      { path: "/positions", label: "Должности и права", cap: "staff.manage" },
       { path: "/work-locations", label: "Рабочие локации", cap: "attendance.manage" },
+      { path: "/attendance/settings", label: "Правила учёта", cap: "attendance.manage" },
       { path: "/payroll/runs", label: "Ведомости", cap: "payroll.read" },
       { path: "/payroll/compensations", label: "Справочник ставок", cap: "payroll.read" },
       { path: "/payroll/loans", label: "Фин. займы", cap: "payroll.read" },

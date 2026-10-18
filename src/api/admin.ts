@@ -111,6 +111,10 @@ export interface MemberCapabilitiesOut {
   effective: string[];
   grants: string[];
   denies: string[];
+  /** Должность из карточки сотрудника и права, которые она даёт. */
+  position_id: number | null;
+  position_name: string | null;
+  position_capabilities: string[];
 }
 
 export type OverrideEffect = "grant" | "deny";
@@ -188,5 +192,61 @@ export async function clearOverride(
   const { data } = await api.delete<MemberCapabilitiesOut>(
     `/members/${membershipId}/capabilities/${capability}`,
   );
+  return data;
+}
+
+// ---------- должности: справочник и права по должности ----------
+
+/** app.staff.schemas.PositionOut */
+export interface PositionOut {
+  position_id: number;
+  name: string;
+  is_active: boolean;
+  /** Действующих сотрудников на должности. */
+  employee_count: number;
+  capabilities: string[];
+  created_at: string;
+}
+
+/** Список читают staff.manage и role.manage. */
+export async function listPositions(includeInactive = false): Promise<PositionOut[]> {
+  const { data } = await api.get<PositionOut[]>("/positions", {
+    params: includeInactive ? { include_inactive: true } : {},
+  });
+  return data;
+}
+
+export async function createPosition(name: string): Promise<PositionOut> {
+  const { data } = await api.post<PositionOut>("/positions", { name });
+  return data;
+}
+
+export async function updatePosition(
+  positionId: number,
+  body: Partial<{ name: string; is_active: boolean }>,
+): Promise<PositionOut> {
+  const { data } = await api.patch<PositionOut>(`/positions/${positionId}`, body);
+  return data;
+}
+
+/** Слить должность (обычно опечатку) в правильную: сотрудники и права переезжают. */
+export async function mergePosition(
+  positionId: number,
+  intoPositionId: number,
+): Promise<PositionOut> {
+  const { data } = await api.post<PositionOut>(`/positions/${positionId}/merge`, {
+    into_position_id: intoPositionId,
+  });
+  return data;
+}
+
+/** Права должности — только role.manage. */
+export async function setPositionCapabilities(
+  positionId: number,
+  capabilities: string[],
+): Promise<PositionOut> {
+  const { data } = await api.put<PositionOut>(`/positions/${positionId}/capabilities`, {
+    capabilities,
+  });
   return data;
 }

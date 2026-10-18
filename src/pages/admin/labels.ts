@@ -25,7 +25,46 @@ const CAPABILITY_LABELS_RU: Record<string, string> = {
   "attendance.manage": "Управление точками работы и корректировка смен",
   "request.approve": "Просмотр всех заявлений, их согласование и отклонение",
   "request.policy.manage": "Управление порогами согласования заявлений",
+  "inventory.count": "Проведение инвентаризации (перебить остатки склада)",
+  "request.submit_any": "Подача заявления за другого сотрудника",
+  "payroll.read": "Просмотр ставок, табелей, ведомостей и выплат",
+  "payroll.manage": "Ведение ставок, табелей, ведомостей, займов и выплат",
+  "order.create": "Приём заказов клиентов",
+  "order.read": "Просмотр заказов клиентов",
+  "order.confirm": "Подтверждение и отклонение новых заказов",
+  "order.fulfill": "Ведение подтверждённых заказов до выдачи",
+  "announcement.manage": "Публикация объявлений на клиентском сайте",
+  "delivery.manage": "Курьерские маршруты и раскладка доставок",
+  // Приложение сотрудника
+  "tab.warehouse": "Вкладка «Склад» (остатки)",
+  "tab.assembly": "Вкладка «Сборка»",
+  "tab.inventory": "Вкладка «Инвентаризация»",
+  "warehouse.transfer": "Создание и проведение перемещений",
+  "warehouse.receive": "Приём входящих перемещений",
+  "assembly.collect": "Сборщик: свои заказы, отметка собранного, фото",
+  "assembly.distribute": "Старший сборщик: все заказы смены, назначение сборщиков",
+  "inventory.create": "Создание инвентаризации",
+  "inventory.close": "Проверка, пересчёт и закрытие инвентаризации (видит расчёт)",
+  "inventory.report": "Суммы недостачи и излишков в инвентаризации",
+  "team.manage": "«Мой цех»: команда, спорные отметки, смена телефона",
 };
+
+/** Права, которые открывают вкладки и действия в приложении сотрудника —
+ *  их раздают по должностям на экране «Должности и права». */
+export const STAFF_APP_CAPABILITIES = [
+  "tab.warehouse",
+  "warehouse.transfer",
+  "warehouse.receive",
+  "tab.assembly",
+  "assembly.collect",
+  "assembly.distribute",
+  "tab.inventory",
+  "inventory.create",
+  "inventory.close",
+  "inventory.report",
+  "team.manage",
+  "request.approve",
+] as const;
 
 /** Русская подпись права; fallback — description с бэкенда. */
 export function capLabel(cap: CapabilityOut): string {
@@ -53,6 +92,14 @@ const GROUP_TITLES_RU: Record<string, string> = {
   staff: "Персонал",
   attendance: "Посещаемость",
   request: "Заявления",
+  payroll: "Зарплата",
+  order: "Заказы",
+  announcement: "Объявления",
+  delivery: "Доставка",
+  tab: "Приложение: вкладки",
+  warehouse: "Приложение: склад",
+  assembly: "Приложение: сборка",
+  team: "Приложение: «Мой цех»",
 };
 
 export function groupTitle(prefix: string): string {

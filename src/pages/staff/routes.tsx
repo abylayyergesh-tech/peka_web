@@ -2,10 +2,12 @@
 import type { RouteObject } from "react-router-dom";
 
 import AttendancePage from "@/pages/staff/AttendancePage";
+import AttendanceSettingsPage from "@/pages/staff/AttendanceSettingsPage";
 import DepartmentsPage from "@/pages/staff/DepartmentsPage";
 import DisciplinariesPage from "@/pages/staff/DisciplinariesPage";
 import EmployeesPage from "@/pages/staff/EmployeesPage";
 import MedicalBooksPage from "@/pages/staff/MedicalBooksPage";
+import PositionsPage from "@/pages/staff/PositionsPage";
 import SchedulePage from "@/pages/staff/SchedulePage";
 import WorkLocationsPage from "@/pages/staff/WorkLocationsPage";
 
@@ -17,4 +19,6 @@ export const staffRoutes: RouteObject[] = [
   { path: "/departments", element: <DepartmentsPage /> },
   { path: "/attendance", element: <AttendancePage /> },
   { path: "/work-locations", element: <WorkLocationsPage /> },
+  { path: "/positions", element: <PositionsPage /> },
+  { path: "/attendance/settings", element: <AttendanceSettingsPage /> },
 ];
