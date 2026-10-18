@@ -15,6 +15,10 @@ export interface WorkLocationOut {
   latitude: string;
   longitude: string;
   radius_m: number;
+  address: string | null;
+  /** Цеха, которые работают на площадке (по ним приложение показывает
+   *  сотруднику его геозоны). */
+  department_ids: number[];
   is_active: boolean;
   created_at: string;
 }
@@ -24,6 +28,8 @@ export interface WorkLocationCreate {
   latitude: number;
   longitude: number;
   radius_m?: number;
+  address?: string | null;
+  department_ids?: number[];
 }
 
 export interface WorkLocationUpdate {
@@ -31,7 +37,36 @@ export interface WorkLocationUpdate {
   latitude?: number;
   longitude?: number;
   radius_m?: number;
+  address?: string | null;
+  /** Передан — заменяет список цехов целиком. */
+  department_ids?: number[];
   is_active?: boolean;
+}
+
+// ---- правила учёта (app.attendance.schemas.AttendanceSettings*) ----
+export interface AttendanceSettings {
+  late_grace_min: number;
+  early_leave_grace_min: number;
+  overtime_after_min: number;
+  no_show_after_min: number;
+  auto_close_after_min: number;
+  clock_in_window_min: number;
+  onboarding_grace_days: number;
+  photo_retention_days: number;
+  hr_contact_phone: string | null;
+  hr_contact_whatsapp: string | null;
+}
+
+export async function getAttendanceSettings(): Promise<AttendanceSettings> {
+  const { data } = await api.get<AttendanceSettings>("/attendance/settings");
+  return data;
+}
+
+export async function saveAttendanceSettings(
+  body: AttendanceSettings,
+): Promise<AttendanceSettings> {
+  const { data } = await api.put<AttendanceSettings>("/attendance/settings", body);
+  return data;
 }
 
 // ---- attendance shifts ----

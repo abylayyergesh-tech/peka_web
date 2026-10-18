@@ -1,4 +1,5 @@
 /** Drawer «Права участника»: эффективные права + индивидуальные grant/deny.
+ * Эффективные = роль ∪ должность ∪ разрешено лично − запрещено лично.
  * Требует role.manage (открывается только при наличии этого права). */
 import { App, Drawer, Spin, Switch, Tag, Typography } from "antd";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -66,6 +67,7 @@ export default function MemberCapabilitiesDrawer({ member, open, onClose }: Prop
   const effective = new Set(caps?.effective ?? []);
   const grants = new Set(caps?.grants ?? []);
   const denies = new Set(caps?.denies ?? []);
+  const fromPosition = new Set(caps?.position_capabilities ?? []);
   const groups = groupByPrefix(capsQuery.data ?? []);
   const loading = capsQuery.isPending || memberCapsQuery.isPending;
   const busy = setMut.isPending || clearMut.isPending;
@@ -84,6 +86,7 @@ export default function MemberCapabilitiesDrawer({ member, open, onClose }: Prop
           <div>
             <Typography.Text type="secondary">
               {member.email || "—"} · роль: {roleLabel(member.role)}
+              {caps?.position_name ? ` · должность: ${caps.position_name}` : ""}
             </Typography.Text>
           </div>
         </div>
@@ -116,7 +119,10 @@ export default function MemberCapabilitiesDrawer({ member, open, onClose }: Prop
                   <span style={{ flex: 1 }}>{capLabel(cap)}</span>
                   {grants.has(cap.key) && <Tag color="green">разрешено лично</Tag>}
                   {denies.has(cap.key) && <Tag color="red">запрещено лично</Tag>}
-                  {!overridden && <Tag>по роли</Tag>}
+                  {!overridden && fromPosition.has(cap.key) && (
+                    <Tag color="blue">по должности</Tag>
+                  )}
+                  {!overridden && !fromPosition.has(cap.key) && <Tag>по роли</Tag>}
                   {overridden && (
                     <a onClick={() => !busy && clearMut.mutate(cap.key)}>сбросить</a>
                   )}

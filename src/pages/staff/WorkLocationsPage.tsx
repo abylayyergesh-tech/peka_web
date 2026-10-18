@@ -8,9 +8,11 @@ import {
   Input,
   InputNumber,
   Popconfirm,
+  Select,
   Space,
   Switch,
   Table,
+  Tag,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useState } from "react";
@@ -26,6 +28,7 @@ import {
   type WorkLocationOut,
   type WorkLocationUpdate,
 } from "@/api/attendance";
+import { listDepartments } from "@/api/staff";
 import { useCan } from "@/auth/store";
 import EntityCardDrawer from "@/components/EntityCardDrawer";
 import { usePagination } from "@/components/usePagination";
@@ -33,10 +36,20 @@ import { ActiveTag } from "@/pages/staff/shared";
 
 interface WorkLocationFormValues {
   name: string;
+  address?: string;
   latitude: number;
   longitude: number;
   radius_m: number;
+  department_ids?: number[];
   is_active?: boolean;
+}
+
+/** Радиус по ТЗ — 150 м; бэкенд ставит то же значение по умолчанию. */
+const DEFAULT_RADIUS_M = 150;
+
+/** Ссылка на точку в картах — проверить, что координаты стоят на цехе. */
+function mapUrl(row: WorkLocationOut): string {
+  return `https://www.google.com/maps/search/?api=1&query=${row.latitude},${row.longitude}`;
 }
 
 export default function WorkLocationsPage() {
@@ -58,6 +71,23 @@ export default function WorkLocationsPage() {
 
   const fresh =
     query.data?.items.find((r) => r.work_location_id === card?.work_location_id) ?? card;
+
+  const departmentsQuery = useQuery({
+    queryKey: ["departments", "options"],
+    queryFn: () => listDepartments({ limit: 200, offset: 0 }),
+    staleTime: 60_000,
+  });
+  const departmentName = new Map(
+    (departmentsQuery.data?.items ?? []).map((d) => [d.department_id, d.name]),
+  );
+  const departmentOptions = (departmentsQuery.data?.items ?? [])
+    .filter((d) => d.is_active)
+    .map((d) => ({ value: d.department_id, label: d.name }));
+
+  function departmentTags(ids: number[]) {
+    if (ids.length === 0) return <span style={{ color: "#999" }}>—</span>;
+    return ids.map((id) => <Tag key={id}>{departmentName.get(id) ?? `#${id}`}</Tag>);
+  }
 
   const save = useMutation({
     mutationFn: (body: WorkLocationCreate | WorkLocationUpdate) =>
@@ -85,9 +115,11 @@ export default function WorkLocationsPage() {
   function fillForm(row: WorkLocationOut) {
     form.setFieldsValue({
       name: row.name,
+      address: row.address ?? undefined,
       latitude: Number(row.latitude),
       longitude: Number(row.longitude),
       radius_m: row.radius_m,
+      department_ids: row.department_ids,
       is_active: row.is_active,
     });
   }
@@ -102,7 +134,7 @@ export default function WorkLocationsPage() {
   function openCreate() {
     setCard(null);
     form.resetFields();
-    form.setFieldsValue({ radius_m: 3000 });
+    form.setFieldsValue({ radius_m: DEFAULT_RADIUS_M, department_ids: [] });
     setEditing(true);
     setOpen(true);
   }
@@ -114,28 +146,25 @@ export default function WorkLocationsPage() {
   }
 
   function onFinish(values: WorkLocationFormValues) {
-    if (card) {
-      save.mutate({
-        name: values.name,
-        latitude: values.latitude,
-        longitude: values.longitude,
-        radius_m: values.radius_m,
-        is_active: values.is_active,
-      });
-    } else {
-      save.mutate({
-        name: values.name,
-        latitude: values.latitude,
-        longitude: values.longitude,
-        radius_m: values.radius_m,
-      });
-    }
+    const common = {
+      name: values.name,
+      address: values.address?.trim() || null,
+      latitude: values.latitude,
+      longitude: values.longitude,
+      radius_m: values.radius_m,
+      department_ids: values.department_ids ?? [],
+    };
+    save.mutate(card ? { ...common, is_active: values.is_active } : common);
   }
 
   const columns: ColumnsType<WorkLocationOut> = [
     { title: "Название", dataIndex: "name" },
-    { title: "Широта", dataIndex: "latitude" },
-    { title: "Долгота", dataIndex: "longitude" },
+    { title: "Адрес", dataIndex: "address", render: (v: string | null) => v ?? "—" },
+    {
+      title: "Цеха",
+      dataIndex: "department_ids",
+      render: (ids: number[]) => departmentTags(ids),
+    },
     { title: "Радиус, м", dataIndex: "radius_m", width: 110 },
     {
       title: "Статус",
@@ -216,8 +245,16 @@ export default function WorkLocationsPage() {
           fresh ? (
             <Descriptions column={1} bordered size="small">
               <Descriptions.Item label="Название">{fresh.name}</Descriptions.Item>
-              <Descriptions.Item label="Широта">{fresh.latitude}</Descriptions.Item>
-              <Descriptions.Item label="Долгота">{fresh.longitude}</Descriptions.Item>
+              <Descriptions.Item label="Адрес">{fresh.address ?? "—"}</Descriptions.Item>
+              <Descriptions.Item label="Цеха">
+                {departmentTags(fresh.department_ids)}
+              </Descriptions.Item>
+              <Descriptions.Item label="Координаты">
+                {fresh.latitude}, {fresh.longitude}{" "}
+                <a href={mapUrl(fresh)} target="_blank" rel="noreferrer">
+                  на карте
+                </a>
+              </Descriptions.Item>
               <Descriptions.Item label="Радиус">{fresh.radius_m} м</Descriptions.Item>
               <Descriptions.Item label="Статус">
                 <ActiveTag active={fresh.is_active} />
@@ -230,7 +267,7 @@ export default function WorkLocationsPage() {
             form={form}
             layout="vertical"
             onFinish={onFinish}
-            initialValues={{ radius_m: 3000 }}
+            initialValues={{ radius_m: DEFAULT_RADIUS_M, department_ids: [] }}
           >
             <Form.Item
               name="name"
@@ -238,6 +275,24 @@ export default function WorkLocationsPage() {
               rules={[{ required: true, message: "Обязательное поле" }]}
             >
               <Input />
+            </Form.Item>
+            <Form.Item name="address" label="Адрес" extra="Показывается сотруднику рядом с названием">
+              <Input maxLength={512} />
+            </Form.Item>
+            <Form.Item
+              name="department_ids"
+              label="Цеха на этой площадке"
+              extra="Сотрудник видит в приложении площадки своих цехов"
+            >
+              <Select
+                mode="multiple"
+                allowClear
+                showSearch
+                optionFilterProp="label"
+                loading={departmentsQuery.isPending}
+                options={departmentOptions}
+                placeholder="Выберите цеха"
+              />
             </Form.Item>
             <Form.Item
               name="latitude"
@@ -256,6 +311,7 @@ export default function WorkLocationsPage() {
             <Form.Item
               name="radius_m"
               label="Радиус (м)"
+              extra="Отметка считается «на месте», если сотрудник ближе к точке, чем этот радиус. По ТЗ — 150 м"
               rules={[{ required: true, message: "Обязательное поле" }]}
             >
               <InputNumber min={1} max={1000000} style={{ width: "100%" }} />

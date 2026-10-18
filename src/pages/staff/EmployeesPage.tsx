@@ -22,6 +22,7 @@ import {
 import {
   Alert,
   App,
+  AutoComplete,
   Avatar,
   Button,
   Card,
@@ -46,6 +47,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { errorMessage, mediaSrc } from "@/api/client";
+import { listPositions } from "@/api/admin";
 import { getRequest } from "@/api/requests";
 import {
   createEmployee,
@@ -137,6 +139,15 @@ export default function EmployeesPage() {
     return () => window.clearTimeout(timer);
     // `reset` пересоздаётся каждый рендер — в зависимостях ему не место.
   }, [search]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Справочник должностей для подсказки в поле «Должность»: свободный текст
+  // остаётся, но одна и та же должность не плодится опечатками.
+  const positionsQuery = useQuery({
+    queryKey: ["positions", { includeInactive: false }],
+    queryFn: () => listPositions(false),
+    staleTime: 60_000,
+  });
+  const positionOptions = (positionsQuery.data ?? []).map((p) => ({ value: p.name }));
 
   const query = useQuery({
     queryKey: ["employees", { limit, offset, departmentId, statusFilter, presenceFilter, q }],
@@ -553,8 +564,17 @@ export default function EmployeesPage() {
           >
             <Input />
           </Form.Item>
-          <Form.Item name="position" label="Должность">
-            <Input />
+          <Form.Item
+            name="position"
+            label="Должность"
+            extra="Выберите из справочника или впишите новую — она появится в «Должностях и правах»"
+          >
+            <AutoComplete
+              options={positionOptions}
+              filterOption={(input, option) =>
+                (option?.value ?? "").toLowerCase().includes(input.toLowerCase())
+              }
+            />
           </Form.Item>
           <Form.Item name="phone" label="Телефон">
             <Input />

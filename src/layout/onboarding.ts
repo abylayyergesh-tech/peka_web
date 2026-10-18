@@ -96,6 +96,8 @@ export const ITEM_HINTS: Record<string, string> = {
   "/employees/disciplinaries": "Журнал замечаний и выговоров (это не штрафы в зарплате).",
   "/departments": "Отделы (цеха) и их руководители.",
   "/work-locations": "Точки на карте и радиус, в котором сотрудник может отметить приход.",
+  "/positions": "Должности и вкладки приложения сотрудника, которые они открывают.",
+  "/attendance/settings": "Пороги опоздания, ухода, переработки и окно отметки прихода.",
   "/payroll/runs": "Расчёт аванса и зарплаты по табелю; утверждение и выплата.",
   "/payroll/compensations": "Оплата каждого сотрудника: за смену или оклад.",
   "/payroll/loans": "Займы сотрудникам и график удержаний.",
@@ -254,16 +256,21 @@ export const SECTION_GUIDES: Record<string, SectionGuide> = {
   hr: {
     summary: "Люди, графики и табели, заявления и зарплата.",
     groups: [
-      { title: "Люди", paths: ["/employees", "/departments", "/work-locations",
+      { title: "Люди", paths: ["/employees", "/departments", "/positions", "/work-locations",
         "/employees/medical-books", "/employees/disciplinaries"] },
       { title: "Смены и табель", intro: "График — план, отметки — факт, табель — итог месяца для зарплаты.",
-        paths: ["/employees/schedule", "/attendance", "/payroll/timesheet"] },
+        paths: ["/employees/schedule", "/attendance", "/attendance/settings", "/payroll/timesheet"] },
       { title: "Зарплата", paths: ["/payroll/runs", "/payroll/compensations", "/payroll/loans",
         "/payroll/staff-meals"] },
       { title: "Заявления", paths: ["/requests", "/requests/templates", "/approval-flows",
         "/request-policies"] },
     ],
     workflows: [
+      { path: "/positions", title: "Открыть вкладку приложения должности", howto: [
+        "Должности и права → нажмите на должность.",
+        "Отметьте вкладки приложения (склад, сборка, инвентаризация, «Мой цех») → «Сохранить права».",
+        "Опечатку в названии — «Объединить с другой должностью»: люди и права переедут.",
+      ] },
       { path: "/employees", title: "Принять сотрудника", howto: [
         "Сотрудники → «Добавить».",
         "«ФИО», «Роль», отдел и личные данные → «Сохранить». Email не обязателен.",
