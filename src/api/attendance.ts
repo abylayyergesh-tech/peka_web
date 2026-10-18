@@ -70,12 +70,43 @@ export async function saveAttendanceSettings(
 }
 
 // ---- attendance shifts ----
+/** Отметка прихода или ухода — для разбора спорной (app.attendance.schemas.AttendanceMarkOut). */
+export interface AttendanceMarkOut {
+  mark_id: number;
+  kind: "clock_in" | "clock_out";
+  marked_at: string;
+  latitude: string | null;
+  longitude: string | null;
+  accuracy_m: string | null;
+  distance_m: number | null;
+  work_location_id: number | null;
+  work_location_name: string | null;
+  /** Подписанная ссылка на селфи; живёт ~15 минут. */
+  photo_url: string | null;
+  is_mocked: boolean;
+  is_rooted: boolean;
+  out_of_zone: boolean;
+  comment: string | null;
+  dispute_status: DisputeStatus | null;
+  dispute_reasons: DisputeReason[];
+  decision_comment: string | null;
+  decided_at: string | null;
+}
+
+export type DisputeStatus = "pending" | "accepted" | "rejected";
+export type DisputeReason =
+  | "out_of_zone"
+  | "mock_location"
+  | "rooted_device"
+  | "out_of_schedule"
+  | "new_device";
+
 export interface AttendanceShiftOut {
   attendance_shift_id: number;
   organization_id: number;
   employee_id: number;
   employee_name: string | null;
-  work_location_id: number;
+  work_location_id: number | null;
   work_location_name: string | null;
   clock_in_at: string;
   clock_in_latitude: string | null;
@@ -90,29 +121,69 @@ export interface AttendanceShiftOut {
   is_edited: boolean;
   edited_by: number | null;
   created_at: string;
+  scheduled_start: string | null;
+  scheduled_end: string | null;
+  shift_name: string | null;
+  late_minutes: number | null;
+  early_leave_minutes: number | null;
+  overtime_minutes: number | null;
+  overtime_status: "pending" | "approved" | "rejected" | null;
+  dispute_status: DisputeStatus | null;
+  dispute_reasons: DisputeReason[];
+  dispute_comment: string | null;
+  decision_comment: string | null;
+  /** no_clock_out — смену закрыла система: ухода не было. */
+  close_reason: string | null;
+  clock_in_photo_url: string | null;
+  clock_out_photo_url: string | null;
+  marks: AttendanceMarkOut[];
 }
 
-/** Editable fields on a shift correction (recomputes worked_minutes). */
+/** Правка смены в кабинете — только с причиной (она попадает в историю). */
 export interface AttendanceShiftUpdate {
   work_location_id?: number;
   clock_in_at?: string;
   clock_out_at?: string | null;
+  reason: string;
 }
 
 /** Force-close an open shift with a supplied clock_out_at (> clock_in_at). */
 export interface AttendanceShiftClose {
   clock_out_at: string;
+  reason: string;
 }
 
-export interface ClockInIn {
-  work_location_id: number;
-  latitude: number;
-  longitude: number;
+export interface AttendanceShiftEditOut {
+  attendance_shift_edit_id: number;
+  attendance_shift_id: number;
+  edited_by: number | null;
+  edited_by_name: string | null;
+  edited_at: string;
+  field: string;
+  old_value: string | null;
+  new_value: string | null;
+  reason: string;
 }
 
-export interface ClockOutIn {
-  latitude: number;
-  longitude: number;
+export interface AttendanceAbsenceOut {
+  absence_id: number;
+  employee_id: number;
+  employee_name: string | null;
+  work_date: string;
+  scheduled_start: string | null;
+  status: "no_show" | "excused" | "unexcused";
+  comment: string | null;
+  resolved_at: string | null;
+}
+
+export interface ShiftTemplateOut {
+  shift_template_id: number;
+  name: string;
+  /** "HH:MM:SS" */
+  starts_at: string;
+  ends_at: string;
+  is_night: boolean;
+  is_active: boolean;
 }
 
 export interface WorkLocationListParams extends PageParams {
@@ -123,6 +194,9 @@ export interface ShiftListParams extends PageParams {
   employee_id?: number;
   work_location_id?: number;
   status?: string;
+  dispute?: DisputeStatus;
+  overtime?: "pending" | "approved" | "rejected";
+  close_reason?: "no_clock_out";
   from?: string;
   to?: string;
 }
@@ -203,12 +277,67 @@ export async function listMyShifts(
   return data;
 }
 
-export async function clockIn(body: ClockInIn): Promise<AttendanceShiftOut> {
-  const { data } = await api.post<AttendanceShiftOut>("/me/attendance/clock-in", body);
+// Отметка прихода/ухода — только из приложения сотрудника (multipart с селфи и
+// привязанным телефоном), из кабинета её не делают.
+
+// ---- история правок, решения, неявки, шаблоны смен ----
+export async function listShiftEdits(id: number): Promise<AttendanceShiftEditOut[]> {
+  const { data } = await api.get<AttendanceShiftEditOut[]>(`/attendance/shifts/${id}/edits`);
   return data;
 }
 
-export async function clockOut(body: ClockOutIn): Promise<AttendanceShiftOut> {
-  const { data } = await api.post<AttendanceShiftOut>("/me/attendance/clock-out", body);
+export async function decideMark(
+  markId: number,
+  decision: "accept" | "reject",
+  comment?: string,
+): Promise<void> {
+  await api.post(`/team/marks/${markId}/decision`, { decision, comment: comment || null });
+}
+
+export async function decideOvertime(
+  shiftId: number,
+  decision: "approve" | "reject",
+): Promise<void> {
+  await api.post(`/team/overtime/${shiftId}/decision`, { decision });
+}
+
+export async function listAbsences(params: {
+  status?: "no_show" | "excused" | "unexcused";
+  from?: string;
+  to?: string;
+}): Promise<AttendanceAbsenceOut[]> {
+  const { data } = await api.get<AttendanceAbsenceOut[]>("/attendance/absences", { params });
+  return data;
+}
+
+export async function resolveAbsence(
+  absenceId: number,
+  resolution: "excused" | "unexcused",
+  comment?: string,
+): Promise<void> {
+  await api.post(`/team/absences/${absenceId}/resolve`, { resolution, comment: comment || null });
+}
+
+export async function listShiftTemplates(includeInactive = false): Promise<ShiftTemplateOut[]> {
+  const { data } = await api.get<ShiftTemplateOut[]>("/shift-templates", {
+    params: includeInactive ? { include_inactive: true } : {},
+  });
+  return data;
+}
+
+export async function createShiftTemplate(body: {
+  name: string;
+  starts_at: string;
+  ends_at: string;
+}): Promise<ShiftTemplateOut> {
+  const { data } = await api.post<ShiftTemplateOut>("/shift-templates", body);
+  return data;
+}
+
+export async function updateShiftTemplate(
+  id: number,
+  body: Partial<{ name: string; starts_at: string; ends_at: string; is_active: boolean }>,
+): Promise<ShiftTemplateOut> {
+  const { data } = await api.patch<ShiftTemplateOut>(`/shift-templates/${id}`, body);
   return data;
 }

@@ -90,6 +90,7 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [
       { path: "/employees", label: "Сотрудники", cap: "staff.manage" },
       { path: "/employees/schedule", label: "График смен", cap: "staff.manage" },
+      { path: "/shift-templates", label: "Шаблоны смен", cap: "staff.manage" },
       { path: "/attendance", label: "Смены", cap: "attendance.manage" },
       { path: "/payroll/timesheet", label: "Табели", cap: "payroll.read" },
       { path: "/requests", label: "Заявления", cap: "request.approve" },
