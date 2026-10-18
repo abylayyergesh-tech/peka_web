@@ -106,6 +106,10 @@ export const NAV_SECTIONS: NavSection[] = [
       { path: "/device-requests", label: "Смена телефона", cap: "staff.manage" },
       { path: "/work-locations", label: "Рабочие локации", cap: "attendance.manage" },
       { path: "/attendance/settings", label: "Правила учёта", cap: "attendance.manage" },
+      // Онбординг и инструктажи по ТБ приложения сотрудника (ТЗ, §5, §7).
+      { path: "/onboarding", label: "Онбординг", cap: "staff.manage" },
+      { path: "/briefings", label: "Инструктажи по ТБ", cap: "staff.manage" },
+      { path: "/briefings/journal", label: "Журнал инструктажей", cap: "staff.manage" },
       { path: "/payroll/runs", label: "Ведомости", cap: "payroll.read" },
       { path: "/payroll/compensations", label: "Справочник ставок", cap: "payroll.read" },
       { path: "/payroll/loans", label: "Фин. займы", cap: "payroll.read" },

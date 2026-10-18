@@ -3,11 +3,15 @@ import type { RouteObject } from "react-router-dom";
 
 import AttendancePage from "@/pages/staff/AttendancePage";
 import AttendanceSettingsPage from "@/pages/staff/AttendanceSettingsPage";
+import BriefingDetailPage from "@/pages/staff/BriefingDetailPage";
+import BriefingJournalPage from "@/pages/staff/BriefingJournalPage";
+import BriefingsPage from "@/pages/staff/BriefingsPage";
 import DepartmentsPage from "@/pages/staff/DepartmentsPage";
 import DeviceRequestsPage from "@/pages/staff/DeviceRequestsPage";
 import DisciplinariesPage from "@/pages/staff/DisciplinariesPage";
 import EmployeesPage from "@/pages/staff/EmployeesPage";
 import MedicalBooksPage from "@/pages/staff/MedicalBooksPage";
+import OnboardingPage from "@/pages/staff/OnboardingPage";
 import PositionsPage from "@/pages/staff/PositionsPage";
 import SchedulePage from "@/pages/staff/SchedulePage";
 import ShiftTemplatesPage from "@/pages/staff/ShiftTemplatesPage";
@@ -27,4 +31,8 @@ export const staffRoutes: RouteObject[] = [
   { path: "/positions", element: <PositionsPage /> },
   { path: "/device-requests", element: <DeviceRequestsPage /> },
   { path: "/attendance/settings", element: <AttendanceSettingsPage /> },
+  { path: "/onboarding", element: <OnboardingPage /> },
+  { path: "/briefings", element: <BriefingsPage /> },
+  { path: "/briefings/journal", element: <BriefingJournalPage /> },
+  { path: "/briefings/:id", element: <BriefingDetailPage /> },
 ];

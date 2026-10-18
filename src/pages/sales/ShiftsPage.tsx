@@ -146,7 +146,11 @@ export default function ShiftsPage() {
       title: "Смена",
       dataIndex: "shift_id",
       render: (id: number, row) => (
-        <Link to={`/shifts/${id}`}>{shiftLabel(id, row.shift_number)}</Link>
+        // Без stopPropagation клик всплывал до строки, и её переход (на чек)
+        // перебивал переход на смену.
+        <Link to={`/shifts/${id}`} onClick={(e) => e.stopPropagation()}>
+          {shiftLabel(id, row.shift_number)}
+        </Link>
       ),
     },
     {
