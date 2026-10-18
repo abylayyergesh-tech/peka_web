@@ -66,6 +66,7 @@ import {
   type PositionHistoryOut,
 } from "@/api/staff";
 import AttachmentsPanel from "@/components/AttachmentsPanel";
+import AppAccessTab from "@/pages/staff/AppAccessTab";
 import { fmtDate, fmtDateTime } from "@/components/format";
 import { HiddenMoney } from "@/components/HiddenMoney";
 import { MONTH_NAMES, PAY_TYPE_LABELS, RUN_KIND_LABELS, RunStatusTag } from "@/pages/payroll/shared";
@@ -154,6 +155,21 @@ export function EmployeeFileBody({
             </Space>
           ),
         },
+        ...(canManage
+          ? [
+              {
+                key: "app",
+                label: "Приложение",
+                children: (
+                  <AppAccessTab
+                    employee={employee}
+                    canManage={canManage}
+                    onEmployeePatched={onEmployeePatched}
+                  />
+                ),
+              },
+            ]
+          : []),
         {
           key: "positions",
           label: "Должности",
