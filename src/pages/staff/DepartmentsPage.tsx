@@ -35,6 +35,7 @@ import { ActiveTag } from "@/pages/staff/shared";
 interface DepartmentFormValues {
   name: string;
   head_employee_id?: number;
+  manager_employee_ids?: number[];
   is_active?: boolean;
 }
 
@@ -93,6 +94,7 @@ export default function DepartmentsPage() {
     form.setFieldsValue({
       name: row.name,
       head_employee_id: row.head_employee_id ?? undefined,
+      manager_employee_ids: row.managers.map((m) => m.employee_id),
       is_active: row.is_active,
     });
   }
@@ -122,12 +124,14 @@ export default function DepartmentsPage() {
       save.mutate({
         name: values.name,
         head_employee_id: values.head_employee_id ?? null,
+        manager_employee_ids: values.manager_employee_ids ?? [],
         is_active: values.is_active,
       });
     } else {
       save.mutate({
         name: values.name,
         head_employee_id: values.head_employee_id ?? null,
+        manager_employee_ids: values.manager_employee_ids ?? [],
       });
     }
   }
@@ -138,6 +142,12 @@ export default function DepartmentsPage() {
       title: "Руководитель",
       dataIndex: "head_employee_name",
       render: (v) => v || "—",
+    },
+    {
+      title: "Руководители цеха",
+      dataIndex: "managers",
+      render: (v: DepartmentOut["managers"]) =>
+        v.length ? v.map((m) => m.full_name).join(", ") : "—",
     },
     {
       title: "Статус",
@@ -163,6 +173,20 @@ export default function DepartmentsPage() {
           showSearch
           optionFilterProp="label"
           placeholder="Не назначен"
+        />
+      </Form.Item>
+      <Form.Item
+        name="manager_employee_ids"
+        label="Руководители цеха"
+        extra="Шеф-повар, су-шеф и другие, кто ведёт цех в приложении («Мой цех»): видят людей цеха, решают спорные отметки и смену телефона. Нужна вкладка «Мой цех» по должности"
+      >
+        <Select
+          mode="multiple"
+          allowClear
+          options={empOptions}
+          showSearch
+          optionFilterProp="label"
+          placeholder="Никого, кроме руководителя"
         />
       </Form.Item>
       {card && (
@@ -246,6 +270,9 @@ export default function DepartmentsPage() {
               <Descriptions.Item label="Название">{fresh.name}</Descriptions.Item>
               <Descriptions.Item label="Руководитель">
                 {fresh.head_employee_name || "—"}
+              </Descriptions.Item>
+              <Descriptions.Item label="Руководители цеха">
+                {fresh.managers.length ? fresh.managers.map((m) => m.full_name).join(", ") : "—"}
               </Descriptions.Item>
               <Descriptions.Item label="Статус">
                 <ActiveTag active={fresh.is_active} />
