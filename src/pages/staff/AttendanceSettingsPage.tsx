@@ -2,7 +2,9 @@
  * «Настройки»). Их применяют отметка в приложении, график и табель — менять
  * здесь, а не в коде. Нет сохранённых правил — действуют значения из ТЗ.
  * Требует attendance.manage. */
-import { App, Button, Card, Col, Form, Input, InputNumber, Row, Skeleton, Space } from "antd";
+import {
+  Alert, App, Button, Card, Col, Form, Input, InputNumber, Row, Skeleton, Space, Statistic,
+} from "antd";
 import { useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -12,6 +14,7 @@ import {
   type AttendanceSettings,
 } from "@/api/attendance";
 import { errorMessage } from "@/api/client";
+import { getPushStatus } from "@/api/notifications";
 import { useCan } from "@/auth/store";
 
 interface Field {
@@ -93,6 +96,62 @@ const OTHER_FIELDS: Field[] = [
   },
 ];
 
+/** Состояние push-уведомлений приложения: включены ли и доходят ли. */
+function PushStatusCard() {
+  const canStaff = useCan("staff.manage");
+  const canRoles = useCan("role.manage");
+  const canSee = canStaff || canRoles;
+  const query = useQuery({
+    queryKey: ["push-status"],
+    queryFn: getPushStatus,
+    enabled: canSee,
+    refetchInterval: 60_000,
+  });
+  if (!canSee) return null;
+  const s = query.data;
+  return (
+    <Card title="Push-уведомления приложения" size="small" style={{ marginBottom: 16 }}>
+      {query.isPending ? (
+        <Skeleton active paragraph={{ rows: 1 }} />
+      ) : !s ? (
+        <Alert type="error" showIcon message={errorMessage(query.error)} />
+      ) : (
+        <Space direction="vertical" style={{ width: "100%" }}>
+          {s.configured ? (
+            <Alert
+              type="success"
+              showIcon
+              message={`Подключены${s.project_id ? ` (проект Firebase ${s.project_id})` : ""}`}
+              description="Напоминания о сменах, инструктажи, заявления, перемещения, сборка и инвентаризация приходят на телефоны сотрудников."
+            />
+          ) : (
+            <Alert
+              type="warning"
+              showIcon
+              message="Не подключены"
+              description="Нужен проект Firebase: ключ сервисного аккаунта кладётся на сервер. До этого уведомления копятся в очереди и через 6 часов отбрасываются, напоминания о сменах не создаются."
+            />
+          )}
+          <Row gutter={16}>
+            <Col xs={12} md={6}>
+              <Statistic title="Телефонов с push" value={s.devices} />
+            </Col>
+            <Col xs={12} md={6}>
+              <Statistic title="В очереди" value={s.pending} />
+            </Col>
+            <Col xs={12} md={6}>
+              <Statistic title="Доставлено за сутки" value={s.sent_24h} />
+            </Col>
+            <Col xs={12} md={6}>
+              <Statistic title="Не доставлено за сутки" value={s.undelivered_24h} />
+            </Col>
+          </Row>
+        </Space>
+      )}
+    </Card>
+  );
+}
+
 export default function AttendanceSettingsPage() {
   const { message } = App.useApp();
   const queryClient = useQueryClient();
@@ -153,6 +212,7 @@ export default function AttendanceSettingsPage() {
           <Card title="Онбординг и фото" size="small" style={{ marginBottom: 16 }}>
             <Row gutter={16}>{OTHER_FIELDS.map(numberField)}</Row>
           </Card>
+          <PushStatusCard />
           <Card title="Контакт HR в приложении" size="small" style={{ marginBottom: 16 }}>
             <Row gutter={16}>
               <Col xs={24} md={12}>
