@@ -115,6 +115,8 @@ export const NAV_SECTIONS: NavSection[] = [
       { path: "/briefings/journal", label: "Журнал инструктажей", cap: "staff.manage" },
       { path: "/payroll/runs", label: "Ведомости", cap: "payroll.read" },
       { path: "/payroll/compensations", label: "Справочник ставок", cap: "payroll.read" },
+      // Ставки за смену по должностям (день/ночь) — для начислений в приложении.
+      { path: "/payroll/position-rates", label: "Ставки по должностям", cap: "payroll.read" },
       { path: "/payroll/loans", label: "Фин. займы", cap: "payroll.read" },
       { path: "/payroll/staff-meals", label: "Питание сотрудников", cap: "payroll.read" },
       { path: "/approval-flows", label: "Маршруты согласования",
