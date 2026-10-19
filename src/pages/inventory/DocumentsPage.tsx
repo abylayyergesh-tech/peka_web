@@ -1,5 +1,5 @@
-/** /documents — складские документы: список с фильтрами (тип, статус, период)
- *  и создание. NB: бэкенд GET /documents НЕ поддерживает фильтр по складу. */
+/** /documents — складские документы: список с фильтрами (тип, статус, склад,
+ *  приём перемещения, период) и создание. Склад — откуда или куда. */
 import { CameraOutlined, PlusOutlined } from "@ant-design/icons";
 import { Button, DatePicker, Select, Space, Table } from "antd";
 import type { ColumnsType } from "antd/es/table";
@@ -13,6 +13,7 @@ import {
   type DocumentOut,
   type DocumentStatus,
   type DocumentType,
+  type ReceiptStatus,
 } from "@/api/inventory";
 import { Money, fmtDate } from "@/components/format";
 import { usePagination } from "@/components/usePagination";
@@ -23,6 +24,8 @@ import {
   DocStatusTag,
   DocTypeTag,
   nameOf,
+  RECEIPT_STATUS_OPTIONS,
+  ReceiptStatusTag,
   useWarehousesLookup,
 } from "@/pages/inventory/shared";
 
@@ -35,6 +38,8 @@ export default function DocumentsPage() {
 
   const [type, setType] = useState<DocumentType | undefined>();
   const [status, setStatus] = useState<DocumentStatus | undefined>();
+  const [warehouseId, setWarehouseId] = useState<number | undefined>();
+  const [receipt, setReceipt] = useState<ReceiptStatus | undefined>();
   const [range, setRange] = useState<[Dayjs, Dayjs] | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
 
@@ -42,8 +47,9 @@ export default function DocumentsPage() {
   const to = range?.[1]?.format("YYYY-MM-DD");
 
   const query = useQuery({
-    queryKey: ["documents", { limit, offset, type, status, from, to }],
-    queryFn: () => listDocuments({ limit, offset, type, status, from, to }),
+    queryKey: ["documents", { limit, offset, type, status, from, to, warehouseId, receipt }],
+    queryFn: () => listDocuments({ limit, offset, type, status, from, to,
+      warehouse_id: warehouseId, receipt_status: receipt }),
   });
 
   const columns: ColumnsType<DocumentOut> = [
@@ -101,7 +107,12 @@ export default function DocumentsPage() {
       title: "Статус",
       dataIndex: "status",
       width: 120,
-      render: (s: DocumentStatus) => <DocStatusTag status={s} />,
+      render: (s: DocumentStatus, row) => (
+        <Space size={4} wrap>
+          <DocStatusTag status={s} />
+          <ReceiptStatusTag status={row.receipt_status} />
+        </Space>
+      ),
     },
   ];
 
@@ -148,6 +159,30 @@ export default function DocumentsPage() {
           value={status}
           onChange={(v) => {
             setStatus(v);
+            reset();
+          }}
+        />
+        <Select
+          allowClear
+          showSearch
+          optionFilterProp="label"
+          placeholder="Склад"
+          style={{ width: 180 }}
+          options={warehouses.options}
+          value={warehouseId}
+          onChange={(v) => {
+            setWarehouseId(v);
+            reset();
+          }}
+        />
+        <Select
+          allowClear
+          placeholder="Приём перемещения"
+          style={{ width: 210 }}
+          options={RECEIPT_STATUS_OPTIONS}
+          value={receipt}
+          onChange={(v) => {
+            setReceipt(v);
             reset();
           }}
         />

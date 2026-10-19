@@ -70,7 +70,7 @@ export default function TransferPage() {
   useUnsavedChanges(Object.keys(moving).length > 0,
                     "Набранные строки перемещения потеряются.");
   const [result, setResult] = useState<
-    { id: number; number: number | null; rows: MovedRow[] } | null
+    { id: number; number: number | null; awaiting: boolean; rows: MovedRow[] } | null
   >(null);
 
   const units = useQuery({
@@ -147,6 +147,9 @@ export default function TransferPage() {
         target_warehouse_id: targetId as number,
         lines,
       });
+      // На получателе есть кому принять — перемещение ждёт приёма и проводится
+      // приёмом, а не здесь (недостача при приёме спишется отдельным актом).
+      if (doc.receipt_status === "awaiting") return doc;
       try {
         return await postDocument(doc.document_id);
       } catch (e) {
@@ -164,6 +167,7 @@ export default function TransferPage() {
       setResult({
         id: doc.document_id,
         number: doc.number,
+        awaiting: doc.receipt_status === "awaiting",
         rows: picked.map((p) => ({ product_id: p.row.product_id, quantity: p.qty })),
       });
       setMoving({});
@@ -173,6 +177,10 @@ export default function TransferPage() {
       queryClient.invalidateQueries({ queryKey: ["documents"] });
     },
     onError: (e) => {
+      if (errorCode(e) === "warehouse_locked_by_inventory") {
+        message.error("Склад заблокирован: идёт инвентаризация. Перемещение — после её закрытия.");
+        return;
+      }
       if (errorCode(e) === "insufficient_stock") {
         message.error(
           "На складе-источнике не хватило остатка — нажмите «Обновить остатки» и перебейте количества.",
@@ -409,9 +417,11 @@ export default function TransferPage() {
         onCancel={() => setResult(null)}
         width={640}
         title={
-          result?.number != null
-            ? `Перемещение № ${result.number} проведено`
-            : "Перемещение проведено"
+          result?.awaiting
+            ? "Перемещение ждёт приёма"
+            : result?.number != null
+              ? `Перемещение № ${result.number} проведено`
+              : "Перемещение проведено"
         }
         footer={
           <Space>
@@ -425,13 +435,23 @@ export default function TransferPage() {
           </Space>
         }
       >
-        <Alert
-          type="success"
-          showIcon
-          style={{ marginBottom: 12 }}
-          message={`Переехало позиций: ${result?.rows.length ?? 0}`}
-          description="Остатки обоих складов уже изменились. Стоимость товара осталась прежней — перемещение её не двигает."
-        />
+        {result?.awaiting ? (
+          <Alert
+            type="info"
+            showIcon
+            style={{ marginBottom: 12 }}
+            message={`Отправлено позиций: ${result.rows.length}`}
+            description="Остатки изменятся, когда ответственный склада-получателя примет товар в приложении. Недостачу при приёме система спишет отдельным актом."
+          />
+        ) : (
+          <Alert
+            type="success"
+            showIcon
+            style={{ marginBottom: 12 }}
+            message={`Переехало позиций: ${result?.rows.length ?? 0}`}
+            description="Остатки обоих складов уже изменились. Стоимость товара осталась прежней — перемещение её не двигает."
+          />
+        )}
         <Table
           rowKey="product_id"
           size="small"

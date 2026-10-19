@@ -6,12 +6,23 @@ import type { Page, PageParams } from "@/api/client";
 // --------------------------- warehouses ---------------------------
 export type WarehousePurpose = "raw" | "finished";
 
+export interface WarehouseResponsible {
+  employee_id: number;
+  full_name: string;
+  /** Принимает перемещения на этот склад. */
+  can_receive: boolean;
+}
+
 export interface WarehouseOut {
   warehouse_id: number;
   organization_id: number;
   name: string;
   purpose: WarehousePurpose;
   is_active: boolean;
+  /** Перемещения сюда ждут приёма ответственным (если такие есть). */
+  receipt_confirmation: boolean;
+  /** Кто работает со складом в приложении сотрудника. */
+  responsibles: WarehouseResponsible[];
   created_at: string;
   updated_at: string | null;
 }
@@ -26,6 +37,7 @@ export async function listWarehouses(
 export async function createWarehouse(body: {
   name: string;
   purpose?: WarehousePurpose;
+  receipt_confirmation?: boolean;
 }): Promise<WarehouseOut> {
   const { data } = await api.post<WarehouseOut>("/warehouses", body);
   return data;
@@ -33,9 +45,18 @@ export async function createWarehouse(body: {
 
 export async function updateWarehouse(
   id: number,
-  body: { name?: string; purpose?: WarehousePurpose },
+  body: { name?: string; purpose?: WarehousePurpose; receipt_confirmation?: boolean },
 ): Promise<WarehouseOut> {
   const { data } = await api.patch<WarehouseOut>(`/warehouses/${id}`, body);
+  return data;
+}
+
+/** Ответственные склада целиком (право inventory.manage). */
+export async function setWarehouseResponsibles(
+  id: number,
+  responsibles: { employee_id: number; can_receive: boolean }[],
+): Promise<WarehouseOut> {
+  const { data } = await api.put<WarehouseOut>(`/warehouses/${id}/responsibles`, { responsibles });
   return data;
 }
 
@@ -54,7 +75,9 @@ export type DocumentType =
   | "sale"
   | "inventory_count";
 
-export type DocumentStatus = "draft" | "posted";
+export type DocumentStatus = "draft" | "posted" | "cancelled";
+/** Приём перемещения на складе-получателе. */
+export type ReceiptStatus = "awaiting" | "received" | "received_with_discrepancy";
 
 /** Decimals travel as strings (backend Decimal). */
 export interface ReceiptLineIn {
@@ -115,6 +138,7 @@ export interface WriteOffDocumentCreate extends _BaseConsumptionCreate {
 export interface TransferDocumentCreate extends _BaseConsumptionCreate {
   type: "transfer";
   target_warehouse_id: number;
+  comment?: string | null;
 }
 
 export interface ProductionDocumentCreate extends _BaseConsumptionCreate {
@@ -155,6 +179,10 @@ export interface DocumentLineOut {
   unit_cost?: string | null;
   line_amount?: string | null;
   stock_quantity?: string | null;
+  product_name?: string | null;
+  unit_name?: string | null;
+  /** Сколько принято по строке перемещения. */
+  received_quantity?: string | null;
 }
 
 export interface DocumentOut {
@@ -176,6 +204,16 @@ export interface DocumentOut {
   recipe_id: number | null;
   posted_at: string | null;
   created_at: string;
+  warehouse_name?: string | null;
+  target_warehouse_name?: string | null;
+  created_by_name?: string | null;
+  receipt_status?: ReceiptStatus | null;
+  received_at?: string | null;
+  received_by_name?: string | null;
+  receipt_comment?: string | null;
+  /** Акт списания недостачи, созданный при приёме. */
+  discrepancy_document_id?: number | null;
+  cancelled_at?: string | null;
   /** Строки приезжают ТОЛЬКО в ответе на запрос одного документа: в списке они
    *  пустые. Для списка есть `lines_count` и `total_amount`. */
   lines: DocumentLineOut[];
@@ -188,6 +226,9 @@ export interface DocumentListParams extends PageParams {
   type?: DocumentType;
   status?: DocumentStatus;
   write_off_category_id?: number;
+  /** Документы склада — откуда или куда. */
+  warehouse_id?: number;
+  receipt_status?: ReceiptStatus;
   /** query aliases: from / to (ISO date). */
   from?: string;
   to?: string;
@@ -225,6 +266,22 @@ export async function deleteDocument(id: number): Promise<void> {
 
 export async function postDocument(id: number): Promise<DocumentOut> {
   const { data } = await api.post<DocumentOut>(`/documents/${id}/post`);
+  return data;
+}
+
+/** Отменить черновик: остаётся в журнале со статусом «отменён». */
+export async function cancelDocument(id: number): Promise<DocumentOut> {
+  const { data } = await api.post<DocumentOut>(`/documents/${id}/cancel`);
+  return data;
+}
+
+/** Принять перемещение: фактически принятое по строкам; недостача списывается
+ *  актом на складе-получателе. */
+export async function receiveTransfer(
+  id: number,
+  body: { lines: { document_line_id: number; received_quantity: string }[]; comment?: string | null },
+): Promise<DocumentOut> {
+  const { data } = await api.post<DocumentOut>(`/transfers/${id}/receive`, body);
   return data;
 }
 
