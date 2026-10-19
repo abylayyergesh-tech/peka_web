@@ -13,6 +13,7 @@ import {
   type DocumentStatus,
   type DocumentType,
   type ProductOut,
+  type ReceiptStatus,
   type SupplierOut,
   type WarehouseOut,
   type WarehousePurpose,
@@ -53,12 +54,36 @@ export const DOC_TYPE_OPTIONS = (
 export const DOC_STATUS_LABELS: Record<DocumentStatus, string> = {
   draft: "Черновик",
   posted: "Проведён",
+  cancelled: "Отменён",
 };
 
 const DOC_STATUS_COLORS: Record<DocumentStatus, string> = {
   draft: "default",
   posted: "green",
+  cancelled: "default",
 };
+
+export const RECEIPT_STATUS_LABELS: Record<ReceiptStatus, string> = {
+  awaiting: "Ждёт приёма",
+  received: "Принято",
+  received_with_discrepancy: "Принято с расхождением",
+};
+
+const RECEIPT_STATUS_COLORS: Record<ReceiptStatus, string> = {
+  awaiting: "gold",
+  received: "green",
+  received_with_discrepancy: "volcano",
+};
+
+export const RECEIPT_STATUS_OPTIONS = (Object.keys(RECEIPT_STATUS_LABELS) as ReceiptStatus[]).map(
+  (s) => ({ value: s, label: RECEIPT_STATUS_LABELS[s] }),
+);
+
+/** Приём перемещения: ждёт / принято / с расхождением. */
+export function ReceiptStatusTag({ status }: { status: ReceiptStatus | null | undefined }) {
+  if (!status) return null;
+  return <Tag color={RECEIPT_STATUS_COLORS[status]}>{RECEIPT_STATUS_LABELS[status]}</Tag>;
+}
 
 export const DOC_STATUS_OPTIONS = (
   Object.keys(DOC_STATUS_LABELS) as DocumentStatus[]

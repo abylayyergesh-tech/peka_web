@@ -1,5 +1,9 @@
 /** /documents/:id — карточка документа: шапка, строки, действия
- *  (провести / редактировать черновик / удалить). */
+ *  (провести / редактировать черновик / удалить / отменить).
+ *
+ *  Перемещение, которое ждёт приёма, проводит приём: в приложении — его
+ *  ответственный, здесь — руководство («Принять»). Недостача при приёме
+ *  списывается актом на складе-получателе, ссылка на акт — в карточке. */
 import { ArrowLeftOutlined, PaperClipOutlined } from "@ant-design/icons";
 import {
   Alert,
@@ -7,6 +11,8 @@ import {
   Button,
   Card,
   Descriptions,
+  Input,
+  InputNumber,
   Modal,
   Popconfirm,
   Result,
@@ -17,14 +23,16 @@ import {
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useState } from "react";
-import { Navigate, useNavigate, useParams } from "react-router-dom";
+import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { errorMessage } from "@/api/client";
 import {
+  cancelDocument,
   deleteDocument,
   getDocument,
   postDocument,
+  receiveTransfer,
   type DocumentLineOut,
 } from "@/api/inventory";
 import { useCan } from "@/auth/store";
@@ -36,6 +44,7 @@ import {
   DocTypeTag,
   isConsumptionType,
   nameOf,
+  ReceiptStatusTag,
   useProductsLookup,
   useWarehousesLookup,
 } from "@/pages/inventory/shared";
@@ -51,6 +60,9 @@ export default function DocumentDetailPage() {
   const [editOpen, setEditOpen] = useState(false);
   /** Окно проведения: там же предлагается приложить фото накладной. */
   const [postOpen, setPostOpen] = useState(false);
+  /** Приём перемещения за ответственного: сколько принято по строкам. */
+  const [received, setReceived] = useState<Record<number, number> | null>(null);
+  const [receiptComment, setReceiptComment] = useState("");
 
   const products = useProductsLookup();
   const warehouses = useWarehousesLookup();
@@ -67,6 +79,37 @@ export default function DocumentDetailPage() {
       message.success("Документ проведён");
       queryClient.invalidateQueries({ queryKey: ["document", docId] });
       queryClient.invalidateQueries({ queryKey: ["documents"] });
+    },
+    onError: (e) => message.error(errorMessage(e)),
+  });
+
+  const cancel = useMutation({
+    mutationFn: () => cancelDocument(docId),
+    onSuccess: () => {
+      message.success("Документ отменён");
+      queryClient.invalidateQueries({ queryKey: ["document", docId] });
+      queryClient.invalidateQueries({ queryKey: ["documents"] });
+    },
+    onError: (e) => message.error(errorMessage(e)),
+  });
+
+  const receive = useMutation({
+    mutationFn: () =>
+      receiveTransfer(docId, {
+        lines: Object.entries(received ?? {}).map(([lineId, qty]) => ({
+          document_line_id: Number(lineId),
+          received_quantity: String(qty),
+        })),
+        comment: receiptComment.trim() || null,
+      }),
+    onSuccess: (d) => {
+      message.success(d.receipt_status === "received_with_discrepancy"
+        ? "Принято с расхождением — недостача списана актом"
+        : "Перемещение принято");
+      setReceived(null);
+      queryClient.invalidateQueries({ queryKey: ["document", docId] });
+      queryClient.invalidateQueries({ queryKey: ["documents"] });
+      queryClient.invalidateQueries({ queryKey: ["stock"] });
     },
     onError: (e) => message.error(errorMessage(e)),
   });
@@ -105,6 +148,7 @@ export default function DocumentDetailPage() {
     return <Navigate to={`/write-offs/${doc.document_id}`} replace />;
   }
   const isDraft = doc.status === "draft";
+  const awaiting = doc.receipt_status === "awaiting";
   const isReceipt = doc.type === "receipt";
   const isCount = doc.type === "inventory_count";
   const canPost = isReceipt ? canManage || canPostReceipt : canManage;
@@ -120,13 +164,25 @@ export default function DocumentDetailPage() {
       render: (pid: number) => nameOf(products.byId, pid),
     },
     {
-      title: isCount ? "Факт. кол-во" : "Количество",
+      title: isCount ? "Факт. кол-во" : doc.type === "transfer" ? "Отправлено" : "Количество",
       dataIndex: "quantity",
       align: "right",
       width: 140,
       render: (v: string) => fmtQty(v),
     },
   ];
+  if (doc.type === "transfer" && doc.receipt_status && doc.receipt_status !== "awaiting") {
+    columns.push({
+      title: "Принято",
+      dataIndex: "received_quantity",
+      align: "right",
+      width: 140,
+      render: (v: string | null, row) => {
+        const short = v != null && Number(v) < Number(row.quantity);
+        return <Typography.Text type={short ? "danger" : undefined}>{fmtQty(v)}</Typography.Text>;
+      },
+    });
+  }
   if (isCount) {
     columns.push({
       title: "Ожид. кол-во",
@@ -180,13 +236,36 @@ export default function DocumentDetailPage() {
         </Space>
         {isDraft && (
           <Space>
-            {canEdit && (
+            {canEdit && !awaiting && (
               <Button onClick={() => setEditOpen(true)}>Редактировать</Button>
             )}
-            {canPost && (
+            {canPost && !awaiting && (
               <Button type="primary" loading={post.isPending} onClick={() => setPostOpen(true)}>
                 Провести
               </Button>
+            )}
+            {canManage && awaiting && (
+              <Button
+                type="primary"
+                onClick={() => {
+                  setReceiptComment("");
+                  setReceived(Object.fromEntries(
+                    doc.lines.map((l) => [l.document_line_id, Number(l.quantity)])));
+                }}
+              >
+                Принять
+              </Button>
+            )}
+            {canManage && (
+              <Popconfirm
+                title="Отменить документ?"
+                description="Останется в журнале со статусом «Отменён»."
+                okText="Отменить документ"
+                cancelText="Нет"
+                onConfirm={() => cancel.mutate()}
+              >
+                <Button loading={cancel.isPending}>Отменить</Button>
+              </Popconfirm>
             )}
             {canManage && (
               <Popconfirm
@@ -230,7 +309,35 @@ export default function DocumentDetailPage() {
         <Descriptions.Item label="Проведён">
           {doc.posted_at ? fmtDateTime(doc.posted_at) : "—"}
         </Descriptions.Item>
+        {doc.created_by_name && (
+          <Descriptions.Item label="Автор">{doc.created_by_name}</Descriptions.Item>
+        )}
+        {doc.comment && <Descriptions.Item label="Комментарий">{doc.comment}</Descriptions.Item>}
+        {doc.receipt_status && (
+          <Descriptions.Item label="Приём">
+            <Space size={4} wrap>
+              <ReceiptStatusTag status={doc.receipt_status} />
+              {doc.received_by_name && <span>{doc.received_by_name}, {fmtDateTime(doc.received_at)}</span>}
+              {doc.discrepancy_document_id && (
+                <Link to={`/write-offs/${doc.discrepancy_document_id}`}>акт недостачи</Link>
+              )}
+            </Space>
+          </Descriptions.Item>
+        )}
+        {doc.receipt_comment && (
+          <Descriptions.Item label="Комментарий приёма">{doc.receipt_comment}</Descriptions.Item>
+        )}
       </Descriptions>
+
+      {awaiting && (
+        <Alert
+          type="info"
+          showIcon
+          style={{ marginBottom: 12 }}
+          message="Ждёт приёма на складе-получателе"
+          description="Остатки изменятся, когда ответственный примет товар в приложении. Принять за него можно кнопкой «Принять»."
+        />
+      )}
 
       {isDraft && isReceipt && (
         <Alert
@@ -324,6 +431,56 @@ export default function DocumentDetailPage() {
           owner={{ kind: "invoice", documentId: docId }}
           uploadHint="Снимок бумажной накладной или pdf"
           emptyText="Пока ничего не приложено"
+        />
+      </Modal>
+
+      <Modal
+        open={received != null}
+        title="Принять перемещение"
+        okText="Принять"
+        cancelText="Отмена"
+        confirmLoading={receive.isPending}
+        onCancel={() => setReceived(null)}
+        onOk={() => receive.mutate()}
+        width={640}
+      >
+        <Typography.Paragraph type="secondary">
+          Впишите, сколько фактически пришло. Недостача спишется актом на складе-получателе
+          с причиной «Недостача при приёме»; больше отправленного принять нельзя.
+        </Typography.Paragraph>
+        <Table<DocumentLineOut>
+          rowKey="document_line_id"
+          size="small"
+          pagination={false}
+          dataSource={doc.lines}
+          columns={[
+            { title: "Продукт", dataIndex: "product_id",
+              render: (pid: number, row) => row.product_name ?? nameOf(products.byId, pid) },
+            { title: "Отправлено", dataIndex: "quantity", align: "right", width: 120,
+              render: (v: string) => fmtQty(v) },
+            {
+              title: "Принято",
+              key: "received",
+              width: 150,
+              render: (_, row) => (
+                <InputNumber
+                  size="small"
+                  min={0}
+                  max={Number(row.quantity)}
+                  value={received?.[row.document_line_id]}
+                  onChange={(v) => setReceived((prev) => ({
+                    ...(prev ?? {}), [row.document_line_id]: v ?? 0 }))}
+                />
+              ),
+            },
+          ]}
+        />
+        <Input.TextArea
+          rows={2}
+          style={{ marginTop: 12 }}
+          placeholder="Комментарий (например: мешок порван)"
+          value={receiptComment}
+          onChange={(e) => setReceiptComment(e.target.value)}
         />
       </Modal>
 
