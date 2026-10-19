@@ -67,6 +67,7 @@ import {
 } from "@/api/staff";
 import AttachmentsPanel from "@/components/AttachmentsPanel";
 import AppAccessTab from "@/pages/staff/AppAccessTab";
+import MonthSummaryTab from "@/pages/staff/MonthSummaryTab";
 import OnboardingTab from "@/pages/staff/OnboardingTab";
 import { fmtDate, fmtDateTime } from "@/components/format";
 import { HiddenMoney } from "@/components/HiddenMoney";
@@ -210,6 +211,11 @@ export function EmployeeFileBody({
           ) : (
             <Typography.Text type="secondary">Нет права payroll.read</Typography.Text>
           ),
+        },
+        {
+          key: "month",
+          label: "Месяц по отметкам",
+          children: <MonthSummaryTab employeeId={id} canPayrollRead={canPayrollRead} />,
         },
         {
           key: "kpis",

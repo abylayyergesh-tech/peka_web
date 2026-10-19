@@ -6,11 +6,13 @@ import LoansPage from "@/pages/payroll/LoansPage";
 import PayrollRunDetailPage from "@/pages/payroll/PayrollRunDetailPage";
 import PayrollRunsPage from "@/pages/payroll/PayrollRunsPage";
 import PaymentsPage from "@/pages/payroll/PaymentsPage";
+import PositionRatesPage from "@/pages/payroll/PositionRatesPage";
 import StaffMealsPage from "@/pages/payroll/StaffMealsPage";
 import TimesheetPage from "@/pages/payroll/TimesheetPage";
 
 export const payrollRoutes: RouteObject[] = [
   { path: "/payroll/compensations", element: <CompensationsPage /> },
+  { path: "/payroll/position-rates", element: <PositionRatesPage /> },
   { path: "/payroll/timesheet", element: <TimesheetPage /> },
   { path: "/payroll/runs", element: <PayrollRunsPage /> },
   // Detail-страница в меню не входит, но роутом быть должна.
