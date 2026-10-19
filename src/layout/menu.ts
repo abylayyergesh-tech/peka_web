@@ -5,7 +5,8 @@
 export interface NavItem {
   path: string;
   label: string;
-  cap?: string;
+  /** Право, без которого пункта не видно; список — достаточно любого. */
+  cap?: string | string[];
   /** Доп. префиксы URL, которые должны подсвечивать этот пункт: страница-деталь
    *  живёт не под `path` (например прайс меню `/menus/5` при пункте
    *  `/menu-items`), а без этого в меню не подсветится ничего. */
@@ -95,8 +96,10 @@ export const NAV_SECTIONS: NavSection[] = [
       { path: "/team/today", label: "Сегодня по цехам", cap: "attendance.manage" },
       { path: "/attendance", label: "Смены", cap: "attendance.manage" },
       { path: "/payroll/timesheet", label: "Табели", cap: "payroll.read" },
-      { path: "/requests", label: "Заявления", cap: "request.approve" },
+      // Бухгалтерия видит заявления без права согласовывать (request.read).
+      { path: "/requests", label: "Заявления", cap: ["request.approve", "request.read"] },
       { path: "/requests/templates", label: "Шаблоны заявлений", cap: "request.approve" },
+      { path: "/requests/types", label: "Типы заявлений", cap: "request.policy.manage" },
       { path: "/employees/medical-books", label: "Медкнижки", cap: "staff.manage" },
       { path: "/employees/disciplinaries", label: "Взыскания", cap: "staff.manage" },
       { path: "/departments", label: "Отделы (цеха)", cap: "staff.manage" },
@@ -135,6 +138,7 @@ export const NAV_SECTIONS: NavSection[] = [
 export function visibleSections(caps: string[]): NavSection[] {
   return NAV_SECTIONS.map((s) => ({
     ...s,
-    items: s.items.filter((i) => !i.cap || caps.includes(i.cap)),
+    items: s.items.filter((i) =>
+      !i.cap || (Array.isArray(i.cap) ? i.cap.some((c) => caps.includes(c)) : caps.includes(i.cap))),
   })).filter((s) => s.items.length > 0);
 }

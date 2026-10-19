@@ -5,10 +5,12 @@ import AllRequestsPage from "@/pages/requests/AllRequestsPage";
 import ApprovalFlowsPage from "@/pages/requests/ApprovalFlowsPage";
 import RequestPoliciesPage from "@/pages/requests/RequestPoliciesPage";
 import RequestTemplatesPage from "@/pages/requests/RequestTemplatesPage";
+import RequestTypesPage from "@/pages/requests/RequestTypesPage";
 
 export const requestsRoutes: RouteObject[] = [
   { path: "/requests", element: <AllRequestsPage /> },
   { path: "/requests/templates", element: <RequestTemplatesPage /> },
+  { path: "/requests/types", element: <RequestTypesPage /> },
   { path: "/approval-flows", element: <ApprovalFlowsPage /> },
   { path: "/request-policies", element: <RequestPoliciesPage /> },
 ];

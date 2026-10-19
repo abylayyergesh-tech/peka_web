@@ -5,7 +5,9 @@
  *     подаётся от имени заявителя, а карточка сотрудника и карточка оплаты
  *     создаются автоматически после подтверждения HR;
  *   * «Перерасчёт табеля» — нужен выбор табеля и построчная правка дней.
- * Остальные типы тоже доступны: HR часто оформляет аванс или займ за человека. */
+ * Остальные типы тоже доступны: HR часто оформляет аванс или займ за человека.
+ * Отгул, справка и свои типы организации — общая форма по виду типа (сумма,
+ * период, дата или ничего). */
 import { DeleteOutlined, PlusOutlined } from "@ant-design/icons";
 import {
   App,
@@ -35,7 +37,7 @@ import {
 } from "@/api/requests";
 import { getScheduleSwapPreview, listDepartments, listEmployees } from "@/api/staff";
 import { PAY_TYPE_OPTIONS, periodLabel } from "@/pages/payroll/shared";
-import { REQUEST_TYPE_LABELS } from "@/pages/requests/shared";
+import { OWN_FORM_TYPES, useRequestTypes } from "@/pages/requests/shared";
 
 /** Строка правки табеля в форме перерасчёта. */
 interface CorrectionRow {
@@ -67,13 +69,9 @@ interface FormValues {
   candidate_official_amount?: number;
   candidate_legal_entity_id?: number;
   hire_date?: Dayjs;
+  on_date?: Dayjs;
   comment?: string;
 }
-
-const TYPE_OPTIONS = (Object.keys(REQUEST_TYPE_LABELS) as RequestType[]).map((value) => ({
-  value,
-  label: REQUEST_TYPE_LABELS[value],
-}));
 
 export default function SubmitForEmployeeModal({
   open,
@@ -89,6 +87,16 @@ export default function SubmitForEmployeeModal({
   const giverId = Form.useWatch("employee_id", form);
   const swapDate = Form.useWatch("effective_date", form);
   const [rows, setRows] = useState<CorrectionRow[]>([]);
+  const requestTypes = useRequestTypes();
+  const typeOptions = requestTypes.types
+    .filter((t) => t.is_active)
+    .map((t) => ({ value: t.code, label: t.name_ru }));
+  // Вид общей формы выбранного типа (у встроенных со своей формой — null).
+  const genericKind =
+    selectedType && !OWN_FORM_TYPES.includes(selectedType)
+      ? requestTypes.byCode.get(selectedType)?.kind ?? "none"
+      : null;
+  const limit = selectedType ? requestTypes.byCode.get(selectedType)?.amount_limit : null;
 
   const employees = useQuery({
     queryKey: ["employees-all"],
@@ -197,6 +205,16 @@ export default function SubmitForEmployeeModal({
           hire_date: v.hire_date ? v.hire_date.format("YYYY-MM-DD") : null,
           comment,
         };
+      default:
+        // Отгул, справка, свои типы: общие поля по виду типа.
+        return {
+          type: v.type,
+          amount: genericKind === "amount" && v.amount != null ? String(v.amount) : null,
+          start_date: genericKind === "date_range" ? v.period![0].format("YYYY-MM-DD") : null,
+          end_date: genericKind === "date_range" ? v.period![1].format("YYYY-MM-DD") : null,
+          date: genericKind === "single_date" ? v.on_date!.format("YYYY-MM-DD") : null,
+          comment,
+        };
     }
   }
 
@@ -286,7 +304,13 @@ export default function SubmitForEmployeeModal({
         }}
       >
         <Form.Item name="type" label="Тип заявления" rules={[{ required: true }]}>
-          <Select options={TYPE_OPTIONS} placeholder="Выберите тип" />
+          <Select
+            showSearch
+            optionFilterProp="label"
+            loading={requestTypes.isPending}
+            options={typeOptions}
+            placeholder="Выберите тип"
+          />
         </Form.Item>
 
         <Form.Item
@@ -311,8 +335,41 @@ export default function SubmitForEmployeeModal({
         </Form.Item>
 
         {selectedType === "advance" && (
-          <Form.Item name="amount" label="Сумма аванса" rules={[{ required: true }]}>
+          <Form.Item
+            name="amount"
+            label="Сумма аванса"
+            rules={[{ required: true }]}
+            extra={limit ? `Не больше ${Number(limit).toLocaleString("ru-RU")} ₸` : undefined}
+          >
             <InputNumber min={1} step={10000} style={{ width: "100%" }} />
+          </Form.Item>
+        )}
+
+        {genericKind === "amount" && (
+          <Form.Item
+            name="amount"
+            label="Сумма, ₸"
+            rules={[{ required: true }]}
+            extra={limit ? `Не больше ${Number(limit).toLocaleString("ru-RU")} ₸` : undefined}
+          >
+            <InputNumber min={1} step={1000} style={{ width: "100%" }} />
+          </Form.Item>
+        )}
+        {genericKind === "date_range" && (
+          <Form.Item
+            name="period"
+            label="Период"
+            rules={[{ required: true }]}
+            extra={selectedType === "day_off"
+              ? "Дни отметятся в табеле буквой В и в графике — как отгул"
+              : undefined}
+          >
+            <DatePicker.RangePicker format="DD.MM.YYYY" style={{ width: "100%" }} />
+          </Form.Item>
+        )}
+        {genericKind === "single_date" && (
+          <Form.Item name="on_date" label="Дата" rules={[{ required: true }]}>
+            <DatePicker format="DD.MM.YYYY" style={{ width: "100%" }} />
           </Form.Item>
         )}
 

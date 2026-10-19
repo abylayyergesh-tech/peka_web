@@ -27,6 +27,8 @@ const CAPABILITY_LABELS_RU: Record<string, string> = {
   "request.policy.manage": "Управление порогами согласования заявлений",
   "inventory.count": "Проведение инвентаризации (перебить остатки склада)",
   "request.submit_any": "Подача заявления за другого сотрудника",
+  "request.read": "Просмотр всех заявлений без права согласования (бухгалтерия)",
+  "request.payout": "Выплата по согласованным авансам, займам и отпускным",
   "payroll.read": "Просмотр ставок, табелей, ведомостей и выплат",
   "payroll.manage": "Ведение ставок, табелей, ведомостей, займов и выплат",
   "order.create": "Приём заказов клиентов",
@@ -124,6 +126,8 @@ const ROLE_LABELS_RU: Record<string, string> = {
   manager: "Менеджер",
   employee: "Сотрудник",
   "hr-admin": "HR-администратор",
+  aup: "АУП",
+  accountant: "Бухгалтерия",
 };
 
 export function roleLabel(name: string): string {

@@ -1,8 +1,11 @@
 /** Маршруты согласования: на каждый тип заявления — упорядоченный список стадий.
  *
- * Стадия адресуется ЛИБО конкретному пользователю, ЛИБО роли (тогда подписать
- * может любой участник с этой ролью). Последняя стадия — подтверждение HR:
- * после неё применяется эффект заявления и регистрируется перевод средств.
+ * Стадия адресуется конкретному пользователю, роли (подписать может любой с
+ * этой ролью), руководителю цеха заявителя (начальник или кто-то из
+ * «Руководителей цеха»; нет цеха — стадия пропускается) или HR (любой с
+ * правом согласования). По умолчанию заявления сотрудников идут «руководитель
+ * цеха → HR» (ТЗ). Последняя стадия — подтверждение: после неё применяется
+ * эффект заявления.
  *
  * Правка маршрута не затрагивает уже поданные заявления — у них снимок стадий
  * на момент подачи. */
@@ -35,14 +38,23 @@ import {
   type RequestType,
 } from "@/api/requests";
 import { useAuthStore, useCan } from "@/auth/store";
-import { REQUEST_TYPE_LABELS } from "@/pages/requests/shared";
+import { useRequestTypes } from "@/pages/requests/shared";
+
+const KIND_LABELS = {
+  department_manager: "Руководитель цеха заявителя",
+  hr: "HR — любой с правом согласования",
+} as const;
 
 /** Черновик стадии в редакторе (до отправки на бэкенд). */
 interface DraftStep {
   key: string;
   title: string;
-  /** Кому адресована: конкретный пользователь или роль. */
-  target: { kind: "user"; userId: number } | { kind: "role"; role: string };
+  /** Кому адресована: пользователь, роль, руководитель цеха заявителя или HR. */
+  target:
+    | { kind: "user"; userId: number }
+    | { kind: "role"; role: string }
+    | { kind: "department_manager" }
+    | { kind: "hr" };
 }
 
 let draftSeq = 0;
@@ -56,6 +68,7 @@ export default function ApprovalFlowsPage() {
   const [editing, setEditing] = useState<ApprovalFlowOut | null>(null);
   const [steps, setSteps] = useState<DraftStep[]>([]);
   const [addForm] = Form.useForm<{ title?: string; target: string }>();
+  const { names: typeNames } = useRequestTypes();
 
   const flows = useQuery({ queryKey: ["approval-flows"], queryFn: listApprovalFlows });
 
@@ -79,6 +92,8 @@ export default function ApprovalFlowsPage() {
         title: s.title || null,
         approver_user_id: s.target.kind === "user" ? s.target.userId : null,
         approver_role: s.target.kind === "role" ? s.target.role : null,
+        approver_kind:
+          s.target.kind === "department_manager" || s.target.kind === "hr" ? s.target.kind : null,
         // Финальная — всегда последняя: именно она подтверждает и запускает перевод.
         is_final: i === steps.length - 1,
       }));
@@ -99,14 +114,17 @@ export default function ApprovalFlowsPage() {
         key: nextKey(),
         title: s.title ?? "",
         target:
-          s.approver_user_id != null
-            ? { kind: "user", userId: s.approver_user_id }
-            : { kind: "role", role: s.approver_role ?? "owner" },
+          s.approver_kind != null
+            ? { kind: s.approver_kind }
+            : s.approver_user_id != null
+              ? { kind: "user", userId: s.approver_user_id }
+              : { kind: "role", role: s.approver_role ?? "owner" },
       })),
     );
   }
 
   function targetLabel(target: DraftStep["target"]): string {
+    if (target.kind === "department_manager" || target.kind === "hr") return KIND_LABELS[target.kind];
     if (target.kind === "role") return `Роль: ${target.role}`;
     const member = members.data?.find((m) => m.user_id === target.userId);
     return member?.email ?? member?.full_name ?? `Пользователь #${target.userId}`;
@@ -122,7 +140,9 @@ export default function ApprovalFlowsPage() {
         target:
           kind === "user"
             ? { kind: "user", userId: Number(value) }
-            : { kind: "role", role: value },
+            : kind === "kind"
+              ? { kind: value as "department_manager" | "hr" }
+              : { kind: "role", role: value },
       },
     ]);
     addForm.resetFields();
@@ -143,7 +163,7 @@ export default function ApprovalFlowsPage() {
       title: "Тип заявления",
       dataIndex: "request_type",
       width: 220,
-      render: (v: RequestType) => REQUEST_TYPE_LABELS[v] ?? v,
+      render: (v: RequestType) => typeNames[v] ?? v,
     },
     {
       title: "Стадии согласования",
@@ -154,10 +174,12 @@ export default function ApprovalFlowsPage() {
           {row.steps.map((s) => (
             <Tag key={s.approval_flow_step_id} color={s.is_final ? "green" : "blue"}>
               {s.step_no}.{" "}
-              {s.approver_user_id != null
-                ? s.approver_email ?? `Пользователь #${s.approver_user_id}`
-                : `Роль: ${s.approver_role}`}
-              {s.is_final ? " · подтверждение HR" : ""}
+              {s.approver_kind != null
+                ? KIND_LABELS[s.approver_kind]
+                : s.approver_user_id != null
+                  ? s.approver_email ?? `Пользователь #${s.approver_user_id}`
+                  : `Роль: ${s.approver_role}`}
+              {s.is_final ? " · подтверждение" : ""}
             </Tag>
           ))}
         </Space>
@@ -211,7 +233,7 @@ export default function ApprovalFlowsPage() {
       width: 190,
       render: (_, __, index) =>
         index === steps.length - 1 ? (
-          <Tag color="green">Подтверждение HR · перевод</Tag>
+          <Tag color="green">Подтверждение</Tag>
         ) : (
           <Tag color="blue">Согласование</Tag>
         ),
@@ -247,6 +269,13 @@ export default function ApprovalFlowsPage() {
 
   const targetOptions = [
     {
+      label: "По месту заявителя",
+      options: [
+        { value: "kind:department_manager", label: KIND_LABELS.department_manager },
+        { value: "kind:hr", label: KIND_LABELS.hr },
+      ],
+    },
+    {
       label: "Роли",
       options: (roles.data ?? []).map((r) => ({
         value: `role:${r.name}`,
@@ -273,12 +302,14 @@ export default function ApprovalFlowsPage() {
         message="Как это работает"
         description={
           <>
-            Стадии проходятся строго по порядку. Стадия, адресованная роли, может быть
-            подписана любым участником с этой ролью; адресованная пользователю — только
-            им. Одно отклонение завершает заявление. Последняя стадия — подтверждение
-            HR: после неё применяется эффект заявления (увольнение, отпуск, займ, приём
-            в штат, правка табеля) и регистрируется перевод средств. Изменение маршрута
-            не затрагивает уже поданные заявления.
+            Стадии проходятся строго по порядку. «Руководитель цеха заявителя» — начальник
+            цеха или кто-то из «Руководителей цеха»; у кого цеха нет, эта стадия
+            пропускается. «HR» — любой с правом согласования заявлений, он же может решить
+            за отсутствующего руководителя. Стадию роли подписывает любой с этой ролью,
+            стадию пользователя — только он. Одно отклонение завершает заявление.
+            Последняя стадия — подтверждение: после неё применяется эффект заявления
+            (отпуск и отгул в табель, увольнение, займ, приём в штат, правка табеля).
+            Изменение маршрута не затрагивает уже поданные заявления.
           </>
         }
       />
@@ -294,7 +325,7 @@ export default function ApprovalFlowsPage() {
 
       <Modal
         open={editing != null}
-        title={`Маршрут — ${editing ? REQUEST_TYPE_LABELS[editing.request_type] : ""}`}
+        title={`Маршрут — ${editing ? typeNames[editing.request_type] ?? editing.request_type : ""}`}
         okText="Сохранить маршрут"
         cancelText="Отмена"
         width={860}
@@ -327,7 +358,7 @@ export default function ApprovalFlowsPage() {
                 showSearch
                 optionFilterProp="label"
                 options={targetOptions}
-                placeholder="Роль или пользователь"
+                placeholder="Руководитель цеха, HR, роль или пользователь"
               />
             </Form.Item>
             <Form.Item name="title" label="Название">
@@ -342,8 +373,8 @@ export default function ApprovalFlowsPage() {
         </Card>
 
         <Typography.Paragraph type="secondary" style={{ marginTop: 12, marginBottom: 0 }}>
-          Последняя стадия автоматически становится подтверждением HR — переставьте
-          стадии стрелками, если нужен другой порядок.
+          Последняя стадия автоматически становится подтверждением — переставьте стадии
+          стрелками, если нужен другой порядок.
         </Typography.Paragraph>
       </Modal>
     </div>

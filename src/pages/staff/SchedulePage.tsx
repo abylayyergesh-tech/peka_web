@@ -39,6 +39,7 @@ import {
   getEmployeeSchedule,
   listDepartments,
   replaceScheduleDays,
+  type LeaveKind,
   type ScheduleDayPut,
   type ScheduleKind,
   type ScheduleRowOut,
@@ -112,7 +113,7 @@ function cellOf(
   };
 }
 
-function leaveOf(row: ScheduleRowOut, day: number): "vacation" | "sick" | null {
+function leaveOf(row: ScheduleRowOut, day: number): LeaveKind | null {
   return row.days[String(day)]?.leave_kind ?? null;
 }
 
@@ -253,6 +254,7 @@ export default function SchedulePage() {
           const tpl = cell.shift_template_id ? templateById.get(cell.shift_template_id) : undefined;
           if (leave === "sick") mark = "Б";
           else if (leave === "vacation") mark = "О";
+          else if (leave === "day_off") mark = "От";
           else if (cell.kind === "work" && cell.shift_template_id) mark = tplShort(tpl);
           else if (cell.kind === "work") mark = fmtShifts(cell.shifts);
           else if (cell.kind === "dayoff") mark = "В";
