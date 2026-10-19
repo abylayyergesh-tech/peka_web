@@ -10,7 +10,7 @@
  *  ведёт прямо в лист. */
 import { PlusOutlined } from "@ant-design/icons";
 import {
-  Alert, App, Button, Checkbox, DatePicker, Form, Input, Modal, Segmented,
+  Alert, App, Button, Checkbox, DatePicker, Form, Input, Modal, Radio, Segmented,
   Select, Space, Table, Tag, Tooltip,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
@@ -19,7 +19,9 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { errorMessage } from "@/api/client";
+import { listProductCategories } from "@/api/catalog";
+import { errorMessage, fetchAllPages } from "@/api/client";
+import { listEmployees } from "@/api/staff";
 import {
   createCountSession,
   listCountSessions,
@@ -38,6 +40,9 @@ interface SessionForm {
   warehouse_ids: number[];
   note?: string;
   prefill: boolean;
+  scope: "full" | "groups";
+  categories?: string[];
+  participant_ids?: number[];
 }
 
 export default function CountSessionsPage() {
@@ -50,6 +55,19 @@ export default function CountSessionsPage() {
   const [status, setStatus] = useState<SessionStatus | "all">("all");
   const [modalOpen, setModalOpen] = useState(false);
   const [form] = Form.useForm<SessionForm>();
+  const scope = Form.useWatch("scope", form);
+  const categories = useQuery({
+    queryKey: ["product-categories"],
+    queryFn: listProductCategories,
+    enabled: modalOpen,
+    staleTime: 60_000,
+  });
+  const employees = useQuery({
+    queryKey: ["employees-all"],
+    queryFn: () => fetchAllPages((p) => listEmployees({ ...p, status: "active" })),
+    enabled: modalOpen,
+    staleTime: 60_000,
+  });
 
   const query = useQuery({
     queryKey: ["count-sessions", { limit, offset, status }],
@@ -69,6 +87,9 @@ export default function CountSessionsPage() {
         warehouse_ids: values.warehouse_ids,
         note: values.note?.trim() || null,
         prefill: values.prefill,
+        scope: values.scope,
+        categories: values.scope === "groups" ? values.categories ?? [] : [],
+        participant_ids: values.participant_ids ?? [],
       }),
     onSuccess: (session) => {
       setModalOpen(false);
@@ -94,6 +115,7 @@ export default function CountSessionsPage() {
     count_date: dayjs(),
     warehouse_ids: [] as number[],
     prefill: true,
+    scope: "full" as const,
   };
 
   const columns: ColumnsType<CountSessionOut> = [
@@ -294,6 +316,43 @@ export default function CountSessionsPage() {
               placeholder="Какие склады считаем"
               loading={warehouses.isPending}
               options={warehouses.options}
+            />
+          </Form.Item>
+          <Form.Item name="scope" label="Что считаем">
+            <Radio.Group
+              options={[
+                { value: "full", label: "Всё с остатком" },
+                { value: "groups", label: "Только группы товаров" },
+              ]}
+            />
+          </Form.Item>
+          {scope === "groups" && (
+            <Form.Item
+              name="categories"
+              label="Группы товаров"
+              rules={[{ required: true, message: "Выберите хотя бы одну группу" }]}
+            >
+              <Select
+                mode="multiple"
+                showSearch
+                loading={categories.isPending}
+                options={(categories.data ?? []).map((c) => ({ value: c.name, label: c.name }))}
+                placeholder="Категории товаров"
+              />
+            </Form.Item>
+          )}
+          <Form.Item
+            name="participant_ids"
+            label="Участники"
+            tooltip="Считают в приложении «вслепую»: учёта и денег не видят, только вносят факт. Получат уведомление"
+          >
+            <Select
+              mode="multiple"
+              showSearch
+              optionFilterProp="label"
+              loading={employees.isLoading}
+              options={(employees.data ?? []).map((e) => ({ value: e.employee_id, label: e.full_name }))}
+              placeholder="Кто считает (можно позже)"
             />
           </Form.Item>
           <Form.Item name="prefill" valuePropName="checked">

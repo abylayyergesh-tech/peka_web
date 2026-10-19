@@ -18,7 +18,7 @@
  *  админка и проводка расходились бы в арифметике на копейки, а спорить с
  *  проводкой бессмысленно — она и есть учёт. */
 import {
-  CheckCircleOutlined, PlusOutlined, ReloadOutlined, SearchOutlined,
+  CheckCircleOutlined, PlusOutlined, ReloadOutlined, SearchOutlined, TeamOutlined,
 } from "@ant-design/icons";
 import {
   Alert, App, Button, Card, Checkbox, Col, Descriptions, Input, InputNumber, Modal,
@@ -29,16 +29,20 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { errorMessage } from "@/api/client";
+import { listProductCategories } from "@/api/catalog";
+import { errorMessage, fetchAllPages } from "@/api/client";
 import {
   cancelCountSession,
   closeCountSession,
   deleteCountLine,
   getCountSession,
+  recountLines,
   saveCountLines,
+  updateCountSession,
   type SessionLineIn,
   type SessionLineOut,
 } from "@/api/counting";
+import { listEmployees } from "@/api/staff";
 import { useCan } from "@/auth/store";
 import { Money, fmtDate, fmtQty } from "@/components/format";
 import { RowStatusTag, SessionStatusTag, signed } from "@/pages/inventory/countShared";
@@ -57,8 +61,24 @@ export default function CountSessionPage() {
   const { message } = App.useApp();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const canCount = useCan("inventory.count");
+  // Проверять, отправлять на пересчёт и закрывать — «inventory.close» (или
+  // прежнее «inventory.count»). Участники считают в приложении.
+  const canCount = useCan("inventory.close") || useCan("inventory.count");
   const products = useProductsLookup();
+  const [selected, setSelected] = useState<number[]>([]);
+  const [team, setTeam] = useState<{ employee_id: number; full_name: string; categories: string[] }[] | null>(null);
+  const employees = useQuery({
+    queryKey: ["employees-all"],
+    queryFn: () => fetchAllPages((p) => listEmployees({ ...p, status: "active" })),
+    enabled: team != null,
+    staleTime: 60_000,
+  });
+  const categoryOptions = useQuery({
+    queryKey: ["product-categories"],
+    queryFn: listProductCategories,
+    enabled: team != null,
+    staleTime: 60_000,
+  });
 
   const [warehouseId, setWarehouseId] = useState<number | "all">("all");
   const [search, setSearch] = useState("");
@@ -247,6 +267,27 @@ export default function CountSessionPage() {
 
   const uncounted = stats.total - stats.counted;
 
+  const recount = useMutation({
+    mutationFn: () => recountLines(sessionId, selected),
+    onSuccess: () => {
+      message.success(`На пересчёт: ${selected.length} поз. Участники увидят «Пересчитать»`);
+      setSelected([]);
+      queryClient.invalidateQueries({ queryKey: ["count-session", sessionId] });
+    },
+    onError: (e) => message.error(errorMessage(e)),
+  });
+  const saveTeam = useMutation({
+    mutationFn: () => updateCountSession(sessionId, {
+      participants: (team ?? []).map((p) => ({ employee_id: p.employee_id, categories: p.categories })),
+    }),
+    onSuccess: () => {
+      message.success("Участники сохранены");
+      setTeam(null);
+      queryClient.invalidateQueries({ queryKey: ["count-session", sessionId] });
+    },
+    onError: (e) => message.error(errorMessage(e)),
+  });
+
   const columns: ColumnsType<SessionLineOut> = [
     ...(warehouseId === "all"
       ? [{
@@ -265,6 +306,12 @@ export default function CountSessionPage() {
         <Space size={4} direction="vertical" style={{ display: "flex" }}>
           <span>{v}</span>
           {row.sku && <span style={{ color: "#999", fontSize: 12 }}>{row.sku}</span>}
+          {(row.recount_requested || row.added_by_counter) && (
+            <Space size={4} wrap>
+              {row.recount_requested && <Tag color="orange">на пересчёт</Tag>}
+              {row.added_by_counter && <Tag color="purple">добавил участник</Tag>}
+            </Space>
+          )}
         </Space>
       ),
       sorter: (a, b) => a.product_name.localeCompare(b.product_name),
@@ -400,6 +447,10 @@ export default function CountSessionPage() {
           </Button>
           {editable && (
             <>
+              <Button icon={<TeamOutlined />}
+                onClick={() => setTeam((session?.participants ?? []).map((p) => ({ ...p })))}>
+                Участники
+              </Button>
               <Popconfirm
                 title="Отменить сессию?"
                 description="Остатки не изменятся, лист останется историей."
@@ -438,7 +489,22 @@ export default function CountSessionPage() {
               label: "Склады",
               children: session.warehouses.map((w) => w.warehouse_name).join(", ") || "—",
             },
-            { key: "who", label: "Открыл", children: session.opened_by_name ?? "—" },
+            { key: "who", label: "Ответственный", children: session.responsible_name ?? session.opened_by_name ?? "—" },
+            {
+              key: "scope",
+              label: "Что считаем",
+              children: session.scope === "groups"
+                ? `группы: ${session.categories.join(", ")}`
+                : "всё с остатком",
+            },
+            {
+              key: "team",
+              label: "Участники",
+              children: session.participants.length
+                ? session.participants.map((p) => p.categories.length
+                    ? `${p.full_name} (${p.categories.join(", ")})` : p.full_name).join(", ")
+                : "—",
+            },
             {
               key: "closed",
               label: "Закрыта",
@@ -508,7 +574,7 @@ export default function CountSessionPage() {
           showIcon
           style={{ marginBottom: 16 }}
           message="Только просмотр"
-          description="Вносить факт и закрывать сессию может администрация — нужно право inventory.count."
+          description="Вносить факт и закрывать сессию может ответственный (право «Проверка, пересчёт и закрытие инвентаризации»). Участники считают в приложении."
         />
       )}
 
@@ -572,12 +638,30 @@ export default function CountSessionPage() {
         )}
       </Space>
 
+      {editable && selected.length > 0 && (
+        <Space style={{ marginBottom: 12 }}>
+          <Popconfirm
+            title={`Отправить на пересчёт ${selected.length} поз.?`}
+            description="Факт по ним сбросится, участники увидят «Пересчитать»."
+            okText="Отправить"
+            cancelText="Отмена"
+            onConfirm={() => recount.mutate()}
+          >
+            <Button loading={recount.isPending}>На пересчёт ({selected.length})</Button>
+          </Popconfirm>
+          <Button type="link" onClick={() => setSelected([])}>Снять выбор</Button>
+        </Space>
+      )}
       <Table<SessionLineOut>
         rowKey="inventory_count_session_line_id"
         size="small"
         loading={query.isPending}
         dataSource={rows}
         columns={columns}
+        rowSelection={editable ? {
+          selectedRowKeys: selected,
+          onChange: (keys) => setSelected(keys as number[]),
+        } : undefined}
         pagination={{ pageSize: 100, showSizeChanger: true, showTotal: (t) => `${t} позиций` }}
         locale={{
           emptyText:
@@ -586,6 +670,77 @@ export default function CountSessionPage() {
               : "Ничего не подходит под фильтр",
         }}
       />
+
+      <Modal
+        title="Участники пересчёта"
+        open={team != null}
+        onCancel={() => setTeam(null)}
+        onOk={() => saveTeam.mutate()}
+        okText="Сохранить"
+        cancelText="Отмена"
+        confirmLoading={saveTeam.isPending}
+        width={680}
+        destroyOnHidden
+      >
+        <Alert
+          type="info"
+          showIcon
+          style={{ marginBottom: 12 }}
+          message="Участник считает в приложении «вслепую»"
+          description="Учёта, расхождений и денег он не видит — только вносит, что на полке. Группы — какие товары он считает; пусто — все. Новым участникам придёт уведомление."
+        />
+        <Select
+          showSearch
+          optionFilterProp="label"
+          placeholder="Добавить участника"
+          style={{ width: "100%", marginBottom: 12 }}
+          value={null}
+          loading={employees.isLoading}
+          options={(employees.data ?? [])
+            .filter((e) => !(team ?? []).some((p) => p.employee_id === e.employee_id))
+            .map((e) => ({ value: e.employee_id, label: e.full_name }))}
+          onChange={(id: number) => {
+            const e = employees.data?.find((x) => x.employee_id === id);
+            if (e) setTeam((prev) => [...(prev ?? []),
+              { employee_id: e.employee_id, full_name: e.full_name, categories: [] }]);
+          }}
+        />
+        <Table
+          rowKey="employee_id"
+          size="small"
+          pagination={false}
+          dataSource={team ?? []}
+          locale={{ emptyText: "Участников нет" }}
+          columns={[
+            { title: "Участник", dataIndex: "full_name", width: 200 },
+            {
+              title: "Группы товаров",
+              key: "cats",
+              render: (_, row) => (
+                <Select
+                  mode="multiple"
+                  size="small"
+                  style={{ width: "100%" }}
+                  placeholder="все"
+                  value={row.categories}
+                  options={(categoryOptions.data ?? []).map((c) => ({ value: c.name, label: c.name }))}
+                  onChange={(cats: string[]) => setTeam((prev) => (prev ?? []).map((p) =>
+                    p.employee_id === row.employee_id ? { ...p, categories: cats } : p))}
+                />
+              ),
+            },
+            {
+              title: "",
+              key: "x",
+              width: 70,
+              render: (_, row) => (
+                <a onClick={() => setTeam((prev) =>
+                  (prev ?? []).filter((p) => p.employee_id !== row.employee_id))}>Убрать</a>
+              ),
+            },
+          ]}
+        />
+      </Modal>
 
       <Modal
         title="Закрыть инвентаризацию с проводкой"

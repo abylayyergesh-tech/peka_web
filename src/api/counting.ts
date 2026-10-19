@@ -36,6 +36,15 @@ export interface CountSessionOut {
   closed_by_name: string | null;
   closed_at: string | null;
   created_at: string;
+  /** full — всё с остатком; groups — только товары категорий `categories`. */
+  scope: "full" | "groups";
+  categories: string[];
+  /** Кто считает в приложении («вслепую»); categories — их группы, пусто — все. */
+  participants: { employee_id: number; full_name: string; categories: string[] }[];
+  responsible_name: string | null;
+  /** Вызывающий — участник без права проверять: учёта и денег ему не отдают. */
+  blind: boolean;
+  snapshot_at: string | null;
   warehouses: SessionWarehouseOut[];
   lines_total: number;
   counted: number;
@@ -51,10 +60,17 @@ export interface SessionLineOut {
   category: string | null;
   unit_id: number;
   unit_name: string;
-  /** Остаток по учёту СЕЙЧАС. */
-  current_quantity: string;
-  /** Средняя себестоимость единицы; «0» — оценивать излишек нечем. */
-  avg_cost: string;
+  /** Остаток по учёту СЕЙЧАС (null — счёт вслепую). */
+  current_quantity: string | null;
+  /** Средняя себестоимость единицы; «0» — оценивать излишек нечем; null — без
+   *  права на суммы. */
+  avg_cost: string | null;
+  /** Учёт на момент открытия сессии. */
+  snapshot_quantity: string | null;
+  /** Ответственный отправил на пересчёт. */
+  recount_requested: boolean;
+  /** Строку добавил участник — товара не было в листе. */
+  added_by_counter: boolean;
   counted_quantity: string | null;
   price: string | null;
   /** Снимок учёта на момент внесения факта. */
@@ -102,10 +118,16 @@ export interface CountReportRow {
    *  между подсчётом и закрытием. */
   expected_at_count: string | null;
   expected_quantity: string;
+  /** Учёт на момент открытия сессии. */
+  snapshot_quantity: string | null;
   counted_quantity: string | null;
   diff: string;
-  diff_value: string;
+  /** Себестоимость единицы и деньги — null без права «суммы инвентаризации». */
+  price: string | null;
+  diff_value: string | null;
   status: RowStatus;
+  recount_requested: boolean;
+  added_by_counter: boolean;
   drifted: boolean;
   movements: SessionMovements;
 }
@@ -121,9 +143,9 @@ export interface CountReportWarehouse {
   matches: number;
   shortages: number;
   surpluses: number;
-  shortage_value: string;
-  surplus_value: string;
-  net_value: string;
+  shortage_value: string | null;
+  surplus_value: string | null;
+  net_value: string | null;
 }
 
 export interface CountReportTransfer {
@@ -148,9 +170,9 @@ export interface CountReportTotals {
   matches: number;
   shortages: number;
   surpluses: number;
-  shortage_value: string;
-  surplus_value: string;
-  net_value: string;
+  shortage_value: string | null;
+  surplus_value: string | null;
+  net_value: string | null;
   /** Расхождение есть, а движений с начала сессии не было. */
   without_movements: number;
 }
@@ -204,6 +226,9 @@ export async function createCountSession(body: {
   note?: string | null;
   /** Наполнить лист позициями с остатком (по умолчанию да). */
   prefill?: boolean;
+  scope?: "full" | "groups";
+  categories?: string[];
+  participant_ids?: number[];
 }): Promise<CountSessionOut> {
   const { data } = await api.post<CountSessionOut>(BASE, body);
   return data;
@@ -222,6 +247,7 @@ export async function updateCountSession(
     note?: string | null;
     add_warehouse_ids?: number[];
     prefill_added?: boolean;
+    participants?: { employee_id: number; categories: string[] }[];
   },
 ): Promise<CountSessionOut> {
   const { data } = await api.patch<CountSessionOut>(`${BASE}/${id}`, body);
@@ -257,4 +283,9 @@ export async function cancelCountSession(id: number): Promise<CountSessionOut> {
 export async function getCountReport(id: number): Promise<CountSessionReport> {
   const { data } = await api.get<CountSessionReport>(`${BASE}/${id}/report`);
   return data;
+}
+
+/** Отправить строки на пересчёт: факт сброшен, участникам — «Пересчитать». */
+export async function recountLines(id: number, lineIds: number[]): Promise<void> {
+  await api.post(`${BASE}/${id}/recount`, { line_ids: lineIds });
 }

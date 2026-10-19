@@ -97,6 +97,7 @@ export default function CountReportPage() {
         <Space direction="vertical" size={0} style={{ display: "flex" }}>
           <span>{v}</span>
           {row.sku && <span style={{ color: "#999", fontSize: 12 }}>{row.sku}</span>}
+          {row.added_by_counter && <Tag color="purple" style={{ width: "fit-content" }}>добавил участник</Tag>}
         </Space>
       ),
     },
@@ -114,6 +115,14 @@ export default function CountReportPage() {
           )}
         </Space>
       ),
+    },
+    {
+      // Снимок при открытии сессии: «сколько числилось, когда начали».
+      title: "На начало",
+      dataIndex: "snapshot_quantity",
+      width: 110,
+      align: "right",
+      render: (v: string | null) => (v == null ? <span style={{ color: "#bbb" }}>—</span> : fmtQty(v)),
     },
     {
       title: "Учёт был",
@@ -162,9 +171,11 @@ export default function CountReportPage() {
         return (
           <Space direction="vertical" size={0} style={{ alignItems: "flex-end" }}>
             <b style={{ color: s.color }}>{s.text}</b>
-            <span style={{ color: "#999", fontSize: 12 }}>
-              <Money value={row.diff_value} />
-            </span>
+            {row.diff_value != null && (
+              <span style={{ color: "#999", fontSize: 12 }}>
+                <Money value={row.diff_value} />
+              </span>
+            )}
           </Space>
         );
       },
