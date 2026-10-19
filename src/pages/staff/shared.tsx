@@ -32,20 +32,24 @@ export const PRESENCE_LABELS: Record<EmployeePresence, string> = {
   at_work: "На работе",
   vacation: "В отпуске",
   sick: "На больничном",
+  day_off: "В отгуле",
 };
 
 export function PresenceTag({ presence }: { presence: EmployeePresence }) {
   if (presence === "vacation") return <Tag color="blue">В отпуске</Tag>;
   if (presence === "sick") return <Tag color="orange">На больничном</Tag>;
+  if (presence === "day_off") return <Tag color="cyan">В отгуле</Tag>;
   return <Tag color="green">На работе</Tag>;
 }
 
 export const LEAVE_KIND_LABELS: Record<LeaveKind, string> = {
   vacation: "Отпуск",
   sick: "Больничный",
+  day_off: "Отгул",
 };
 
 export function LeaveKindTag({ kind }: { kind: LeaveKind }) {
+  if (kind === "day_off") return <Tag color="cyan">Отгул</Tag>;
   return kind === "sick" ? (
     <Tag color="orange">Больничный</Tag>
   ) : (

@@ -1,14 +1,14 @@
-/** /requests — управление (cap request.approve): все заявления, фильтры,
- * детали + история согласований, решения approve/reject, выплата аванса
- * (POST /pay гейтится на бэкенде правом finance.manage, не request.approve).
+/** /requests — все заявления: HR согласует (request.approve), бухгалтерия
+ * смотрит и выплачивает согласованные авансы (request.read + request.payout).
  *
  * Согласование идёт по стадиям маршрута: кнопки решения показываются только
  * когда бэкенд вернул can_decide = true (текущая стадия адресована этому
- * пользователю лично или его роли). Финальная стадия применяет эффект
- * заявления и регистрирует перевод в реестре выплат. */
+ * пользователю лично, его роли, его цеху или HR). Финальная стадия применяет
+ * эффект заявления. Аванс по ТЗ сам не выплачивается: «Выплатить» записывает
+ * выплату в реестр платежей, фильтр «Не выплачено» — список бухгалтерии. */
 import { PlusOutlined } from "@ant-design/icons";
 import {
-  Alert, App, Button, DatePicker, Divider, Drawer, Form, Input, InputNumber,
+  Alert, App, Button, Checkbox, DatePicker, Divider, Drawer, Form, Input, InputNumber,
   Modal, Popconfirm, Select, Space, Spin, Table, Typography,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
@@ -19,7 +19,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { errorMessage } from "@/api/client";
 import {
   approveRequest, getRequest, listActiveExpenseCategories, listRequests,
-  payRequest, rejectRequest,
+  payoutRequest, payRequest, rejectRequest,
   type AdvancePayIn, type PaymentMethod, type RequestOut, type RequestStatus,
   type RequestType,
 } from "@/api/requests";
@@ -29,9 +29,9 @@ import { usePagination } from "@/components/usePagination";
 import RequestsSectionTabs from "@/pages/requests/RequestsSectionTabs";
 import SubmitForEmployeeModal from "@/pages/requests/SubmitForEmployeeModal";
 import {
-  ApprovalSteps, ApprovalsList, describeRequest, REQUEST_STATUS_OPTIONS,
-  REQUEST_TYPE_OPTIONS, RequestDetails, RequestStatusTags, RequestTypeTag,
-  TimesheetCorrectionLines,
+  ApprovalSteps, ApprovalsList, awaitsPayout, describeRequest, REQUEST_STATUS_OPTIONS,
+  RequestDetails, RequestStatusTags, RequestTypeTag, TimesheetCorrectionLines,
+  useRequestTypes,
 } from "@/pages/requests/shared";
 
 const PAYMENT_METHOD_OPTIONS: { value: PaymentMethod; label: string }[] = [
@@ -54,6 +54,11 @@ export default function AllRequestsPage() {
   const canApprove = useCan("request.approve");
   const canPay = useCan("finance.manage");
   const canSubmitAny = useCan("request.submit_any");
+  const canPayout = useCan("request.payout");
+  const { options: typeOptions } = useRequestTypes();
+  const [unpaid, setUnpaid] = useState(false);
+  const [payoutOpen, setPayoutOpen] = useState(false);
+  const [payoutForm] = Form.useForm<{ amount?: number; note?: string }>();
   const [submitForOpen, setSubmitForOpen] = useState(false);
   const { limit, offset, tablePagination, reset } = usePagination();
   const [typeFilter, setTypeFilter] = useState<RequestType | undefined>();
@@ -68,9 +73,10 @@ export default function AllRequestsPage() {
   const to = period?.[1]?.format("YYYY-MM-DD");
 
   const query = useQuery({
-    queryKey: ["requests", { limit, offset, type: typeFilter, status: statusFilter, from, to }],
+    queryKey: ["requests", { limit, offset, type: typeFilter, status: statusFilter, from, to, unpaid }],
     queryFn: () =>
-      listRequests({ limit, offset, type: typeFilter, status: statusFilter, from, to }),
+      listRequests({ limit, offset, type: typeFilter, status: statusFilter, from, to,
+        unpaid: unpaid || undefined }),
   });
 
   const detail = useQuery({
@@ -137,6 +143,21 @@ export default function AllRequestsPage() {
     onError: (e) => message.error(errorMessage(e)),
   });
 
+  const payout = useMutation({
+    mutationFn: ({ id, values }: { id: number; values: { amount?: number; note?: string } }) =>
+      payoutRequest(id, {
+        amount: values.amount != null ? String(values.amount) : null,
+        note: values.note?.trim() || null,
+      }),
+    onSuccess: () => {
+      message.success("Выплата записана в реестр платежей");
+      setPayoutOpen(false);
+      invalidate();
+      queryClient.invalidateQueries({ queryKey: ["payroll-payments"] });
+    },
+    onError: (e) => message.error(errorMessage(e)),
+  });
+
   function openDetail(id: number) {
     setDecisionComment("");
     setDetailId(id);
@@ -157,15 +178,16 @@ export default function AllRequestsPage() {
       dataIndex: "employee_name",
       render: (_, row) => row.employee_name ?? `Сотрудник #${row.employee_id}`,
     },
-    { title: "Тип", dataIndex: "type", width: 130, render: (t: RequestType) => <RequestTypeTag type={t} /> },
+    { title: "Тип", dataIndex: "type", width: 150,
+      render: (t: RequestType, row) => <RequestTypeTag type={t} name={row.type_name} /> },
     { title: "Статус", key: "status", width: 200, render: (_, row) => <RequestStatusTags req={row} /> },
     { title: "Детали", key: "details", render: (_, row) => describeRequest(row) },
     { title: "Создано", dataIndex: "created_at", width: 140, render: fmtDateTime },
   ];
 
   const req = detail.data;
-  // Отражение расходом — отдельный необязательный шаг: реестр выплат уже
-  // заполнен финальной стадией согласования, здесь создаётся Expense.
+  // Отражение расходом — отдельный необязательный шаг: создаётся Expense по
+  // статье (в P&L), реестр платежей это не трогает.
   const payable =
     req != null && req.type === "advance" && req.status === "approved" && req.expense_id == null;
 
@@ -186,9 +208,11 @@ export default function AllRequestsPage() {
       <Space style={{ marginBottom: 16 }} wrap>
         <Select
           allowClear
+          showSearch
+          optionFilterProp="label"
           placeholder="Тип"
-          style={{ width: 170 }}
-          options={REQUEST_TYPE_OPTIONS}
+          style={{ width: 200 }}
+          options={typeOptions}
           value={typeFilter}
           onChange={(v?: RequestType) => {
             setTypeFilter(v);
@@ -214,6 +238,9 @@ export default function AllRequestsPage() {
             reset();
           }}
         />
+        <Checkbox checked={unpaid} onChange={(e) => { setUnpaid(e.target.checked); reset(); }}>
+          Не выплачено
+        </Checkbox>
       </Space>
       <Table
         rowKey="request_id"
@@ -264,7 +291,7 @@ export default function AllRequestsPage() {
                     showIcon
                     style={{ marginBottom: 12 }}
                     message="Это финальная стадия"
-                    description="После согласования заявление вступит в силу, а по денежным типам будет зарегистрирован перевод в реестре выплат."
+                    description="После согласования заявление вступит в силу: отпуск, отгул и больничный сразу встанут в табель и график. Займ и отпускные запишутся в реестр выплат, аванс выплачивает бухгалтерия."
                   />
                 )}
                 <Input.TextArea
@@ -304,12 +331,30 @@ export default function AllRequestsPage() {
                 </Space>
               </>
             )}
+            {awaitsPayout(req) && canPayout && (
+              <>
+                <Divider />
+                <Typography.Paragraph type="secondary">
+                  Заявление согласовано, выплата ещё не записана. «Выплатить» добавит её в
+                  реестр платежей.
+                </Typography.Paragraph>
+                <Button
+                  type="primary"
+                  onClick={() => {
+                    payoutForm.resetFields();
+                    payoutForm.setFieldsValue({ amount: req.amount != null ? Number(req.amount) : undefined });
+                    setPayoutOpen(true);
+                  }}
+                >
+                  Выплатить
+                </Button>
+              </>
+            )}
             {payable && canPay && (
               <>
                 <Divider />
                 <Typography.Paragraph type="secondary">
-                  Перевод уже зарегистрирован в реестре выплат. Отразить его ещё и
-                  расходом по статье — необязательный шаг.
+                  Отразить аванс ещё и расходом по статье (для P&amp;L) — необязательный шаг.
                 </Typography.Paragraph>
                 <Button onClick={() => openPay(req)}>Отразить расходом</Button>
               </>
@@ -319,6 +364,33 @@ export default function AllRequestsPage() {
       </Drawer>
 
       <SubmitForEmployeeModal open={submitForOpen} onClose={() => setSubmitForOpen(false)} />
+
+      <Modal
+        title="Выплатить по заявлению"
+        open={payoutOpen}
+        onCancel={() => setPayoutOpen(false)}
+        onOk={() => payoutForm.submit()}
+        okText="Выплатить"
+        cancelText="Отмена"
+        confirmLoading={payout.isPending}
+        destroyOnClose
+      >
+        <Form
+          form={payoutForm}
+          layout="vertical"
+          onFinish={(values) => detailId != null && payout.mutate({ id: detailId, values })}
+        >
+          <Form.Item name="amount" label="Сумма, ₸" tooltip="По умолчанию — сумма из заявления">
+            <InputNumber min={0.01} precision={2} style={{ width: "100%" }} />
+          </Form.Item>
+          <Form.Item name="note" label="Примечание">
+            <Input placeholder="например: на карту 18.10" />
+          </Form.Item>
+        </Form>
+        <Typography.Text type="secondary">
+          Способ выплаты — из оформления сотрудника в «Справочнике ставок».
+        </Typography.Text>
+      </Modal>
 
       <Modal
         title="Отразить аванс расходом"

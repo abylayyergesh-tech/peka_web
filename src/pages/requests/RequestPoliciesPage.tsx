@@ -12,10 +12,11 @@ import {
 } from "@/api/requests";
 import { useCan } from "@/auth/store";
 import EntityCardDrawer from "@/components/EntityCardDrawer";
-import { REQUEST_TYPE_LABELS } from "@/pages/requests/shared";
+import { useRequestTypes } from "@/pages/requests/shared";
 
 export default function RequestPoliciesPage() {
   const { message } = App.useApp();
+  const { names: typeNames } = useRequestTypes();
   const queryClient = useQueryClient();
   const canManage = useCan("request.policy.manage");
   const [card, setCard] = useState<RequestPolicyOut | null>(null);
@@ -60,7 +61,7 @@ export default function RequestPoliciesPage() {
     setCard(null);
   }
 
-  const typeLabel = (t: RequestPolicyOut["type"]) => REQUEST_TYPE_LABELS[t] ?? t;
+  const typeLabel = (t: RequestPolicyOut["type"]) => typeNames[t] ?? t;
 
   const columns: ColumnsType<RequestPolicyOut> = [
     {

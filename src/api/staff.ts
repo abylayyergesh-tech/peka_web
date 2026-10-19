@@ -4,8 +4,9 @@ import type { Page, PageParams } from "@/api/client";
 
 export type Role = "owner" | "manager" | "employee";
 export type EmployeeStatus = "active" | "terminated";
-export type EmployeePresence = "at_work" | "vacation" | "sick";
-export type LeaveKind = "vacation" | "sick";
+export type EmployeePresence = "at_work" | "vacation" | "sick" | "day_off";
+/** day_off — отгул по согласованному заявлению. */
+export type LeaveKind = "vacation" | "sick" | "day_off";
 export type DisciplinaryKind = "remark" | "reprimand" | "severe_reprimand" | "other";
 export type MedicalAlert = "ok" | "expiring" | "expired";
 

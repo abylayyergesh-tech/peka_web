@@ -4,7 +4,8 @@ import { api } from "@/api/client";
 import type { Page, PageParams } from "@/api/client";
 
 // ---- domain enums (app/requests/models.py) ----
-export type RequestType =
+/** Встроенные типы со своей формой и эффектом согласования. */
+export type BuiltinRequestType =
   | "advance"
   | "schedule"
   | "vacation"
@@ -12,7 +13,14 @@ export type RequestType =
   | "resignation"
   | "timesheet_correction"
   | "loan"
-  | "hiring";
+  | "hiring"
+  | "day_off"
+  | "certificate";
+/** Код типа из справочника организации: встроенный или свой («custom_…»). */
+export type RequestType = string;
+/** Форма подачи типа; special — своя форма, только в кабинете. */
+export type RequestKind = "amount" | "date_range" | "single_date" | "none" | "special";
+export type AttachmentPolicy = "none" | "optional" | "required";
 export type RequestStatus = "pending" | "approved" | "rejected" | "cancelled";
 export type RequestStepStatus = "pending" | "approved" | "rejected" | "skipped";
 export type ApprovalDecision = "approve" | "reject";
@@ -92,7 +100,18 @@ export interface HiringRequestCreate {
   comment?: string | null;
 }
 
+/** Отгул, справка и свои типы: общие поля, обязательные — по форме типа. */
+export interface GenericRequestCreate {
+  type: string;
+  amount?: string | null;
+  start_date?: string | null;
+  end_date?: string | null;
+  date?: string | null;
+  comment?: string | null;
+}
+
 export type RequestCreate =
+  | GenericRequestCreate
   | AdvanceRequestCreate
   | VacationRequestCreate
   | SickLeaveRequestCreate
@@ -144,7 +163,11 @@ export interface RequestStepOut {
   approver_user_id: number | null;
   approver_email: string | null;
   approver_role: string | null;
-  /** Финальная стадия = подтверждение HR, после неё регистрируется перевод. */
+  /** department_manager — руководитель цеха заявителя, hr — с правом согласования. */
+  approver_kind: "department_manager" | "hr" | null;
+  approver_department_id: number | null;
+  approver_department_name: string | null;
+  /** Финальная стадия = подтверждение HR, после неё применяется эффект заявления. */
   is_final: boolean;
   status: RequestStepStatus;
   decided_by: number | null;
@@ -166,7 +189,11 @@ export interface RequestOut {
   employee_id: number;
   employee_name: string | null;
   type: RequestType;
+  /** Название типа (свои типы — как назвал HR). */
+  type_name: string | null;
   status: RequestStatus;
+  /** Где заявление: ждёт руководителя цеха, HR или уже решено. */
+  stage: "submitted" | "manager" | "hr" | "approved" | "rejected" | "cancelled" | null;
   required_approvals: number;
   /** Стадия, ждущая решения (null = маршрута нет или он пройден). */
   current_step_no: number | null;
@@ -181,6 +208,8 @@ export interface RequestOut {
   is_paid: boolean | null;
   last_working_day: string | null;
   effective_date: string | null;
+  /** Дата у типов с формой «одна дата». */
+  date: string | null;
   counterpart_employee_id: number | null;
   counterpart_employee_name: string | null;
   term_months: number | null;
@@ -206,6 +235,8 @@ export interface RequestOut {
   paid_at: string | null;
   paid_by: number | null;
   created_at: string;
+  /** Фото документов (больничный лист, справка): ссылки живут 15 минут. */
+  attachments: { attachment_id: number; file_name: string; content_type: string | null; url: string | null }[];
   /** Detail-only (empty on list responses). */
   steps: RequestStepOut[];
   approvals: RequestApprovalOut[];
@@ -238,6 +269,8 @@ export interface RequestListParams extends PageParams {
   from?: string;
   /** ISO date (YYYY-MM-DD), inclusive upper bound on created_at. */
   to?: string;
+  /** Согласованные авансы, займы и отпускные без записанной выплаты. */
+  unpaid?: boolean;
 }
 
 // ==== self-service (/me/requests) ====
@@ -286,6 +319,7 @@ export interface ApprovalFlowStepOut {
   approver_user_id: number | null;
   approver_email: string | null;
   approver_role: string | null;
+  approver_kind: "department_manager" | "hr" | null;
   is_final: boolean;
 }
 
@@ -302,6 +336,7 @@ export interface ApprovalFlowStepIn {
   title?: string | null;
   approver_user_id?: number | null;
   approver_role?: string | null;
+  approver_kind?: "department_manager" | "hr" | null;
   is_final: boolean;
 }
 
@@ -341,6 +376,16 @@ export async function rejectRequest(id: number, body: ApprovalDecisionIn): Promi
   return data;
 }
 
+/** Выплата по согласованному авансу (займу, отпускным) — строка в реестре
+ * платежей. Право request.payout (бухгалтерия). */
+export async function payoutRequest(
+  id: number,
+  body: { amount?: string | null; note?: string | null },
+): Promise<RequestOut> {
+  const { data } = await api.post<RequestOut>(`/requests/${id}/payout`, body);
+  return data;
+}
+
 /** Advance payout (cap finance.manage on the backend, NOT request.approve). */
 export async function payRequest(id: number, body: AdvancePayIn): Promise<RequestOut> {
   const { data } = await api.post<RequestOut>(`/requests/${id}/pay`, body);
@@ -375,5 +420,54 @@ export async function listActiveExpenseCategories(): Promise<ExpenseCategoryOut[
   const { data } = await api.get<ExpenseCategoryOut[]>("/expense-categories", {
     params: { active: true },
   });
+  return data;
+}
+
+// ==== типы заявлений (справочник HR) ====
+export interface RequestTypeOut {
+  request_type_id: number;
+  code: string;
+  name_ru: string;
+  name_kk: string | null;
+  description_ru: string | null;
+  description_kk: string | null;
+  kind: RequestKind;
+  amount_limit: string | null;
+  attachment: AttachmentPolicy;
+  in_app: boolean;
+  auto_payout: boolean;
+  is_builtin: boolean;
+  is_active: boolean;
+  position: number;
+}
+
+export interface RequestTypeIn {
+  name_ru: string;
+  name_kk?: string | null;
+  description_ru?: string | null;
+  description_kk?: string | null;
+  kind?: Exclude<RequestKind, "special">;
+  amount_limit?: string | null;
+  attachment?: AttachmentPolicy;
+  in_app?: boolean;
+  auto_payout?: boolean;
+  is_active?: boolean;
+}
+
+export async function listRequestTypes(): Promise<RequestTypeOut[]> {
+  const { data } = await api.get<RequestTypeOut[]>("/request-types");
+  return data;
+}
+
+export async function createRequestType(body: RequestTypeIn): Promise<RequestTypeOut> {
+  const { data } = await api.post<RequestTypeOut>("/request-types", body);
+  return data;
+}
+
+export async function updateRequestType(
+  code: string,
+  body: Partial<RequestTypeIn>,
+): Promise<RequestTypeOut> {
+  const { data } = await api.patch<RequestTypeOut>(`/request-types/${code}`, body);
   return data;
 }

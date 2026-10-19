@@ -10,7 +10,7 @@ function load() {
   const env = runtime();
   return { env, menu: env.load('src/layout/menu.ts'), tour: env.load('src/layout/onboarding.ts') };
 }
-const ALL_CAPS = (menu) => [...new Set(menu.NAV_SECTIONS.flatMap(s => s.items.map(i => i.cap)))];
+const ALL_CAPS = (menu) => [...new Set(menu.NAV_SECTIONS.flatMap(s => s.items.flatMap(i => i.cap)))];
 
 test('chapters cover only sections the member can see', () => {
   const { menu, tour } = load();

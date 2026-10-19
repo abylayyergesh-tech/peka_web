@@ -36,7 +36,7 @@ import { useCan } from "@/auth/store";
 import EntityCardDrawer from "@/components/EntityCardDrawer";
 import { fmtDateTime } from "@/components/format";
 import RequestsSectionTabs from "@/pages/requests/RequestsSectionTabs";
-import { REQUEST_TYPE_LABELS, REQUEST_TYPE_OPTIONS } from "@/pages/requests/shared";
+import { useRequestTypes } from "@/pages/requests/shared";
 
 const TEMPLATES_KEY = ["request-templates"] as const;
 
@@ -52,6 +52,8 @@ function pickedFile(list: UploadFile[] | undefined): File | undefined {
 
 export default function RequestTemplatesPage() {
   const { message } = App.useApp();
+  // Типы — из справочника организации: бланк можно привязать и к своему типу.
+  const { names: typeNames, options: typeOptions } = useRequestTypes();
   const queryClient = useQueryClient();
   const canManage = useCan("staff.manage");
   const [typeFilter, setTypeFilter] = useState<RequestType | undefined>();
@@ -97,7 +99,7 @@ export default function RequestTemplatesPage() {
       dataIndex: "request_type",
       width: 180,
       render: (t: RequestType | null) =>
-        t ? REQUEST_TYPE_LABELS[t] ?? t : "Общий бланк",
+        t ? typeNames[t] ?? t : "Общий бланк",
     },
     { title: "Название", dataIndex: "title" },
     {
@@ -194,7 +196,7 @@ export default function RequestTemplatesPage() {
           allowClear
           placeholder="Тип заявления"
           style={{ width: 220 }}
-          options={REQUEST_TYPE_OPTIONS}
+          options={typeOptions}
           value={typeFilter}
           onChange={setTypeFilter}
         />
@@ -254,7 +256,7 @@ export default function RequestTemplatesPage() {
             <Descriptions column={1} bordered size="small">
               <Descriptions.Item label="Тип">
                 {card.request_type
-                  ? REQUEST_TYPE_LABELS[card.request_type] ?? card.request_type
+                  ? typeNames[card.request_type] ?? card.request_type
                   : "Общий бланк"}
               </Descriptions.Item>
               <Descriptions.Item label="Название">{card.title}</Descriptions.Item>
@@ -291,7 +293,7 @@ export default function RequestTemplatesPage() {
             <Select
               allowClear
               placeholder="Общий бланк"
-              options={REQUEST_TYPE_OPTIONS}
+              options={typeOptions}
             />
           </Form.Item>
           <Form.Item
