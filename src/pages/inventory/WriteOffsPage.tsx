@@ -7,6 +7,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 
+import { fetchAllPages } from "@/api/client";
 import {
   listDocuments,
   type DocumentOut,
@@ -23,6 +24,7 @@ import {
 import WriteOffCategoriesModal, {
   useWriteOffCategories,
 } from "@/pages/inventory/WriteOffCategoriesModal";
+import { ExcelExportButton, columnsFromTable } from "@/components/excel";
 
 const { RangePicker } = DatePicker;
 
@@ -109,6 +111,16 @@ export default function WriteOffsPage() {
       >
         <h2 style={{ margin: 0 }}>Акты списания</h2>
         <Space>
+          <ExcelExportButton
+            fileName="Акты списания"
+            sheets={async () => [{
+              name: "Акты списания",
+              columns: columnsFromTable(columns),
+              rows: await fetchAllPages((p) => listDocuments({
+                ...p, type: "write_off", status, write_off_category_id: categoryId, from, to,
+              })),
+            }]}
+          />
           <Button
             icon={<SettingOutlined />}
             onClick={() => setCategoriesOpen(true)}

@@ -26,6 +26,7 @@ import {
   useCompanyEntities,
 } from "@/pages/finance/companyEntities";
 import { useSupplierRefs } from "@/pages/procurement/refData";
+import { ExcelExportButton, columnsFromTable } from "@/components/excel";
 
 function normalize(s: string): string {
   return s.toLowerCase().replace(/ё/g, "е");
@@ -144,6 +145,10 @@ export default function PayablesReportPage() {
       >
         <h2 style={{ margin: 0 }}>Кредиторка</h2>
         <Space wrap>
+          <ExcelExportButton
+            fileName="Кредиторская задолженность"
+            sheets={() => [{ name: "Кредиторка", columns: columnsFromTable(columns), rows }]}
+          />
           <Input
             allowClear
             value={search}

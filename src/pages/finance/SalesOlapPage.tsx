@@ -18,6 +18,7 @@ import { listAllCustomers, listMenus } from "@/api/sales";
 import { fmtDate, fmtQty, Money } from "@/components/format";
 import { fmtPct } from "@/pages/finance/labels";
 import { ReportRangePicker, useReportRange } from "@/pages/finance/reportRange";
+import { ExcelExportButton, columnsFromTable, flattenTree } from "@/components/excel";
 
 /** Пустой `children` рисует стрелку раскрытия без смысла — у листа поля нет. */
 function toTableRows(rows: OlapSalesRow[]): OlapSalesRow[] {
@@ -233,6 +234,19 @@ export default function SalesOlapPage() {
 
       <Space wrap style={{ marginBottom: 16 }}>
         <ReportRangePicker value={range} onChange={setRange} />
+        <ExcelExportButton
+          fileName="OLAP продажи"
+          sheets={() => {
+            const flat = flattenTree(rows, (r) => r.name);
+            const cols = columnsFromTable(columns);
+            return [{
+              name: "OLAP продажи",
+              columns: [{ title: "Клиент / товар", value: (r: (typeof flat)[number]) => r.__label },
+                        ...cols.slice(1)],
+              rows: flat,
+            }];
+          }}
+        />
         <Select
           allowClear
           showSearch

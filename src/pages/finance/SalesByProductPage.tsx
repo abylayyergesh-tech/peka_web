@@ -13,6 +13,7 @@ import { fetchSalesByProduct, type ProductSalesRow } from "@/api/finance";
 import { fmtDate, fmtMoney, fmtQty, Money } from "@/components/format";
 import { fmtPct } from "@/pages/finance/labels";
 import { ReportRangePicker, useReportRange } from "@/pages/finance/reportRange";
+import { ExcelExportButton, columnsFromTable } from "@/components/excel";
 
 export default function SalesByProductPage() {
   const { range, setRange, params } = useReportRange();
@@ -134,6 +135,10 @@ export default function SalesByProductPage() {
 
       <Space wrap style={{ marginBottom: 16 }}>
         <ReportRangePicker value={range} onChange={setRange} />
+        <ExcelExportButton
+          fileName="Продажи по товарам"
+          sheets={() => [{ name: "Продажи по товарам", columns: columnsFromTable(columns), rows }]}
+        />
         <Input.Search
           allowClear
           placeholder="Поиск по названию или артикулу"

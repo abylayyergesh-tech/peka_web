@@ -9,6 +9,7 @@ import { errorMessage } from "@/api/client";
 import { fetchPnl, type PnLParams, type PnLReport } from "@/api/finance";
 import { fmtDate, fmtMoney, Money } from "@/components/format";
 import { fmtPct, paymentMethodLabel } from "@/pages/finance/labels";
+import { ExcelExportButton, columnsFromTable } from "@/components/excel";
 
 type Mode = "month" | "range";
 
@@ -146,6 +147,35 @@ function PnLView({ report, loading }: { report: PnLReport; loading: boolean }) {
     <Card
       loading={loading}
       title={`P&L за ${fmtDate(report.date_from)} — ${fmtDate(report.date_to)}`}
+      extra={
+        <ExcelExportButton
+          size="small"
+          fileName="ОПиУ (P&L)"
+          sheets={() => [
+            {
+              name: "P&L",
+              caption: [`Отчёт о прибылях и убытках за ${fmtDate(report.date_from)} — ${fmtDate(report.date_to)}`],
+              columns: [
+                { title: "Показатель", value: (r: { label: string }) => r.label },
+                { title: "Значение", value: (r: { value: unknown }) => r.value },
+              ],
+              rows: [
+                { label: "Выручка", value: report.revenue },
+                { label: "Себестоимость", value: report.cogs },
+                { label: "Валовая прибыль", value: report.gross_profit },
+                { label: "Валовая маржа, %", value: report.gross_margin_pct },
+                { label: "Операционные расходы", value: report.opex },
+                { label: "Потери склада", value: report.inventory_losses },
+                { label: "Питание сотрудников (себестоимость)", value: report.staff_meals_cost },
+                { label: "Чистая прибыль", value: report.net_profit },
+                { label: "Чистая маржа, %", value: report.net_margin_pct },
+              ],
+            },
+            { name: "Выручка по оплате", columns: columnsFromTable(methodColumns), rows: methodRows },
+            { name: "Расходы по статьям", columns: columnsFromTable(categoryColumns), rows: categoryRows },
+          ]}
+        />
+      }
     >
       <Descriptions bordered size="small" column={{ xs: 1, sm: 2 }} items={items} />
 

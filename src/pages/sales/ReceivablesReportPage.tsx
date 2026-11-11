@@ -22,6 +22,7 @@ import {
   entityName,
   useCompanyEntities,
 } from "@/pages/finance/companyEntities";
+import { ExcelExportButton, columnsFromTable } from "@/components/excel";
 
 /** Регистр и «ё» не должны мешать поиску: «пекарня» находит «Пекарню», а
  *  «елка» — «Ёлку». */
@@ -162,6 +163,10 @@ export default function ReceivablesReportPage() {
       >
         <h2 style={{ margin: 0 }}>Дебиторская задолженность</h2>
         <Space wrap>
+          <ExcelExportButton
+            fileName="Дебиторская задолженность"
+            sheets={() => [{ name: "Дебиторка", columns: columnsFromTable(columns), rows }]}
+          />
           <Input
             allowClear
             value={search}

@@ -34,6 +34,7 @@ import { fmtQty } from "@/components/format";
 import { useProductsLookup, useWarehousesLookup } from "@/pages/inventory/shared";
 import { useUnsavedChanges } from "@/components/useUnsavedChanges";
 import Stat from "@/components/Stat";
+import { ExcelExportButton, columnsFromTable } from "@/components/excel";
 
 const RAW_WH_KEY = "peka.productionPlan.warehouseId";
 const FIN_WH_KEY = "peka.productionPlan.targetWarehouseId";
@@ -571,6 +572,13 @@ function DayTab() {
         />
       )}
 
+      <div style={{ marginBottom: 8 }}>
+        <ExcelExportButton
+          size="small"
+          fileName="План и факт выпуска (день)"
+          sheets={() => [{ name: "Выпуск за день", columns: columnsFromTable(columns), rows }]}
+        />
+      </div>
       <Typography.Paragraph type="secondary" style={{ fontSize: 13 }}>
         В лист — только блюда. Сохранение факта склад не двигает: остатки меняет
         отдельная кнопка «Провести выпуск». Пустое поле — «не заполняли». Ноль —
@@ -708,6 +716,10 @@ function PeriodTab() {
         <Button icon={<ReloadOutlined />} onClick={() => query.refetch()}>
           Обновить
         </Button>
+        <ExcelExportButton
+          fileName="План и факт выпуска (период)"
+          sheets={() => [{ name: "Выпуск за период", columns: columnsFromTable(columns), rows }]}
+        />
       </Space>
 
       <Table<PeriodRow>

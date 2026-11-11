@@ -48,10 +48,10 @@ import {
   type AttendanceShiftOut,
   type ShiftListParams,
 } from "@/api/attendance";
-import { errorMessage } from "@/api/client";
+import { errorMessage, fetchAllPages } from "@/api/client";
 import { listEmployees } from "@/api/staff";
 import { useCan } from "@/auth/store";
-import { fmtDate, fmtDateTime } from "@/components/format";
+import { businessIso, businessPickerValue, fmtDate, fmtDateTime, fmtTime } from "@/components/format";
 import { usePagination } from "@/components/usePagination";
 import {
   DISPUTE_REASON_LABELS,
@@ -60,6 +60,7 @@ import {
   ShiftStatusTag,
   fmtDuration,
 } from "@/pages/staff/shared";
+import { ExcelExportButton, columnsFromTable } from "@/components/excel";
 
 const { RangePicker } = DatePicker;
 
@@ -89,7 +90,7 @@ const ABSENCE_LABELS: Record<string, string> = {
 };
 
 function time(v: string | null): string {
-  return v ? dayjs(v).format("HH:mm") : "—";
+  return v ? fmtTime(v) : "—";
 }
 
 function mapUrl(lat: string | null, lon: string | null): string | null {
@@ -192,8 +193,8 @@ export default function AttendancePage() {
     mutationFn: (values: EditFormValues) =>
       updateShift(card!.attendance_shift_id, {
         ...(values.work_location_id ? { work_location_id: values.work_location_id } : {}),
-        clock_in_at: values.clock_in_at.toISOString(),
-        clock_out_at: values.clock_out_at ? values.clock_out_at.toISOString() : null,
+        clock_in_at: businessIso(values.clock_in_at),
+        clock_out_at: values.clock_out_at ? businessIso(values.clock_out_at) : null,
         reason: values.reason.trim(),
       }),
     onSuccess: (row) => {
@@ -207,7 +208,7 @@ export default function AttendancePage() {
   const doClose = useMutation({
     mutationFn: (values: CloseFormValues) =>
       closeShift(closing!.attendance_shift_id, {
-        clock_out_at: values.clock_out_at.toISOString(),
+        clock_out_at: businessIso(values.clock_out_at),
         reason: values.reason.trim(),
       }),
     onSuccess: (row) => {
@@ -255,8 +256,8 @@ export default function AttendancePage() {
   function startEdit(row: AttendanceShiftOut) {
     editForm.setFieldsValue({
       work_location_id: row.work_location_id ?? undefined,
-      clock_in_at: dayjs(row.clock_in_at),
-      clock_out_at: row.clock_out_at ? dayjs(row.clock_out_at) : undefined,
+      clock_in_at: businessPickerValue(row.clock_in_at),
+      clock_out_at: row.clock_out_at ? businessPickerValue(row.clock_out_at) : undefined,
       reason: "",
     });
     setEditing(true);
@@ -265,7 +266,9 @@ export default function AttendancePage() {
   function openClose(row: AttendanceShiftOut) {
     setClosing(row);
     closeForm.setFieldsValue({
-      clock_out_at: row.scheduled_end ? dayjs(row.scheduled_end) : dayjs(),
+      clock_out_at: row.scheduled_end
+        ? businessPickerValue(row.scheduled_end)
+        : businessPickerValue(dayjs().toISOString()),
       reason: "",
     });
   }
@@ -408,7 +411,17 @@ export default function AttendancePage() {
     <div>
       <Space style={{ justifyContent: "space-between", width: "100%" }} align="baseline">
         <h2 style={{ marginTop: 0 }}>Отметки смен</h2>
-        <Link to="/payroll/timesheet">Табель за месяц →</Link>
+        <Space>
+          <ExcelExportButton
+            fileName={view === "absences" ? "Неявки" : "Отметки смен"}
+            sheets={async () => view === "absences"
+              ? [{ name: "Неявки", columns: columnsFromTable(absenceColumns),
+                   rows: absencesQuery.data ?? [] }]
+              : [{ name: "Отметки смен", columns: columnsFromTable(columns),
+                   rows: await fetchAllPages((p) => listShifts({ ...params, ...p })) }]}
+          />
+          <Link to="/payroll/timesheet">Табель за месяц →</Link>
+        </Space>
       </Space>
       <Typography.Paragraph type="secondary">
         Отметки из приложения: приход и уход с селфи и точкой на карте. Спорная отметка идёт в{" "}

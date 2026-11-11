@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { errorMessage } from "@/api/client";
 import { fetchFinancialSummary } from "@/api/finance";
 import Stat from "@/components/Stat";
+import { ExcelExportButton } from "@/components/excel";
 
 export default function FinancialSummaryPage() {
   const query = useQuery({
@@ -16,6 +17,22 @@ export default function FinancialSummaryPage() {
     <div>
       <Space style={{ marginBottom: 16, justifyContent: "space-between", width: "100%" }}>
         <h2 style={{ margin: 0 }}>Финансовая сводка</h2>
+        <Space>
+        <ExcelExportButton
+          fileName="Финансовая сводка"
+          disabled={!query.data}
+          sheets={() => [{
+            name: "Сводка",
+            columns: [
+              { title: "Показатель", value: (r: { k: string }) => r.k },
+              { title: "Сумма", value: (r: { v: unknown }) => r.v },
+            ],
+            rows: [
+              { k: "Кредиторская задолженность (мы должны поставщикам)", v: query.data?.ap_total },
+              { k: "Дебиторская задолженность (нам должны клиенты)", v: query.data?.ar_total },
+            ],
+          }]}
+        />
         <Button
           icon={<ReloadOutlined />}
           onClick={() => query.refetch()}
@@ -23,6 +40,7 @@ export default function FinancialSummaryPage() {
         >
           Обновить
         </Button>
+        </Space>
       </Space>
 
       {query.isError && (

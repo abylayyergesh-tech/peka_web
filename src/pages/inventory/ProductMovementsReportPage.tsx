@@ -21,6 +21,7 @@ import {
   useProductsLookup,
   useWarehousesLookup,
 } from "@/pages/inventory/shared";
+import { ExcelExportButton, columnsFromTable } from "@/components/excel";
 
 const DOC_LABELS: Record<string, string> = {
   receipt: "Приходная накладная",
@@ -225,6 +226,11 @@ export default function ProductMovementsReportPage() {
           onChange={(v) => patchUrl({ warehouse_id: v ?? null })}
         />
         <ReportRangePicker value={range} onChange={setRange} />
+        <ExcelExportButton
+          fileName="Движение товара"
+          disabled={!rows.length}
+          sheets={() => [{ name: "Движение товара", columns: columnsFromTable(columns), rows }]}
+        />
         <Checkbox
           checked={colorOn}
           onChange={(e) => setColorOn(e.target.checked)}

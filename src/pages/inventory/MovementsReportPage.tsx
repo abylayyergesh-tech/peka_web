@@ -14,6 +14,7 @@ import {
   useProductsLookup,
   useWarehousesLookup,
 } from "@/pages/inventory/shared";
+import { ExcelExportButton, columnsFromTable } from "@/components/excel";
 
 const { RangePicker } = DatePicker;
 const PAGE_SIZE = 50;
@@ -102,6 +103,23 @@ export default function MovementsReportPage() {
     <div>
       <h2 style={{ marginTop: 0 }}>Движения</h2>
       <Space wrap style={{ marginBottom: 16 }}>
+        <ExcelExportButton
+          fileName="Движения"
+          sheets={async () => {
+            // Все страницы курсора, но не больше 20 000 строк.
+            const all: MovementRow[] = [];
+            let cursor: string | undefined;
+            do {
+              const page = await getMovements({
+                warehouse_id: warehouseId, product_id: productId, from, to,
+                cursor, limit: 200,
+              });
+              all.push(...page.items);
+              cursor = page.next_cursor ?? undefined;
+            } while (cursor && all.length < 20_000);
+            return [{ name: "Движения", columns: columnsFromTable(columns), rows: all }];
+          }}
+        />
         <Select
           allowClear
           showSearch

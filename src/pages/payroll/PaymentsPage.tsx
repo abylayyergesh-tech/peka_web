@@ -44,6 +44,7 @@ import {
   PayoutMethodTag,
   fmtTenge,
 } from "@/pages/payroll/shared";
+import { ExcelExportButton, columnsFromTable } from "@/components/excel";
 
 interface FormValues {
   employee_id: number;
@@ -155,7 +156,20 @@ export default function PaymentsPage() {
   return (
     <div>
       <Space style={{ marginBottom: 16, justifyContent: "space-between", width: "100%" }}>
-        <h2 style={{ margin: 0 }}>Реестр выплат</h2>
+        <Space>
+          <h2 style={{ margin: 0 }}>Реестр выплат</h2>
+          <ExcelExportButton
+            fileName="Реестр выплат"
+            sheets={async () => [{
+              name: "Выплаты",
+              columns: columnsFromTable(columns),
+              rows: await fetchAllPages((p) => listPayments({
+                ...p, kind, method,
+                from: range?.[0]?.format("YYYY-MM-DD"), to: range?.[1]?.format("YYYY-MM-DD"),
+              })),
+            }]}
+          />
+        </Space>
         {canManage && (
           <Button type="primary" icon={<PlusOutlined />} onClick={() => {
             form.setFieldsValue({ paid_on: dayjs(), kind: "other", method: "cash" });

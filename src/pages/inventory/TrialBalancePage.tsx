@@ -16,6 +16,7 @@ import { getTrialBalance, type TrialBalanceRow } from "@/api/reports";
 import { NumText, fmtMoney, fmtQty } from "@/components/format";
 import { ReportRangePicker, useReportRange } from "@/pages/finance/reportRange";
 import { useWarehousesLookup } from "@/pages/inventory/shared";
+import { ExcelExportButton, columnsFromTable } from "@/components/excel";
 
 type ViewMode = "extended" | "simple";
 type GroupBy = "none" | "category" | "group_name";
@@ -512,6 +513,14 @@ export default function TrialBalancePage() {
 
       <Space wrap style={{ marginBottom: 12, flexShrink: 0 }}>
         <ReportRangePicker value={range} onChange={setRange} />
+        <ExcelExportButton
+          fileName="Оборотно-сальдовая ведомость"
+          sheets={() => [{
+            name: "ОСВ",
+            columns: columnsFromTable(view === "extended" ? extended : simple),
+            rows: dataSource,
+          }]}
+        />
         <Select
           value={view}
           style={{ width: 180 }}
