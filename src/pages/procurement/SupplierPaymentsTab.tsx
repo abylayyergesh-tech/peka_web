@@ -9,10 +9,13 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { errorMessage } from "@/api/client";
-import { listPayments, recordPayment, voidPayment, type PaymentOut } from "@/api/procurement";
+import {
+  getSupplier, listPayments, recordPayment, voidPayment, type PaymentOut,
+} from "@/api/procurement";
 import { useCan } from "@/auth/store";
 import {
   EntityTag,
+  entityFilterOptions,
   useCompanyEntities,
 } from "@/pages/finance/companyEntities";
 import { fmtDate, fmtDateTime, Money } from "@/components/format";
@@ -35,10 +38,17 @@ export default function SupplierPaymentsTab({ supplierId }: { supplierId: number
   const [modalOpen, setModalOpen] = useState(false);
   const [form] = Form.useForm<PaymentFormValues>();
   const entities = useCompanyEntities();
+  const [entityFilter, setEntityFilter] = useState<string | undefined>();
+  // Юрлица поставщика: платить можно только с них (пусто — с любого).
+  const supplier = useQuery({
+    queryKey: ["supplier", supplierId],
+    queryFn: () => getSupplier(supplierId),
+  });
+  const served = supplier.data?.company_entities ?? [];
 
   const query = useQuery({
-    queryKey: ["supplier-payments", supplierId],
-    queryFn: () => listPayments(supplierId),
+    queryKey: ["supplier-payments", supplierId, entityFilter ?? null],
+    queryFn: () => listPayments(supplierId, entityFilter),
   });
 
   function invalidate() {
@@ -132,6 +142,14 @@ export default function SupplierPaymentsTab({ supplierId }: { supplierId: number
           Зарегистрировать платёж
         </Button>
       )}
+      <Select
+        allowClear
+        placeholder="Все юр. лица"
+        style={{ width: 260, marginBottom: 16, marginLeft: canManage ? 12 : 0 }}
+        value={entityFilter}
+        onChange={setEntityFilter}
+        options={entityFilterOptions(entities.data)}
+      />
       <Table
         rowKey="supplier_payment_id"
         size="small"
@@ -182,11 +200,15 @@ export default function SupplierPaymentsTab({ supplierId }: { supplierId: number
               allowClear
               showSearch
               optionFilterProp="label"
-              placeholder="По умолчанию"
+              placeholder={served.length
+                ? `По умолчанию: ${served.find((x) => x.is_default)?.name ?? served[0].name}`
+                : "По умолчанию"}
               loading={entities.isPending}
-              options={(entities.data ?? [])
-                .filter((e) => e.is_active)
-                .map((e) => ({ value: e.company_entity_id, label: e.name }))}
+              options={(served.length
+                ? served.map((x) => ({ value: x.company_entity_id, label: x.name }))
+                : (entities.data ?? [])
+                    .filter((e) => e.is_active)
+                    .map((e) => ({ value: e.company_entity_id, label: e.name })))}
             />
           </Form.Item>
           <Form.Item name="method" label="Способ оплаты">

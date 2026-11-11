@@ -197,6 +197,10 @@ export interface DocumentOut {
   counterparty: string | null;
   /** От чьего нашего юр. лица документ; null — до разделения на юр. лица. */
   company_entity_id: number | null;
+  supplier_id?: number | null;
+  purchase_order_id?: number | null;
+  /** Документ сторно продажи: на какую продажу ссылается. */
+  reverses_document_id?: number | null;
   write_off_category_id: number | null;
   comment: string | null;
   /** Заполнен у кассового списания; складские акты АУП поле не ставят. */
@@ -229,6 +233,9 @@ export interface DocumentListParams extends PageParams {
   /** Документы склада — откуда или куда. */
   warehouse_id?: number;
   receipt_status?: ReceiptStatus;
+  supplier_id?: number;
+  /** id нашего юр. лица или "none". */
+  company_entity?: string;
   /** query aliases: from / to (ISO date). */
   from?: string;
   to?: string;

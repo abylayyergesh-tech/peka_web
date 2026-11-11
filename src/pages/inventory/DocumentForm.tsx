@@ -30,6 +30,7 @@ import type {
   ReceiptLineIn,
 } from "@/api/inventory";
 import { DOC_TYPE_OPTIONS } from "@/pages/inventory/shared";
+import { useSupplierRefs } from "@/pages/procurement/refData";
 
 export interface DocumentFormValues {
   type: DocumentType;
@@ -187,6 +188,16 @@ export function DocumentFormFields({
   const type = Form.useWatch("type", form);
   const internal = Form.useWatch("internal", form);
   const warehouseId = Form.useWatch("warehouse_id", form);
+  const supplierId = Form.useWatch("supplier_id", form);
+  // Поставщик поставляет только своим юрлицам: в выборе — только они.
+  const suppliers = useSupplierRefs();
+  const served = type === "receipt" && !internal ? suppliers.companiesOf(supplierId) : [];
+  const entityOptions = served.length
+    ? served.map((x) => ({ value: x.company_entity_id, label: x.name }))
+    : companyEntityOptions;
+  const entityPlaceholder = served.length
+    ? `По умолчанию: ${served.find((x) => x.is_default)?.name ?? served[0].name}`
+    : "По умолчанию";
 
   const isReceipt = type === "receipt";
   const isTransfer = type === "transfer";
@@ -330,8 +341,8 @@ export function DocumentFormFields({
           allowClear
           showSearch
           optionFilterProp="label"
-          placeholder="По умолчанию"
-          options={companyEntityOptions}
+          placeholder={entityPlaceholder}
+          options={entityOptions}
         />
       </Form.Item>
       {isWriteOff && (

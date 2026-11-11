@@ -17,6 +17,7 @@ import {
 import { useCan } from "@/auth/store";
 import { fmtDate, fmtDateTime } from "@/components/format";
 import { usePagination } from "@/components/usePagination";
+import { EntityTag, entityFilterOptions, useCompanyEntities } from "@/pages/finance/companyEntities";
 import POLinesFormList, { type POLineFormValue } from "@/pages/procurement/POLinesFormList";
 import { nullIfEmpty, useSupplierRefs, useWarehouseRefs } from "@/pages/procurement/refData";
 import { PO_STATUS_OPTIONS, POStatusTag } from "@/pages/procurement/statuses";
@@ -24,6 +25,7 @@ import { PO_STATUS_OPTIONS, POStatusTag } from "@/pages/procurement/statuses";
 interface POCreateFormValues {
   supplier_id: number;
   warehouse_id: number;
+  company_entity_id?: number | null;
   expected_date?: Dayjs | null;
   note?: string;
   lines: POLineFormValue[];
@@ -41,10 +43,14 @@ export default function PurchaseOrdersPage() {
   const [form] = Form.useForm<POCreateFormValues>();
   const suppliers = useSupplierRefs();
   const warehouses = useWarehouseRefs();
+  const entities = useCompanyEntities();
+  const [entity, setEntity] = useState<string | undefined>(undefined);
+  const formSupplier = Form.useWatch("supplier_id", form);
+  const served = suppliers.companiesOf(formSupplier);
 
   const query = useQuery({
-    queryKey: ["purchase-orders", { limit, offset, status, supplier }],
-    queryFn: () => listPurchaseOrders({ limit, offset, status, supplier }),
+    queryKey: ["purchase-orders", { limit, offset, status, supplier, entity }],
+    queryFn: () => listPurchaseOrders({ limit, offset, status, supplier, company_entity: entity }),
   });
 
   const create = useMutation({
@@ -52,6 +58,7 @@ export default function PurchaseOrdersPage() {
       createPurchaseOrder({
         supplier_id: v.supplier_id,
         warehouse_id: v.warehouse_id,
+        company_entity_id: v.company_entity_id ?? null,
         expected_date: v.expected_date ? v.expected_date.format("YYYY-MM-DD") : null,
         note: nullIfEmpty(v.note),
         lines: v.lines.map((l) => ({
@@ -90,6 +97,11 @@ export default function PurchaseOrdersPage() {
       title: "Склад",
       dataIndex: "warehouse_id",
       render: (v: number) => warehouses.byId.get(v) ?? `#${v}`,
+    },
+    {
+      title: "Юр. лицо",
+      dataIndex: "company_entity_id",
+      render: (v: number | null) => <EntityTag entities={entities.data} id={v} />,
     },
     {
       title: "Статус",
@@ -140,6 +152,17 @@ export default function PurchaseOrdersPage() {
             }}
             options={suppliers.options}
             loading={suppliers.isPending}
+          />
+          <Select
+            allowClear
+            placeholder="Юр. лицо"
+            style={{ width: 220 }}
+            value={entity}
+            onChange={(v) => {
+              setEntity(v);
+              reset();
+            }}
+            options={entityFilterOptions(entities.data)}
           />
         </Space>
         {canManage && (
@@ -217,6 +240,23 @@ export default function PurchaseOrdersPage() {
               <DatePicker format="DD.MM.YYYY" />
             </Form.Item>
           </Space>
+          <Form.Item
+            name="company_entity_id"
+            label="Наше юр. лицо"
+            tooltip="Накладная по заказу оформится на это же юр. лицо"
+            style={{ maxWidth: 320 }}
+          >
+            <Select
+              allowClear
+              placeholder={served.length
+                ? `По умолчанию: ${served.find((x) => x.is_default)?.name ?? served[0].name}`
+                : "По умолчанию"}
+              options={(served.length
+                ? served.map((x) => ({ value: x.company_entity_id, label: x.name }))
+                : (entities.data ?? []).filter((e) => e.is_active)
+                    .map((e) => ({ value: e.company_entity_id, label: e.name })))}
+            />
+          </Form.Item>
           <Form.Item name="note" label="Примечание">
             <Input.TextArea rows={2} />
           </Form.Item>

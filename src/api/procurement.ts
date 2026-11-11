@@ -16,6 +16,37 @@ export interface SupplierOut {
   is_active: boolean;
   created_at: string;
   updated_at: string | null;
+  /** Каким нашим юр. лицам поставляет. Пусто — не ограничен. */
+  company_entities?: SupplierCompany[];
+}
+
+export interface SupplierCompany {
+  company_entity_id: number;
+  name: string;
+  is_default: boolean;
+}
+
+/** Долг поставщику по одному нашему юрлицу (null — записи без юрлица). */
+export interface SupplierCompanyBalance {
+  company_entity_id: number | null;
+  company_entity_name: string | null;
+  total_received: string;
+  total_paid: string;
+  balance: string;
+}
+
+/** Заменить список юрлиц поставщика целиком (пусто — не ограничен). */
+export async function setSupplierCompanies(
+  supplierId: number,
+  items: { company_entity_id: number; is_default: boolean }[],
+): Promise<SupplierOut> {
+  const { data } = await api.put<SupplierOut>(`/suppliers/${supplierId}/company-entities`, { items });
+  return data;
+}
+
+export async function getSupplierBalances(supplierId: number): Promise<SupplierCompanyBalance[]> {
+  const { data } = await api.get<SupplierCompanyBalance[]>(`/suppliers/${supplierId}/balances`);
+  return data;
 }
 
 export interface SupplierCreate {
@@ -121,12 +152,15 @@ export interface POLineIn {
 export interface PurchaseOrderCreate {
   supplier_id: number;
   warehouse_id: number;
+  /** Наше юр. лицо. Пусто — юрлицо поставщика по умолчанию. */
+  company_entity_id?: number | null;
   expected_date?: string | null;
   note?: string | null;
   lines: POLineIn[];
 }
 
 export interface PurchaseOrderUpdate {
+  company_entity_id?: number | null;
   expected_date?: string | null;
   note?: string | null;
   lines?: POLineIn[];
@@ -155,6 +189,7 @@ export interface PurchaseOrderOut {
   organization_id: number;
   supplier_id: number;
   warehouse_id: number;
+  company_entity_id?: number | null;
   status: POStatus;
   number: number | null;
   expected_date: string | null;
@@ -168,6 +203,8 @@ export interface PurchaseOrderOut {
 export interface PurchaseOrderListParams extends PageParams {
   supplier?: number;
   status?: POStatus;
+  /** id нашего юр. лица или "none". */
+  company_entity?: string;
   /** Query aliases on the backend: from/to. */
   from?: string;
   to?: string;
@@ -239,8 +276,13 @@ export interface PaymentOut {
   created_at: string;
 }
 
-export async function listPayments(supplierId: number): Promise<PaymentOut[]> {
-  const { data } = await api.get<PaymentOut[]>(`/suppliers/${supplierId}/payments`);
+export async function listPayments(
+  supplierId: number,
+  companyEntity?: string,
+): Promise<PaymentOut[]> {
+  const { data } = await api.get<PaymentOut[]>(`/suppliers/${supplierId}/payments`, {
+    params: companyEntity ? { company_entity: companyEntity } : undefined,
+  });
   return data;
 }
 
@@ -310,7 +352,7 @@ export interface PayableLedgerPage {
 
 export async function supplierLedger(
   supplierId: number,
-  params: { after_seq?: number; limit?: number } = {},
+  params: { after_seq?: number; limit?: number; company_entity?: string } = {},
 ): Promise<PayableLedgerPage> {
   const { data } = await api.get<PayableLedgerPage>(`/suppliers/${supplierId}/ledger`, { params });
   return data;
