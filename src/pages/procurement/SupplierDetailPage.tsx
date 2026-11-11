@@ -10,6 +10,7 @@ import { getSupplier, reportPayables, updateSupplier } from "@/api/procurement";
 import { useCan } from "@/auth/store";
 import { Money, fmtDateTime } from "@/components/format";
 import { nullIfEmpty } from "@/pages/procurement/refData";
+import SupplierCompaniesCard from "@/pages/procurement/SupplierCompaniesCard";
 import SupplierLedgerTab from "@/pages/procurement/SupplierLedgerTab";
 import SupplierPaymentsTab from "@/pages/procurement/SupplierPaymentsTab";
 import SupplierPricesTab from "@/pages/procurement/SupplierPricesTab";
@@ -136,6 +137,7 @@ export default function SupplierDetailPage() {
           {supplier.note ?? "—"}
         </Descriptions.Item>
       </Descriptions>
+      <SupplierCompaniesCard supplier={supplier} />
       <Tabs
         defaultActiveKey="prices"
         items={[

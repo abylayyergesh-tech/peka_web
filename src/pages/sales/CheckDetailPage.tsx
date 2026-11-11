@@ -20,6 +20,7 @@ import {
 } from "@/api/sales";
 import { useCan } from "@/auth/store";
 import { Money, fmtMoney, fmtQty } from "@/components/format";
+import { CheckCorrectionModal, CheckStornoModal } from "@/pages/sales/CheckCorrectionModal";
 import { CheckStatusTag, paymentMethodLabel } from "@/pages/sales/statusTags";
 
 const DISCOUNT_TYPE_OPTIONS = [
@@ -39,6 +40,9 @@ export default function CheckDetailPage() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const canOperate = useCan("sale.operate");
+  const canCorrect = useCan("sale.correct");
+  const [correctOpen, setCorrectOpen] = useState(false);
+  const [stornoOpen, setStornoOpen] = useState(false);
 
   const [lineModalOpen, setLineModalOpen] = useState(false);
   const [editingLine, setEditingLine] = useState<CheckLineOut | null>(null);
@@ -314,6 +318,14 @@ export default function CheckDetailPage() {
               Чек
             </Button>
           )}
+          {check.status === "paid" && canCorrect && check.payment_method !== "staff" && (
+            <>
+              <Button onClick={() => setCorrectOpen(true)}>Исправить чек</Button>
+              <Button danger onClick={() => setStornoOpen(true)}>
+                Сторно
+              </Button>
+            </>
+          )}
         </Space>
       </Space>
 
@@ -338,6 +350,52 @@ export default function CheckDetailPage() {
         />
       )}
 
+      {check.status === "voided" && check.void_reason && (
+        <Alert
+          type="error"
+          showIcon
+          style={{ marginBottom: 16 }}
+          message={check.corrected_by_check_id ? "Чек исправлен" : "Чек сторнирован"}
+          description={
+            <Space direction="vertical" size={2}>
+              <span>Причина: {check.void_reason}</span>
+              {check.corrected_by_check_id && (
+                <Link to={`/checks/${check.corrected_by_check_id}`}>Открыть исправленный чек</Link>
+              )}
+            </Space>
+          }
+        />
+      )}
+      {check.corrects_check_id && (
+        <Alert
+          type="info"
+          showIcon
+          style={{ marginBottom: 16 }}
+          message={
+            <span>
+              Этот чек исправляет{" "}
+              <Link to={`/checks/${check.corrects_check_id}`}>сторнированный чек</Link>
+            </span>
+          }
+        />
+      )}
+      <CheckCorrectionModal
+        check={check}
+        open={correctOpen}
+        menuItems={menuItems.data?.items ?? []}
+        onClose={() => setCorrectOpen(false)}
+        onCorrected={(result) => {
+          setCorrectOpen(false);
+          setWarnings(result.warnings);
+          navigate(`/checks/${result.check.check_id}`);
+        }}
+      />
+      <CheckStornoModal
+        check={check}
+        open={stornoOpen}
+        onClose={() => setStornoOpen(false)}
+        onDone={() => setStornoOpen(false)}
+      />
       <Card size="small" style={{ marginBottom: 16 }}>
         <Descriptions size="small" column={3}>
           <Descriptions.Item label="Смена">

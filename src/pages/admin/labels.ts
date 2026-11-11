@@ -13,6 +13,7 @@ const CAPABILITY_LABELS_RU: Record<string, string> = {
   "customer.manage": "Создание и изменение покупателей",
   "customer_payment.manage": "Регистрация и отмена платежей покупателей",
   "sale.operate": "Работа за кассой (смены, чеки, списания)",
+  "sale.correct": "Исправление и сторно закрытых чеков",
   "finance.read": "Просмотр финансовых отчётов",
   "finance.manage": "Управление расходами и учётными периодами",
   "report.read": "Просмотр отчётов",

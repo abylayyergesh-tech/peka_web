@@ -18,6 +18,8 @@ import {
 import { Money, fmtDate } from "@/components/format";
 import { usePagination } from "@/components/usePagination";
 import DocumentCreateModal from "@/pages/inventory/DocumentCreateModal";
+import { EntityTag, entityFilterOptions, useCompanyEntities } from "@/pages/finance/companyEntities";
+import { useSupplierRefs } from "@/pages/procurement/refData";
 import {
   DOC_STATUS_OPTIONS,
   DOC_TYPE_OPTIONS,
@@ -41,15 +43,21 @@ export default function DocumentsPage() {
   const [warehouseId, setWarehouseId] = useState<number | undefined>();
   const [receipt, setReceipt] = useState<ReceiptStatus | undefined>();
   const [range, setRange] = useState<[Dayjs, Dayjs] | null>(null);
+  const [entity, setEntity] = useState<string | undefined>();
+  const [supplierId, setSupplierId] = useState<number | undefined>();
   const [createOpen, setCreateOpen] = useState(false);
+  const entities = useCompanyEntities();
+  const suppliers = useSupplierRefs();
 
   const from = range?.[0]?.format("YYYY-MM-DD");
   const to = range?.[1]?.format("YYYY-MM-DD");
 
   const query = useQuery({
-    queryKey: ["documents", { limit, offset, type, status, from, to, warehouseId, receipt }],
+    queryKey: ["documents", { limit, offset, type, status, from, to, warehouseId, receipt,
+      entity, supplierId }],
     queryFn: () => listDocuments({ limit, offset, type, status, from, to,
-      warehouse_id: warehouseId, receipt_status: receipt }),
+      warehouse_id: warehouseId, receipt_status: receipt,
+      company_entity: entity, supplier_id: supplierId }),
   });
 
   const columns: ColumnsType<DocumentOut> = [
@@ -84,7 +92,14 @@ export default function DocumentsPage() {
     {
       title: "Контрагент",
       dataIndex: "counterparty",
-      render: (v: string | null) => v || "—",
+      render: (v: string | null, row) =>
+        v || (row.supplier_id != null ? suppliers.byId.get(row.supplier_id) : null) || "—",
+    },
+    {
+      title: "Юр. лицо",
+      dataIndex: "company_entity_id",
+      render: (v: number | null, row) =>
+        row.type === "receipt" || v != null ? <EntityTag entities={entities.data} id={v} /> : "—",
     },
     {
       // Из агрегата, а не из `lines`: в списке строк нет, и раньше здесь всегда
@@ -183,6 +198,30 @@ export default function DocumentsPage() {
           value={receipt}
           onChange={(v) => {
             setReceipt(v);
+            reset();
+          }}
+        />
+        <Select
+          allowClear
+          showSearch
+          optionFilterProp="label"
+          placeholder="Поставщик"
+          style={{ width: 200 }}
+          options={suppliers.options}
+          value={supplierId}
+          onChange={(v) => {
+            setSupplierId(v);
+            reset();
+          }}
+        />
+        <Select
+          allowClear
+          placeholder="Наше юр. лицо"
+          style={{ width: 200 }}
+          options={entityFilterOptions(entities.data)}
+          value={entity}
+          onChange={(v) => {
+            setEntity(v);
             reset();
           }}
         />

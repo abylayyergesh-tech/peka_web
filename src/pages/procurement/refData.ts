@@ -82,7 +82,10 @@ export function useSupplierRefs() {
   const activeOptions: SelectOption[] = all
     .filter((s) => s.is_active)
     .map((s) => ({ value: s.supplier_id, label: s.name }));
-  return { byId, options, activeOptions, isPending: query.isPending };
+  /** Каким нашим юр. лицам поставляет поставщик (пусто — не ограничен). */
+  const companiesOf = (id: number | undefined | null) =>
+    all.find((s) => s.supplier_id === id)?.company_entities ?? [];
+  return { byId, options, activeOptions, companiesOf, isPending: query.isPending };
 }
 
 /** Empty form strings -> null so optional backend fields are cleared, not "". */
