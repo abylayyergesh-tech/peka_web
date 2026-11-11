@@ -9,6 +9,7 @@
  * Правят смену только здесь и только с причиной: она и прежнее значение
  * попадают в историю правок. Руководитель цеха решает то же самое в приложении
  * («Мой цех») по своим людям. */
+import ArrivalsCharts from "@/pages/staff/ArrivalsCharts";
 import {
   App,
   Button,
@@ -64,7 +65,7 @@ import { ExcelExportButton, columnsFromTable } from "@/components/excel";
 
 const { RangePicker } = DatePicker;
 
-type View = "all" | "disputed" | "overtime" | "no_clock_out" | "absences";
+type View = "all" | "disputed" | "overtime" | "no_clock_out" | "absences" | "chart";
 
 interface EditFormValues {
   work_location_id?: number;
@@ -152,7 +153,7 @@ export default function AttendancePage() {
   const query = useQuery({
     queryKey: ["shifts", params],
     queryFn: () => listShifts(params),
-    enabled: view !== "absences",
+    enabled: view !== "absences" && view !== "chart",
   });
   const absencesQuery = useQuery({
     queryKey: ["absences", { from, to }],
@@ -441,11 +442,14 @@ export default function AttendancePage() {
           { key: "overtime", label: "Переработки" },
           { key: "no_clock_out", label: "Без ухода" },
           { key: "absences", label: "Неявки" },
+          { key: "chart", label: "График приходов" },
         ]}
       />
-      {filters}
+      {view !== "chart" && filters}
 
-      {view === "absences" ? (
+      {view === "chart" ? (
+        <ArrivalsCharts />
+      ) : view === "absences" ? (
         <Table
           rowKey="absence_id"
           size="small"
