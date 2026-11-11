@@ -84,6 +84,7 @@ export function cellValue(raw: unknown, type?: CellType): unknown {
   if (typeof raw === "number") return raw;
   if (typeof raw === "string") {
     const s = raw.trim();
+    if (s === "—" || s === "-") return null; // прочерк таблицы — пустая ячейка
     if (type === "text") return s;
     if (NUMERIC.test(s)) return Number(s);
     if (ISO_DATE.test(s)) return dayjs(s).format("DD.MM.YYYY");
