@@ -7,6 +7,7 @@ import CustomerDetailPage from "@/pages/sales/CustomerDetailPage";
 import CustomersPage from "@/pages/sales/CustomersPage";
 import MenuPage, { PRICE_LISTS_TAB } from "@/pages/sales/MenuPage";
 import MenuPricesPage from "@/pages/sales/MenuPricesPage";
+import PortalRulesPage from "@/pages/sales/PortalRulesPage";
 import ReceivablesReportPage from "@/pages/sales/ReceivablesReportPage";
 import ReplacementsReportPage from "@/pages/sales/ReplacementsReportPage";
 import SalesReportPage from "@/pages/sales/SalesReportPage";
@@ -34,6 +35,7 @@ export const salesRoutes: RouteObject[] = [
   { path: "/customers", element: <CustomersPage /> },
   { path: "/customers/:id", element: <CustomerDetailPage /> },
   { path: "/announcements", element: <AnnouncementsPage /> },
+  { path: "/portal-rules", element: <PortalRulesPage /> },
   { path: "/reports/sales", element: <SalesReportPage /> },
   { path: "/reports/receivables", element: <ReceivablesReportPage /> },
   { path: "/reports/replacements", element: <ReplacementsReportPage /> },
