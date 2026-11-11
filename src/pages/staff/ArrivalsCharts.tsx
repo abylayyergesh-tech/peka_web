@@ -238,7 +238,7 @@ function DayTimeline({ day, shifts, absences }: {
   const lo = Math.max(-120, Math.floor((Math.min(...points) - 30) / 60) * 60);
   const hi = Math.min(36 * 60, Math.ceil((Math.max(...points) + 30) / 60) * 60);
   const nameW = Math.min(200, Math.max(120, width * 0.22));
-  const padR = 90, rowH = 26, padT = 22;
+  const padR = 90, rowH = 26, padT = 34;
   const plotW = Math.max(100, width - nameW - padR);
   const x = (m: number) => nameW + ((Math.min(Math.max(m, lo), hi) - lo) / (hi - lo)) * plotW;
   const H = padT + rows.length * rowH + 8;
@@ -257,14 +257,14 @@ function DayTimeline({ day, shifts, absences }: {
         <svg width={width} height={H} role="img" aria-label="Приходы и уходы сотрудников за день">
           {hours.map((m) => (
             <g key={m}>
-              <line x1={x(m)} x2={x(m)} y1={padT - 4} y2={H - 6} stroke={C.grid} strokeWidth={1} />
+              <line x1={x(m)} x2={x(m)} y1={padT - 14} y2={H - 6} stroke={C.grid} strokeWidth={1} />
               <text x={x(m)} y={12} textAnchor="middle" fontSize={11} fill={C.muted}>{hhmm(m)}</text>
             </g>
           ))}
           {isToday && now > lo && now < hi && (
             <g>
-              <line x1={x(now)} x2={x(now)} y1={padT - 6} y2={H - 6} stroke={C.ink2} strokeDasharray="3 3" strokeWidth={1} />
-              <text x={x(now) + 4} y={padT - 8} fontSize={10} fill={C.ink2}>сейчас</text>
+              <line x1={x(now)} x2={x(now)} y1={padT - 12} y2={H - 6} stroke={C.ink2} strokeDasharray="3 3" strokeWidth={1} />
+              <text x={x(now) + 4} y={padT - 6} fontSize={10} fill={C.ink2}>сейчас {hhmm(now)}</text>
             </g>
           )}
           {rows.map((r, i) => {
