@@ -12,6 +12,7 @@ import { errorMessage } from "@/api/client";
 import { fetchCashFlow, type CashFlowDay, type CashFlowLine } from "@/api/finance";
 import { fmtDate, fmtMoney, Money } from "@/components/format";
 import { ReportRangePicker, useReportRange } from "@/pages/finance/reportRange";
+import { ExcelExportButton, columnsFromTable } from "@/components/excel";
 
 const lineColumns = (totalLabel: string): ColumnsType<CashFlowLine> => [
   { title: totalLabel, dataIndex: "label" },
@@ -62,6 +63,17 @@ export default function CashFlowPage() {
 
       <Space wrap style={{ marginBottom: 16 }}>
         <ReportRangePicker value={range} onChange={setRange} />
+        <ExcelExportButton
+          fileName="Движение денег"
+          disabled={!data}
+          sheets={() => [
+            { name: "Пришло", columns: columnsFromTable(lineColumns("Источник")), rows: data?.inflow ?? [],
+              totals: { "Сумма": data?.inflow_total } },
+            { name: "Ушло", columns: columnsFromTable(lineColumns("Направление")), rows: data?.outflow ?? [],
+              totals: { "Сумма": data?.outflow_total } },
+            { name: "По дням", columns: columnsFromTable(dayColumns), rows: data?.by_day ?? [] },
+          ]}
+        />
       </Space>
 
       {query.isError && (

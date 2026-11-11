@@ -21,6 +21,7 @@ import { listMenus } from "@/api/sales";
 import { getProductCost, getTechCard, type TechCardRow } from "@/api/reports";
 import { fmtDate, fmtMoney, fmtQty } from "@/components/format";
 import { useProductsLookup } from "@/pages/inventory/shared";
+import { ExcelExportButton, columnsFromTable } from "@/components/excel";
 
 /** Выбор цены продажи: базовые цены, конкретный прайс-лист или средняя. */
 type PriceSource = "base" | "average" | number;
@@ -250,6 +251,11 @@ export default function ProductCostReportPage() {
     <div>
       <h2 style={{ marginTop: 0 }}>Себестоимость</h2>
       <Space wrap style={{ marginBottom: 16 }}>
+        <ExcelExportButton
+          fileName="Себестоимость"
+          disabled={!rows.length}
+          sheets={() => [{ name: "Себестоимость", columns: columnsFromTable(columns), rows }]}
+        />
         <Select
           showSearch
           optionFilterProp="label"

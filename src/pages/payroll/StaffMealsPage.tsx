@@ -16,7 +16,7 @@ import type { ColumnsType } from "antd/es/table";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { errorMessage } from "@/api/client";
+import { errorMessage, fetchAllPages } from "@/api/client";
 import {
   fetchStaffMealsSummary,
   listStaffMeals,
@@ -26,6 +26,7 @@ import {
 } from "@/api/payroll";
 import { fmtDate, fmtMoney, fmtQty, Money } from "@/components/format";
 import { ReportRangePicker, useReportRange } from "@/pages/finance/reportRange";
+import { ExcelExportButton, columnsFromTable } from "@/components/excel";
 
 const KIND_LABELS: Record<string, string> = {
   breakfast: "Завтрак",
@@ -186,6 +187,15 @@ export default function StaffMealsPage() {
 
       <Space wrap style={{ marginBottom: 16 }}>
         <ReportRangePicker value={range} onChange={setRange} />
+        <ExcelExportButton
+          fileName="Питание сотрудников"
+          sheets={async () => [
+            { name: "По сотрудникам", columns: columnsFromTable(summaryColumns),
+              rows: summary.data?.rows ?? [] },
+            { name: "Журнал", columns: columnsFromTable(journalColumns),
+              rows: await fetchAllPages((p) => listStaffMeals({ ...params, ...p, include_voided: true })) },
+          ]}
+        />
       </Space>
 
       {(summary.isError || journal.isError) && (

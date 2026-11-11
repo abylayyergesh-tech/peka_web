@@ -38,6 +38,7 @@ import ProductCategoriesModal, {
 import { fmtDate, fmtQty, Money } from "@/components/format";
 import { fmtPct } from "@/pages/finance/labels";
 import { ReportRangePicker, useReportRange } from "@/pages/finance/reportRange";
+import { ExcelExportButton, columnsFromTable } from "@/components/excel";
 
 const METRIC_LABELS: Record<AbcMetric, string> = {
   revenue: "Выручка",
@@ -231,9 +232,16 @@ export default function AbcReportPage() {
         style={{ marginBottom: 16, justifyContent: "space-between", width: "100%" }}
       >
         <h2 style={{ margin: 0 }}>ABC-анализ</h2>
-        <Button icon={<TagsOutlined />} onClick={() => setCategoriesOpen(true)}>
-          Категории
-        </Button>
+        <Space>
+          <ExcelExportButton
+            fileName="ABC-анализ"
+            disabled={!query.data}
+            sheets={() => [{ name: "ABC", columns: columnsFromTable(columns), rows: query.data?.rows ?? [] }]}
+          />
+          <Button icon={<TagsOutlined />} onClick={() => setCategoriesOpen(true)}>
+            Категории
+          </Button>
+        </Space>
       </Space>
 
       <Space wrap style={{ marginBottom: 8 }}>

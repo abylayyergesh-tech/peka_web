@@ -8,6 +8,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 
+import { fetchAllPages } from "@/api/client";
 import {
   listDocuments,
   type DocumentOut,
@@ -30,6 +31,7 @@ import {
   ReceiptStatusTag,
   useWarehousesLookup,
 } from "@/pages/inventory/shared";
+import { ExcelExportButton, columnsFromTable } from "@/components/excel";
 
 const { RangePicker } = DatePicker;
 
@@ -138,6 +140,17 @@ export default function DocumentsPage() {
       >
         <h2 style={{ margin: 0 }}>Накладные</h2>
         <Space>
+          <ExcelExportButton
+            fileName="Накладные"
+            sheets={async () => [{
+              name: "Документы",
+              columns: columnsFromTable(columns),
+              rows: await fetchAllPages((p) => listDocuments({
+                ...p, type, status, from, to, warehouse_id: warehouseId, receipt_status: receipt,
+                company_entity: entity, supplier_id: supplierId,
+              })),
+            }]}
+          />
           <Button
             icon={<CameraOutlined />}
             onClick={() => navigate("/documents/digitize")}

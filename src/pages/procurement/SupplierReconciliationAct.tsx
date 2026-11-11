@@ -22,6 +22,7 @@ import {
   useCompanyEntities,
 } from "@/pages/finance/companyEntities";
 import { ReportRangePicker, type Range } from "@/pages/finance/reportRange";
+import { ExcelExportButton } from "@/components/excel";
 
 const MONTHS_RU = [
   "января",
@@ -334,6 +335,30 @@ export default function SupplierReconciliationAct({
         >
           Печать
         </Button>
+        <ExcelExportButton
+          fileName={`Акт сверки ${data?.supplier_name ?? ""}`}
+          disabled={!data}
+          sheets={() => data ? [{
+            name: "Акт сверки",
+            caption: [
+              `Акт сверки взаиморасчётов: ${data.our_name} — ${data.supplier_name}`,
+              `Период: ${fmtDate(data.date_from)} — ${fmtDate(data.date_to)}`,
+              `Сальдо на начало: ${fmtMoney(data.opening_balance)}`,
+            ],
+            columns: [
+              { title: "Дата", value: (l: ReconciliationLine) => l.entry_date },
+              { title: "Документ", value: (l: ReconciliationLine) => {
+                const d = documentTitle(l);
+                return `${d.title} ${d.number}`;
+              } },
+              { title: "Дебет", value: (l: ReconciliationLine) => (Number(l.debit) ? l.debit : null) },
+              { title: "Кредит", value: (l: ReconciliationLine) => (Number(l.credit) ? l.credit : null) },
+            ],
+            rows: data.lines,
+            totals: { "Документ": "Обороты за период", "Дебет": data.turnover_debit,
+                      "Кредит": data.turnover_credit },
+          }] : []}
+        />
       </Space>
 
       {entityFilter && (

@@ -15,7 +15,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 
-import { errorMessage } from "@/api/client";
+import { errorMessage, fetchAllPages } from "@/api/client";
 import {
   listAllCustomers,
   listReplacements,
@@ -26,6 +26,7 @@ import { useCan } from "@/auth/store";
 import { Money, fmtDate, fmtQty } from "@/components/format";
 import { usePagination } from "@/components/usePagination";
 import Stat from "@/components/Stat";
+import { ExcelExportButton, columnsFromTable } from "@/components/excel";
 
 const { RangePicker } = DatePicker;
 
@@ -111,6 +112,15 @@ export default function ReplacementsReportPage() {
       <Space style={{ marginBottom: 16, justifyContent: "space-between", width: "100%" }} wrap>
         <h2 style={{ margin: 0 }}>Замены</h2>
         <Space wrap>
+          <ExcelExportButton
+            fileName="Замены"
+            disabled={!canRead}
+            sheets={async () => [{
+              name: "Замены",
+              columns: columnsFromTable(columns),
+              rows: await fetchAllPages((p) => listReplacements({ ...filters, ...p })),
+            }]}
+          />
           <Select
             allowClear
             showSearch

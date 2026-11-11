@@ -5,9 +5,10 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { listAuditEvents, type AuditEventOut } from "@/api/audit";
-import { errorMessage } from "@/api/client";
+import { errorMessage, fetchAllPages } from "@/api/client";
 import { fmtDateTime } from "@/components/format";
 import { usePagination } from "@/components/usePagination";
+import { ExcelExportButton, columnsFromTable } from "@/components/excel";
 
 /** Русские подписи известных действий; неизвестные показываем как есть. */
 const ACTION_LABELS: Record<string, { label: string; color: string }> = {
@@ -80,7 +81,17 @@ export default function AuditPage() {
   return (
     <div>
       <Space style={{ marginBottom: 16, justifyContent: "space-between", width: "100%" }}>
-        <h2 style={{ margin: 0 }}>Журнал действий</h2>
+        <Space>
+          <h2 style={{ margin: 0 }}>Журнал действий</h2>
+          <ExcelExportButton
+            fileName="Журнал действий"
+            sheets={async () => [{
+              name: "Журнал",
+              columns: columnsFromTable(columns),
+              rows: await fetchAllPages((p) => listAuditEvents({ ...p, action })),
+            }]}
+          />
+        </Space>
         <Select
           style={{ minWidth: 260 }}
           allowClear

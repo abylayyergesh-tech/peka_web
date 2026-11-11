@@ -25,6 +25,7 @@ import {
   useProductsLookup,
   useWarehousesLookup,
 } from "@/pages/inventory/shared";
+import { ExcelExportButton, columnsFromTable } from "@/components/excel";
 
 export default function StockTab() {
   const products = useProductsLookup();
@@ -308,6 +309,10 @@ export default function StockTab() {
           />
           <span>Скрыть нулевые</span>
         </Space>
+        <ExcelExportButton
+          fileName="Остатки на складах"
+          sheets={() => [{ name: "Остатки", columns: columnsFromTable(columns), rows }]}
+        />
       </Space>
 
       <Table<StockRow>

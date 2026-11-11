@@ -20,7 +20,7 @@ import type { ColumnsType } from "antd/es/table";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { errorMessage } from "@/api/client";
+import { errorMessage, fetchAllPages } from "@/api/client";
 import {
   listCompensations,
   listLegalEntities,
@@ -38,6 +38,7 @@ import {
   fmtShare,
   fmtTenge,
 } from "@/pages/payroll/shared";
+import { ExcelExportButton, columnsFromTable } from "@/components/excel";
 
 interface FormValues {
   /** Только у новой карточки: кому назначаем ставку. */
@@ -219,7 +220,19 @@ export default function CompensationsPage() {
   return (
     <div>
       <Space style={{ marginBottom: 16, justifyContent: "space-between", width: "100%" }}>
-        <h2 style={{ margin: 0 }}>Справочник ставок</h2>
+        <Space>
+          <h2 style={{ margin: 0 }}>Справочник ставок</h2>
+          <ExcelExportButton
+            fileName="Справочник ставок"
+            sheets={async () => [{
+              name: "Ставки",
+              columns: columnsFromTable(columns),
+              rows: await fetchAllPages((p) => listCompensations({
+                ...p, department_id: departmentId, pay_type: payType, q: search || undefined,
+              })),
+            }]}
+          />
+        </Space>
         {canManage && (
           <Button type="primary" icon={<PlusOutlined />} onClick={openNew}>
             Назначить ставку

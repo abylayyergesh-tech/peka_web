@@ -11,7 +11,7 @@ import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { errorMessage } from "@/api/client";
+import { errorMessage, fetchAllPages } from "@/api/client";
 import {
   createCheck,
   listCustomers,
@@ -26,6 +26,7 @@ import { useCan } from "@/auth/store";
 import { Money, fmtDate, fmtDateTime } from "@/components/format";
 import { usePagination } from "@/components/usePagination";
 import { CheckStatusTag } from "@/pages/sales/statusTags";
+import { ExcelExportButton, columnsFromTable } from "@/components/excel";
 
 const { RangePicker } = DatePicker;
 
@@ -187,7 +188,20 @@ export default function ShiftsPage() {
   return (
     <div>
       <Space style={{ marginBottom: 16, justifyContent: "space-between", width: "100%" }}>
-        <h2 style={{ margin: 0 }}>Чеки и списания</h2>
+        <Space>
+          <h2 style={{ margin: 0 }}>Чеки и списания</h2>
+          <ExcelExportButton
+            fileName="Чеки и списания"
+            disabled={!canOperate}
+            sheets={async () => [{
+              name: "Чеки и списания",
+              columns: columnsFromTable(columns),
+              rows: await fetchAllPages((p) => listRegisterJournal({
+                ...p, shift: shiftFilter, kind: kindFilter, from: dateFrom, to: dateTo,
+              })),
+            }]}
+          />
+        </Space>
         {canOperate && (
           <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
             Новый чек

@@ -38,6 +38,7 @@ import Stat from "@/components/Stat";
 import {
   RowStatusTag, SessionStatusTag, movementsHint, signed,
 } from "@/pages/inventory/countShared";
+import { ExcelExportButton, columnsFromTable } from "@/components/excel";
 
 type View = "diff" | "empty" | "todo" | "all";
 
@@ -346,6 +347,15 @@ export default function CountReportPage() {
           {report && <SessionStatusTag status={report.session.status} />}
         </Space>
         <Space>
+          <ExcelExportButton
+            fileName={`Инвентаризация ${report?.session.name ?? ""}`}
+            disabled={!report}
+            sheets={() => report ? [
+              { name: "Расхождения", columns: columnsFromTable(columns), rows },
+              { name: "По складам", columns: columnsFromTable(warehouseColumns), rows: report.warehouses },
+              { name: "Перемещения", columns: columnsFromTable(transferColumns), rows: report.transfers },
+            ] : []}
+          />
           <a onClick={() => navigate("/inventory-count")}>К списку</a>
           <a onClick={() => navigate(`/inventory-count/${sessionId}`)}>Лист пересчёта</a>
         </Space>

@@ -11,6 +11,7 @@ import ExpensesPage from "@/pages/finance/ExpensesPage";
 import FinancialSummaryPage from "@/pages/finance/FinancialSummaryPage";
 import PnLReportPage from "@/pages/finance/PnLReportPage";
 import SalesByProductPage from "@/pages/finance/SalesByProductPage";
+import OlapBuilderPage from "@/pages/finance/OlapBuilderPage";
 import SalesOlapPage from "@/pages/finance/SalesOlapPage";
 
 export const financeRoutes: RouteObject[] = [
@@ -22,6 +23,7 @@ export const financeRoutes: RouteObject[] = [
   { path: "/expense-categories", element: <ExpenseCategoriesPage /> },
   { path: "/reports/sales-by-product", element: <SalesByProductPage /> },
   { path: "/reports/sales-olap", element: <SalesOlapPage /> },
+  { path: "/reports/olap-builder", element: <OlapBuilderPage /> },
   { path: "/reports/abc", element: <AbcReportPage /> },
   { path: "/reports/cash-flow", element: <CashFlowPage /> },
   { path: "/reports/pnl", element: <PnLReportPage /> },

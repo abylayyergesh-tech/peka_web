@@ -80,6 +80,8 @@ export const NAV_SECTIONS: NavSection[] = [
       { path: "/reports/receivables", label: "Дебиторка", cap: "report.read" },
       { path: "/reports/payables", label: "Кредиторка", cap: "report.read" },
       { path: "/reports/sales-olap", label: "OLAP отчёт", cap: "finance.read" },
+      // Свой отчёт: группировки, показатели, фильтры (SQL собирает сервер).
+      { path: "/reports/olap-builder", label: "Конструктор отчётов", cap: "finance.read" },
       { path: "/company-entities", label: "Наши юр. лица", cap: "report.read" },
       { path: "/reports/company-entities", label: "Деньги по юр. лицам",
         cap: "report.read" },

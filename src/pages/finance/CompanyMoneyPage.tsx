@@ -41,6 +41,7 @@ import { useCan } from "@/auth/store";
 import { Money } from "@/components/format";
 import Stat from "@/components/Stat";
 import { NO_ENTITY_FILTER } from "@/pages/finance/companyEntities";
+import { ExcelExportButton, columnsFromTable } from "@/components/excel";
 
 /** Значение фильтра для ссылок «провалиться»: id юрлица либо `none`. */
 function filterValue(row: CompanyEntityMoney): string {
@@ -213,6 +214,10 @@ export default function CompanyMoneyPage() {
       >
         <h2 style={{ margin: 0 }}>Деньги по юр. лицам</h2>
         <Space wrap>
+          <ExcelExportButton
+            fileName="Деньги по юр. лицам"
+            sheets={() => [{ name: "По юр. лицам", columns: columnsFromTable(columns), rows }]}
+          />
           <Link to="/company-entities">Реквизиты компаний</Link>
           <DatePicker
             placeholder="На дату"

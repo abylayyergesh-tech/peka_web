@@ -13,6 +13,7 @@ import { useCan } from "@/auth/store";
 import { Money } from "@/components/format";
 import Stat from "@/components/Stat";
 import { paymentMethodLabel } from "@/pages/sales/statusTags";
+import { ExcelExportButton, columnsFromTable } from "@/components/excel";
 
 const { RangePicker } = DatePicker;
 
@@ -94,7 +95,17 @@ export default function SalesReportPage() {
     <div>
       <Space style={{ marginBottom: 16, justifyContent: "space-between", width: "100%" }}>
         <h2 style={{ margin: 0 }}>Отчёт по продажам</h2>
-        <RangePicker value={range} onChange={(v) => setRange(v)} />
+        <Space>
+          <RangePicker value={range} onChange={(v) => setRange(v)} />
+          <ExcelExportButton
+            fileName="Отчёт по продажам"
+            disabled={!query.data}
+            sheets={() => [
+              { name: "По способам оплаты", columns: columnsFromTable(methodColumns), rows: methodRows },
+              { name: "По позициям меню", columns: columnsFromTable(menuColumns), rows: menuRows },
+            ]}
+          />
+        </Space>
       </Space>
 
       {query.isError && (

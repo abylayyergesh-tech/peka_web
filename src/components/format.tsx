@@ -1,5 +1,6 @@
 /** Shared display formatting: money (backend Decimal-as-string) and dates. */
-import dayjs from "dayjs";
+import dayjs, { type Dayjs } from "dayjs";
+import utc from "dayjs/plugin/utc";
 import { Fragment } from "react";
 
 const CURRENCY = (import.meta.env.VITE_CURRENCY as string | undefined) ?? "";
@@ -24,12 +25,43 @@ export function fmtQty(value: string | number | null | undefined): string {
   return n.toLocaleString("ru-RU", { maximumFractionDigits: 6 });
 }
 
+dayjs.extend(utc);
+
+/** Учёт ведётся по времени Астаны (UTC+5, `app/core/timeutil.py`). Время с
+ *  сервера показываем в нём, а не в часовом поясе браузера: иначе на ноутбуке,
+ *  где стоит другой пояс, приход в 09:05 показался бы как 04:05 или 10:05. */
+export const BUSINESS_UTC_OFFSET_MIN = 300;
+
+/** Момент времени (ISO с зоной) — в часах Астаны. */
+export function toBusiness(value: string | Dayjs): Dayjs {
+  return dayjs(value).utcOffset(BUSINESS_UTC_OFFSET_MIN);
+}
+
+/** Дата без времени («2026-11-01») — как есть; момент времени — по Астане. */
 export function fmtDate(value: string | null | undefined): string {
-  return value ? dayjs(value).format("DD.MM.YYYY") : "—";
+  if (!value) return "—";
+  return (value.includes("T") ? toBusiness(value) : dayjs(value)).format("DD.MM.YYYY");
 }
 
 export function fmtDateTime(value: string | null | undefined): string {
-  return value ? dayjs(value).format("DD.MM.YYYY HH:mm") : "—";
+  return value ? toBusiness(value).format("DD.MM.YYYY HH:mm") : "—";
+}
+
+/** Только время «09:05» по Астане. */
+export function fmtTime(value: string | null | undefined): string {
+  return value ? toBusiness(value).format("HH:mm") : "—";
+}
+
+/** Время, выбранное в поле ввода, — как время Астаны, в ISO для сервера.
+ *  Поле ввода работает в поясе браузера; берём только «стенные» часы и минуты,
+ *  иначе 09:00, выбранные на ноутбуке в другом поясе, ушли бы другим моментом. */
+export function businessIso(value: Dayjs): string {
+  return `${value.format("YYYY-MM-DDTHH:mm:ss")}+05:00`;
+}
+
+/** Значение с сервера — для поля ввода: те же «стенные» часы Астаны. */
+export function businessPickerValue(value: string): Dayjs {
+  return dayjs(toBusiness(value).format("YYYY-MM-DDTHH:mm:ss"));
 }
 
 /** Куски числа, после каждого из которых можно перенести строку:

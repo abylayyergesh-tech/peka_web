@@ -24,11 +24,12 @@ import {
   type TeamPerson,
 } from "@/api/team";
 import { useCan } from "@/auth/store";
-import { fmtDate, fmtDateTime } from "@/components/format";
+import { fmtDate, fmtDateTime, fmtTime } from "@/components/format";
 import { DISPUTE_REASON_LABELS, fmtDuration } from "@/pages/staff/shared";
+import { ExcelExportButton, columnsFromTable } from "@/components/excel";
 
 function time(v: string | null): string {
-  return v ? dayjs(v).format("HH:mm") : "—";
+  return v ? fmtTime(v) : "—";
 }
 
 function Stat({ label, value, color }: { label: string; value: number; color?: string }) {
@@ -120,7 +121,17 @@ export default function TeamTodayPage() {
     <div>
       <Space style={{ justifyContent: "space-between", width: "100%" }} align="baseline">
         <h2 style={{ marginTop: 0 }}>Сегодня по цехам</h2>
-        <Link to="/attendance">Все отметки →</Link>
+        <Space>
+          <ExcelExportButton
+            fileName="Сегодня по цехам"
+            disabled={!query.data}
+            sheets={() => [
+              { name: "На смене", columns: columnsFromTable(personColumns), rows: query.data?.on_shift ?? [] },
+              { name: "Опоздали", columns: columnsFromTable(personColumns), rows: query.data?.late ?? [] },
+            ]}
+          />
+          <Link to="/attendance">Все отметки →</Link>
+        </Space>
       </Space>
       <Typography.Paragraph type="secondary">
         То же табло, что руководитель цеха видит в приложении («Мой цех»). Обновляется само раз в минуту.

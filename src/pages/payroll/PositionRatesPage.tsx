@@ -23,6 +23,7 @@ import {
 import { useCan } from "@/auth/store";
 import { fmtDate } from "@/components/format";
 import { fmtTenge } from "@/pages/payroll/shared";
+import { ExcelExportButton, columnsFromTable } from "@/components/excel";
 
 interface FormValues {
   day_rate: number;
@@ -164,6 +165,22 @@ export default function PositionRatesPage() {
       <Space style={{ width: "100%", justifyContent: "space-between", marginBottom: 12 }} wrap>
         <h2 style={{ margin: 0 }}>Ставки по должностям</h2>
         <Space>
+          <ExcelExportButton
+            fileName="Ставки по должностям"
+            sheets={() => [
+              { name: "Ставки", columns: columnsFromTable(columns), rows },
+              {
+                name: "История",
+                columns: [
+                  { title: "Должность", value: (r: { position_name: string }) => r.position_name },
+                  { title: "С даты", value: (r: { effective_from: string }) => r.effective_from },
+                  { title: "День", value: (r: { day_rate: string }) => r.day_rate },
+                  { title: "Ночь", value: (r: { night_rate: string }) => r.night_rate },
+                ],
+                rows: rows.flatMap((r) => r.history.map((h) => ({ ...h, position_name: r.position_name }))),
+              },
+            ]}
+          />
           <Switch size="small" checked={showInactive} onChange={setShowInactive} />
           <span>Показать неиспользуемые должности</span>
         </Space>
