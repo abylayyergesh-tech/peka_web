@@ -24,6 +24,7 @@ test('cell values: numbers stay numbers, codes stay text, dates in Astana time',
   assert.equal(cellValue(true), 'Да');
   assert.equal(cellValue('№ 12'), '№ 12');
   assert.equal(cellValue(null), null);
+  assert.equal(cellValue('—'), null);
 });
 
 test('columns from an antd table: raw numbers, rendered labels, groups, no action columns', () => {
