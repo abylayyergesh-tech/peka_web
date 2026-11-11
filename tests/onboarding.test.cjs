@@ -17,12 +17,13 @@ test('chapters cover only sections the member can see', () => {
   const chapters = tour.tourChapters(menu.visibleSections(['customer.manage']));
   assert.deepEqual(plain(chapters.map(c => c.key)), ['overview', 'lists', 'menu']);
 
-  // В разделе «Меню» человеку виден один экран — тур не рассказывает о прочих
-  // и не учит «добавлять позицию в меню», на которую у него нет права.
+  // В разделе «Меню» человеку видны только экраны его права — тур не рассказывает
+  // о прочих и не учит «добавлять позицию в меню», на которую у него нет права.
   const menuChapter = chapters[2];
   const labels = menuChapter.steps.flatMap(s => (s.items ?? []).map(i => i.label));
-  assert.deepEqual(plain(labels), ['Клиенты']);
-  assert.ok(!menuChapter.steps.some(s => s.link && s.link.path !== '/customers'));
+  assert.deepEqual(plain(labels), ['Клиенты', 'Правила заказа']);
+  assert.ok(!menuChapter.steps.some(
+    s => s.link && !['/customers', '/portal-rules'].includes(s.link.path)));
 
   const sidebar = chapters[0].steps.find(s => s.selector === "[data-tour='sidebar']");
   assert.deepEqual(plain(sidebar.items.map(i => i.label)), ['Меню']);

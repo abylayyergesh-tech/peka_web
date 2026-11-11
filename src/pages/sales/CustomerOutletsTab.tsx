@@ -6,9 +6,14 @@
  * распознанный из него адрес.
  *
  * Удаление мягкое: на точку ссылаются прошлые заказы и чеки.
+ *
+ * У точки могут быть свои минимум заказа и порог бесплатной доставки — поверх
+ * общих «Правил заказа». Пустое поле — действует общее правило.
  */
 import { PlusOutlined } from "@ant-design/icons";
-import { App, Button, Descriptions, Form, Input, Popconfirm, Space, Switch, Table, Tag } from "antd";
+import {
+  App, Button, Descriptions, Divider, Form, Input, InputNumber, Popconfirm, Space, Switch, Table, Tag,
+} from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -18,6 +23,7 @@ import { listAssignments } from "@/api/delivery";
 import {
   createCustomerAddress,
   deleteCustomerAddress,
+  getPortalSettings,
   listCustomerAddresses,
   updateCustomerAddress,
   type CustomerAddressCreate,
@@ -25,6 +31,28 @@ import {
 } from "@/api/sales";
 import { useCan } from "@/auth/store";
 import EntityCardDrawer from "@/components/EntityCardDrawer";
+import { fmtMoney } from "@/components/format";
+
+/** Форма держит суммы числами (InputNumber), API — строками; пусто — null. */
+type OutletForm = Omit<CustomerAddressCreate, "min_order_total" | "free_delivery_threshold"> & {
+  min_order_total?: number | null;
+  free_delivery_threshold?: number | null;
+};
+
+const toMoney = (v: number | null | undefined) => (v == null ? null : String(v));
+const toNumber = (v: string | null | undefined) => (v == null ? null : Number(v));
+
+/** Свои условия точки — по строке на условие; пусто — точка живёт по общим правилам. */
+function ownTerms(row: CustomerAddressOut): string[] {
+  const parts: string[] = [];
+  if (row.min_order_total != null) parts.push(`мин. ${fmtMoney(row.min_order_total)}`);
+  if (row.free_delivery_threshold != null) {
+    parts.push(Number(row.free_delivery_threshold) === 0
+      ? "доставка бесплатно"
+      : `бесплатно от ${fmtMoney(row.free_delivery_threshold)}`);
+  }
+  return parts;
+}
 
 export default function CustomerOutletsTab({ customerId }: { customerId: number }) {
   const { message } = App.useApp();
@@ -44,6 +72,18 @@ export default function CustomerOutletsTab({ customerId }: { customerId: number 
     queryKey: ["delivery-assignments"],
     queryFn: listAssignments,
   });
+  // Общие правила — подсказкой в пустых полях: «пусто = как у всех, то есть …».
+  const rules = useQuery({
+    queryKey: ["portal-settings"],
+    queryFn: getPortalSettings,
+    staleTime: 60_000,
+  });
+  const generalMin = rules.data ? fmtMoney(rules.data.min_order_total) : "…";
+  const generalFree = rules.data
+    ? rules.data.free_delivery_threshold == null
+      ? "не бывает"
+      : `от ${fmtMoney(rules.data.free_delivery_threshold)}`
+    : "…";
   const courierByAddress = useMemo(() => {
     const map = new Map<number, string>();
     for (const row of assignments.data ?? []) {
@@ -59,10 +99,17 @@ export default function CustomerOutletsTab({ customerId }: { customerId: number 
   };
 
   const save = useMutation({
-    mutationFn: (values: CustomerAddressCreate) =>
-      editing
+    mutationFn: (form: OutletForm) => {
+      // Обе суммы уходят всегда: null в правке возвращает точку к общему правилу.
+      const values: CustomerAddressCreate = {
+        ...form,
+        min_order_total: toMoney(form.min_order_total),
+        free_delivery_threshold: toMoney(form.free_delivery_threshold),
+      };
+      return editing
         ? updateCustomerAddress(editing.customer_address_id, values)
-        : createCustomerAddress(customerId, values),
+        : createCustomerAddress(customerId, values);
+    },
     onSuccess: (row) => {
       message.success(editing ? "Точка сохранена" : "Точка добавлена");
       setEditing(row);
@@ -98,7 +145,11 @@ export default function CustomerOutletsTab({ customerId }: { customerId: number 
   }
 
   function fillForm(row: CustomerAddressOut) {
-    form.setFieldsValue(row);
+    form.setFieldsValue({
+      ...row,
+      min_order_total: toNumber(row.min_order_total),
+      free_delivery_threshold: toNumber(row.free_delivery_threshold),
+    });
   }
 
   function openCard(row: CustomerAddressOut) {
@@ -125,6 +176,20 @@ export default function CustomerOutletsTab({ customerId }: { customerId: number 
       title: "Способ входа",
       dataIndex: "comment",
       render: (v: string | null) => v || "—",
+    },
+    {
+      title: "Условия",
+      key: "terms",
+      render: (_, row) => {
+        const own = ownTerms(row);
+        return own.length ? (
+          <Space direction="vertical" size={2}>
+            {own.map((t) => <Tag key={t} color="gold">{t}</Tag>)}
+          </Space>
+        ) : (
+          <span style={{ color: "#999" }}>общие</span>
+        );
+      },
     },
     {
       title: "Курьер (завтра)",
@@ -204,6 +269,7 @@ export default function CustomerOutletsTab({ customerId }: { customerId: number 
         dataSource={query.data}
         pagination={false}
         columns={columns}
+        scroll={{ x: "max-content" }}
         locale={{ emptyText: "Точек нет — добавьте адрес, иначе курьеру некуда везти" }}
         rowClassName={() => "row-clickable"}
         onRow={(row) => ({ onClick: () => openCard(row) })}
@@ -237,6 +303,18 @@ export default function CustomerOutletsTab({ customerId }: { customerId: number 
               <Descriptions.Item label="Контакт">
                 {[editing.contact_name, editing.contact_phone].filter(Boolean).join(" · ") || "—"}
               </Descriptions.Item>
+              <Descriptions.Item label="Минимальная сумма заказа">
+                {editing.min_order_total != null
+                  ? fmtMoney(editing.min_order_total)
+                  : `общее правило (${generalMin})`}
+              </Descriptions.Item>
+              <Descriptions.Item label="Бесплатная доставка">
+                {editing.free_delivery_threshold == null
+                  ? `общее правило (${generalFree})`
+                  : Number(editing.free_delivery_threshold) === 0
+                    ? "всегда"
+                    : `от ${fmtMoney(editing.free_delivery_threshold)}`}
+              </Descriptions.Item>
               <Descriptions.Item label="Основная">
                 {editing.is_default ? <Tag color="blue">Основная</Tag> : "Нет"}
               </Descriptions.Item>
@@ -247,7 +325,7 @@ export default function CustomerOutletsTab({ customerId }: { customerId: number 
           ) : null
         }
         form={
-        <Form form={form} layout="vertical" onFinish={(v) => save.mutate(v)}>
+        <Form form={form} layout="vertical" onFinish={(v: OutletForm) => save.mutate(v)}>
           <Form.Item
             name="address_line"
             label="Адрес"
@@ -277,6 +355,23 @@ export default function CustomerOutletsTab({ customerId }: { customerId: number 
           </Form.Item>
           <Form.Item name="is_default" label="Основная точка" valuePropName="checked">
             <Switch />
+          </Form.Item>
+          <Divider orientation="left" plain>Условия заказа этой точки</Divider>
+          <Form.Item
+            name="min_order_total"
+            label="Минимальная сумма заказа"
+            tooltip="Сумма товаров без доставки, ниже которой сайт не примет заказ на эту точку. Пусто — общее правило."
+            extra={`Пусто — общее правило: ${generalMin}`}
+          >
+            <InputNumber min={0} step={1000} style={{ width: "100%" }} placeholder={generalMin} />
+          </Form.Item>
+          <Form.Item
+            name="free_delivery_threshold"
+            label="Бесплатная доставка от"
+            tooltip="С этой суммы товаров доставка на точку бесплатна; 0 — всегда бесплатно. Пусто — общее правило."
+            extra={`Пусто — общее правило: ${generalFree}`}
+          >
+            <InputNumber min={0} step={1000} style={{ width: "100%" }} />
           </Form.Item>
         </Form>
         }

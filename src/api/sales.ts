@@ -679,6 +679,10 @@ export interface CustomerAddressOut {
   comment: string | null;
   is_default: boolean;
   is_active: boolean;
+  /** Свой минимум заказа точки; null — общее правило («Правила заказа»). */
+  min_order_total: string | null;
+  /** Свой порог бесплатной доставки; null — общее правило, "0" — всегда бесплатно. */
+  free_delivery_threshold: string | null;
 }
 
 export interface CustomerAddressCreate {
@@ -688,6 +692,8 @@ export interface CustomerAddressCreate {
   contact_phone?: string | null;
   comment?: string | null;
   is_default?: boolean;
+  min_order_total?: string | null;
+  free_delivery_threshold?: string | null;
 }
 
 export type CustomerAddressUpdate = Partial<CustomerAddressCreate> & {
@@ -728,6 +734,52 @@ export async function deleteCustomerAddress(
 ): Promise<CustomerAddressOut> {
   const { data } = await api.delete<CustomerAddressOut>(
     `/portal-addresses/${addressId}`);
+  return data;
+}
+
+// ---- правила заказа на клиентском сайте ----
+// Одна строка на организацию (`app/portal/schemas.py` PortalSettingsOut/Update).
+// Время — местное, строкой "HH:MM:SS"; деньги — строками.
+
+export interface PortalSettingsUpdate {
+  min_order_total: string;
+  free_delivery_threshold: string | null;
+  delivery_fee: string;
+  /** До скольки принимается заказ на ближайший день; null — без ограничения. */
+  cutoff_time: string | null;
+  lead_days: number;
+  max_days_ahead: number;
+  time_zone: string;
+  pickup_enabled: boolean;
+  delivery_enabled: boolean;
+  /** Дозаказ на сегодня — до этого времени; null — только на следующие дни. */
+  same_day_until: string | null;
+  /** Пауза приёма заказов (может переходить через полночь); оба null — нет паузы. */
+  pause_from: string | null;
+  pause_until: string | null;
+}
+
+export interface PortalSettingsOut extends PortalSettingsUpdate {
+  extra_order_enabled: boolean;
+  extra_order_title: string;
+  extra_order_body: string | null;
+  /** Что сайт предлагает прямо сейчас. */
+  earliest_delivery_date: string;
+  available_delivery_dates: string[];
+  is_past_cutoff: boolean;
+  is_same_day_open: boolean;
+  is_paused: boolean;
+}
+
+export async function getPortalSettings(): Promise<PortalSettingsOut> {
+  const { data } = await api.get<PortalSettingsOut>("/portal-settings");
+  return data;
+}
+
+export async function updatePortalSettings(
+  body: PortalSettingsUpdate,
+): Promise<PortalSettingsOut> {
+  const { data } = await api.put<PortalSettingsOut>("/portal-settings", body);
   return data;
 }
 
