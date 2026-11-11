@@ -796,7 +796,46 @@ export interface CheckOut {
   payment_method: string | null;
   inventory_document_id: number | null;
   fiscal_status: string;
+  paid_at?: string | null;
+  /** Сторно/исправление: причина и ссылки между старым и новым чеком. */
+  voided_at?: string | null;
+  void_reason?: string | null;
+  corrected_by_check_id?: number | null;
+  corrects_check_id?: number | null;
+  customer_address_id?: number | null;
+  employee_id?: number | null;
   lines: CheckLineOut[];
+}
+
+export interface CheckCorrectionLineIn {
+  menu_item_id: number;
+  quantity: number | string;
+  /** Цена исходного чека; пусто — цена меню клиента. У замены не передаётся. */
+  unit_price?: number | string | null;
+  discount_type?: "percent" | "amount" | null;
+  discount_value?: number | string | null;
+  is_replacement?: boolean;
+}
+
+export interface CheckCorrectionIn {
+  reason: string;
+  lines: CheckCorrectionLineIn[];
+  payment_method?: "cash" | "card" | "credit";
+  customer_id?: number | null;
+  discount_type?: "percent" | "amount" | null;
+  discount_value?: number | string | null;
+}
+
+/** Сторно закрытого чека: склад, долг и замены возвращаются, чек аннулируется. */
+export async function stornoCheck(id: number, reason: string): Promise<CheckOut> {
+  const { data } = await api.post<CheckOut>(`/checks/${id}/storno`, { reason });
+  return data;
+}
+
+/** Исправить закрытый чек: сторно и новый чек той же датой. Возвращает новый чек. */
+export async function correctCheck(id: number, body: CheckCorrectionIn): Promise<CheckCloseResult> {
+  const { data } = await api.post<CheckCloseResult>(`/checks/${id}/correct`, body);
+  return data;
 }
 
 export interface CheckWarning {
