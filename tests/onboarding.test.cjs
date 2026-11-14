@@ -21,9 +21,9 @@ test('chapters cover only sections the member can see', () => {
   // о прочих и не учит «добавлять позицию в меню», на которую у него нет права.
   const menuChapter = chapters[2];
   const labels = menuChapter.steps.flatMap(s => (s.items ?? []).map(i => i.label));
-  assert.deepEqual(plain(labels), ['Клиенты', 'Правила заказа']);
+  assert.deepEqual(plain(labels), ['Клиенты', 'Правила заказа', 'Сверка заказов']);
   assert.ok(!menuChapter.steps.some(
-    s => s.link && !['/customers', '/portal-rules'].includes(s.link.path)));
+    s => s.link && !['/customers', '/portal-rules', '/legacy-sync'].includes(s.link.path)));
 
   const sidebar = chapters[0].steps.find(s => s.selector === "[data-tour='sidebar']");
   assert.deepEqual(plain(sidebar.items.map(i => i.label)), ['Меню']);
