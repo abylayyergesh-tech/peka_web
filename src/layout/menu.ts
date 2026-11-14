@@ -28,6 +28,7 @@ export const NAV_SECTIONS: NavSection[] = [
         match: ["/menus"] },
       { path: "/customers", label: "Клиенты", cap: "customer.manage" },
       { path: "/portal-rules", label: "Правила заказа", cap: "customer.manage" },
+      { path: "/legacy-sync", label: "Сверка заказов", cap: "customer.manage" },
       { path: "/announcements", label: "Объявления", cap: "announcement.manage" },
       { path: "/delivery", label: "Курьеры и маршруты", cap: "delivery.manage" },
     ],
