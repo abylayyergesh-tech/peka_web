@@ -14,6 +14,7 @@ const CAPABILITY_LABELS_RU: Record<string, string> = {
   "customer_payment.manage": "Регистрация и отмена платежей покупателей",
   "sale.operate": "Работа за кассой (смены, чеки, списания)",
   "sale.correct": "Исправление и сторно закрытых чеков",
+  "assistant.use": "ИИ-ассистент «Абеке» (beta) и его база знаний",
   "finance.read": "Просмотр финансовых отчётов",
   "finance.manage": "Управление расходами и учётными периодами",
   "report.read": "Просмотр отчётов",
@@ -103,6 +104,7 @@ const GROUP_TITLES_RU: Record<string, string> = {
   warehouse: "Приложение: склад",
   assembly: "Приложение: сборка",
   team: "Приложение: «Мой цех»",
+  assistant: "ИИ-ассистент",
 };
 
 export function groupTitle(prefix: string): string {

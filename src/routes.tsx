@@ -9,6 +9,7 @@ import RequireAuth from "@/auth/RequireAuth";
 import ResetPasswordPage from "@/auth/ResetPasswordPage";
 import AppLayout from "@/layout/AppLayout";
 import DashboardPage from "@/pages/DashboardPage";
+import AssistantPage from "@/pages/assistant/AssistantPage";
 import { adminRoutes } from "@/pages/admin/routes";
 import { bankingRoutes } from "@/pages/banking/routes";
 import { catalogRoutes } from "@/pages/catalog/routes";
@@ -34,6 +35,8 @@ export const router = createBrowserRouter([
         element: <AppLayout />,
         children: [
           { path: "/", element: <DashboardPage /> },
+          // «Абеке (Beta)» — ИИ-ассистент с базой знаний.
+          { path: "/assistant", element: <AssistantPage /> },
           ...catalogRoutes,
           ...inventoryRoutes,
           ...procurementRoutes,

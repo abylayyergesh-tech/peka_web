@@ -6,13 +6,14 @@ import {
   LogoutOutlined,
   PlusOutlined,
   QuestionCircleOutlined,
+  RobotOutlined,
   ShopOutlined,
   TeamOutlined,
   UserOutlined,
   WalletOutlined,
 } from "@ant-design/icons";
 import type { MenuProps } from "antd";
-import { App, Button, Dropdown, Form, Layout, Menu, Modal, Result, Select, Input } from "antd";
+import { App, Button, Dropdown, Form, Layout, Menu, Modal, Result, Select, Input, Tag } from "antd";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 
@@ -85,6 +86,17 @@ export default function AppLayout() {
     return [
       { key: "/", icon: <DashboardOutlined />,
         label: <span data-tour="dashboard-link">Дашборд</span> },
+      // ИИ-ассистент — отдельным пунктом сверху, с меткой Beta.
+      ...(caps.includes("assistant.use")
+        ? [{ key: "/assistant", icon: <RobotOutlined />,
+            label: (
+              <span>
+                Абеке{" "}
+                <Tag color="purple" style={{ marginInlineStart: 4, fontSize: 10, lineHeight: "16px",
+                  padding: "0 5px" }}>Beta</Tag>
+              </span>
+            ) }]
+        : []),
       ...sections.map((s) => ({
         key: s.key,
         icon: SECTION_ICONS[s.key],
@@ -96,7 +108,7 @@ export default function AppLayout() {
         })),
       })),
     ];
-  }, [sections, tourSpot]);
+  }, [sections, tourSpot, caps]);
 
   // Highlight the deepest nav path that prefixes the current URL, so detail
   // pages (/suppliers/5) still highlight their list item (/suppliers). Items may
