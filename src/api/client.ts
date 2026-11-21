@@ -100,6 +100,17 @@ async function tryRefresh(epoch: number): Promise<string | null> {
   return rotate();
 }
 
+/** Обновлять ли токен на 401 этого запроса. /auth/* — вход, обновление, выход,
+ * смена и сброс пароля: там 401 значит «неверные данные», а не «токен протух»,
+ * и обновление токена только выкинуло бы из сессии. Исключение — профиль
+ * /auth/me: обычный запрос под токеном, с него начинается загрузка каждой
+ * страницы. Без обновления на нём протухший токен давал экран «Не удалось
+ * загрузить профиль», и «Повторить» срабатывало лишь потому, что токен успевал
+ * обновить соседний запрос прав. */
+export function refreshable(url: string): boolean {
+  return !url.startsWith("/auth/") || url === "/auth/me";
+}
+
 api.interceptors.response.use((response) => {
   if ((response.config as typeof response.config & SessionConfig)._sessionEpoch !== sessionEpoch())
     throw new CanceledError("Session changed");
@@ -112,7 +123,7 @@ api.interceptors.response.use((response) => {
   if (!cfg) return Promise.reject(error);
   const epoch = cfg._sessionEpoch;
   if (epoch !== sessionEpoch()) throw new CanceledError("Session changed");
-  if (error.response?.status === 401 && !(cfg.url ?? "").startsWith("/auth/")) {
+  if (error.response?.status === 401 && refreshable(cfg.url ?? "")) {
     if (!cfg._retried) {
       if (!refreshInFlight || refreshInFlight.epoch !== epoch) {
         const flight = { epoch, promise: tryRefresh(epoch) };
