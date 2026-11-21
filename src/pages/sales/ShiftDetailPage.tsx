@@ -1,19 +1,19 @@
 /** /shifts/:id — shift report: shift info, sales totals, payment breakdown,
  * и печатный чек за смену (итоги или полный, со всеми проданными позициями). */
-import { ArrowLeftOutlined, CopyOutlined, PrinterOutlined } from "@ant-design/icons";
+import { ArrowLeftOutlined, PrinterOutlined } from "@ant-design/icons";
 import {
-  Alert, App, Button, Card, Col, Descriptions, Modal, Popconfirm, Result, Row,
-  Segmented, Space, Spin,
+  App, Button, Card, Col, Descriptions, Popconfirm, Result, Row, Space, Spin,
 } from "antd";
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { errorMessage } from "@/api/client";
-import { closeShift, getShift, getShiftReceipt, listWarehousesLookup } from "@/api/sales";
+import { closeShift, getShift, listWarehousesLookup } from "@/api/sales";
 import { useCan } from "@/auth/store";
 import { Money, fmtDateTime } from "@/components/format";
 import Stat from "@/components/Stat";
+import ShiftReceiptModal from "@/pages/sales/ShiftReceiptModal";
 import { ShiftStatusTag, paymentMethodLabel } from "@/pages/sales/statusTags";
 
 export default function ShiftDetailPage() {
@@ -24,19 +24,11 @@ export default function ShiftDetailPage() {
   const navigate = useNavigate();
   const canOperate = useCan("sale.operate");
   const [receiptOpen, setReceiptOpen] = useState(false);
-  /** «Итоги» — Z-отчёт кассира, «Полный» — плюс все проданные позиции. */
-  const [receiptKind, setReceiptKind] = useState<"totals" | "full">("totals");
 
   const query = useQuery({
     queryKey: ["shift", shiftId],
     queryFn: () => getShift(shiftId),
     enabled: Number.isFinite(shiftId),
-  });
-
-  const receipt = useQuery({
-    queryKey: ["shift-receipt", shiftId, receiptKind],
-    queryFn: () => getShiftReceipt(shiftId, { items: receiptKind === "full" }),
-    enabled: receiptOpen && Number.isFinite(shiftId),
   });
 
   const warehouses = useQuery({
@@ -158,56 +150,12 @@ export default function ShiftDetailPage() {
         )}
       </Card>
 
-      {/* Чек за смену: тот же документ в двух подробностях. Итоги сдаёт кассир,
-          полный (со всеми позициями) нужен пекарне и бухгалтеру. */}
-      <Modal
+      <ShiftReceiptModal
         open={receiptOpen}
-        onCancel={() => setReceiptOpen(false)}
+        shiftId={shiftId}
         title={`Чек за смену №${shift.number ?? shift.shift_id}`}
-        width={520}
-        footer={
-          <Space>
-            <Button
-              icon={<CopyOutlined />}
-              disabled={!receipt.data}
-              onClick={() => {
-                navigator.clipboard
-                  ?.writeText(receipt.data?.content ?? "")
-                  .then(() => message.success("Скопировано"))
-                  .catch(() => message.error("Не удалось скопировать"));
-              }}
-            >
-              Скопировать
-            </Button>
-            <Button
-              type="primary"
-              icon={<PrinterOutlined />}
-              disabled={!receipt.data}
-              onClick={() => window.print()}
-            >
-              Печать
-            </Button>
-          </Space>
-        }
-      >
-        <Segmented
-          block
-          style={{ marginBottom: 12 }}
-          value={receiptKind}
-          onChange={(v) => setReceiptKind(v as "totals" | "full")}
-          options={[
-            { value: "totals", label: "Итоги смены" },
-            { value: "full", label: "Полный чек" },
-          ]}
-        />
-        {receipt.isPending && <Spin />}
-        {receipt.isError && <Alert type="error" message={errorMessage(receipt.error)} />}
-        {receipt.data && (
-          <pre style={{ fontFamily: "monospace", fontSize: 13, whiteSpace: "pre-wrap", margin: 0 }}>
-            {receipt.data.content}
-          </pre>
-        )}
-      </Modal>
+        onClose={() => setReceiptOpen(false)}
+      />
     </div>
   );
 }

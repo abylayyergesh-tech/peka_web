@@ -1,9 +1,11 @@
 /** /shifts — лента кассы: чеки и списания смены в одной таблице.
  *
  * Отдельной вкладки «Смены» больше нет: открытие смены живёт на кассе, отчёт
- * по смене — на /shifts/:id. Складские акты без shift_id сюда не входят.
+ * по смене — на /shifts/:id. «Чек за смену» — кнопкой прямо здесь, у фильтра
+ * смены: по выбранной смене, без фильтра — по последней. Складские акты без
+ * shift_id сюда не входят.
  */
-import { PlusOutlined } from "@ant-design/icons";
+import { PlusOutlined, PrinterOutlined } from "@ant-design/icons";
 import { App, Button, DatePicker, Form, Modal, Result, Select, Space, Table, Tag } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import type { Dayjs } from "dayjs";
@@ -25,6 +27,7 @@ import {
 import { useCan } from "@/auth/store";
 import { Money, fmtDate, fmtDateTime } from "@/components/format";
 import { usePagination } from "@/components/usePagination";
+import ShiftReceiptModal from "@/pages/sales/ShiftReceiptModal";
 import { CheckStatusTag } from "@/pages/sales/statusTags";
 import { ExcelExportButton, columnsFromTable } from "@/components/excel";
 
@@ -55,6 +58,7 @@ export default function ShiftsPage() {
   const [kindFilter, setKindFilter] = useState<RegisterKind | undefined>(undefined);
   const [range, setRange] = useState<[Dayjs | null, Dayjs | null] | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+  const [receiptOpen, setReceiptOpen] = useState(false);
   const [form] = Form.useForm();
 
   const dateFrom = range?.[0]?.format("YYYY-MM-DD");
@@ -122,6 +126,14 @@ export default function ShiftsPage() {
     const opened = s ? ` от ${fmtDate(s.opened_at)}` : "";
     return `№${n}${opened}`;
   };
+
+  const shiftOptions = shifts.data?.items.map((s) => ({
+    value: s.shift_id,
+    label: `Смена №${s.number ?? s.shift_id} от ${fmtDate(s.opened_at)}`
+      + (s.status === "open" ? " (открыта)" : ""),
+  }));
+  /** Чей чек за смену показать: выбранной в фильтре, иначе последней. */
+  const receiptShiftId = shiftFilter ?? shifts.data?.items[0]?.shift_id ?? null;
 
   if (!canOperate) {
     return <Result status="403" title="Недостаточно прав" subTitle="Нужно право sale.operate" />;
@@ -217,11 +229,15 @@ export default function ShiftsPage() {
           style={{ width: 260 }}
           value={shiftFilter}
           onChange={applyShiftFilter}
-          options={shifts.data?.items.map((s) => ({
-            value: s.shift_id,
-            label: `Смена №${s.number ?? s.shift_id} от ${fmtDate(s.opened_at)}`,
-          }))}
+          options={shiftOptions}
         />
+        <Button
+          icon={<PrinterOutlined />}
+          disabled={receiptShiftId == null}
+          onClick={() => setReceiptOpen(true)}
+        >
+          Чек за смену
+        </Button>
         <Select
           placeholder="Тип"
           allowClear
@@ -255,6 +271,12 @@ export default function ShiftsPage() {
         onRow={(row) => ({
           onClick: () => navigate(entryHref(row)),
         })}
+      />
+      <ShiftReceiptModal
+        open={receiptOpen}
+        shiftId={receiptShiftId}
+        shiftOptions={shiftOptions}
+        onClose={() => setReceiptOpen(false)}
       />
       <Modal
         title="Новый чек"
