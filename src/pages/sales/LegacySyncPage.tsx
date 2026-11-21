@@ -20,10 +20,10 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { errorMessage } from "@/api/client";
 import {
-  getSyncStatus, getSyncSummary, listSyncOrders, listSyncProducts, retrySyncOrder,
+  getIikoDay, getSyncStatus, getSyncSummary, listSyncOrders, listSyncProducts, retrySyncOrder,
   updateSyncProduct,
-  type DaySummaryOut, type ReasonOut, type SyncOrderOut, type SyncOrderStatus,
-  type SyncProductOut,
+  type DaySummaryOut, type IikoKind, type IikoOrderOut, type IikoStatus, type ReasonOut,
+  type SyncOrderOut, type SyncOrderStatus, type SyncProductOut,
 } from "@/api/legacySync";
 import { listAllMenuItems } from "@/api/sales";
 import { useCan } from "@/auth/store";
@@ -291,6 +291,78 @@ function OrderDetail({ row }: { row: SyncOrderOut }) {
   );
 }
 
+// ------------------------------------------------------------------ iiko
+const IIKO_KIND: Record<IikoKind, string> = {
+  site: "С сайта",
+  direct: "Заведён в iiko",
+  staff_meal: "Питание сотрудников",
+  unpaid: "Без оплаты",
+};
+const IIKO_STATUS: Record<IikoStatus, { label: string; color: string }> = {
+  matched: { label: "Совпадает", color: "green" },
+  applied: { label: "Правки перенесены", color: "blue" },
+  imported: { label: "Заведён у нас", color: "blue" },
+  unmatched: { label: "Копия не найдена", color: "gold" },
+  skipped: { label: "Не переносим", color: "default" },
+  failed: { label: "Ошибка", color: "red" },
+};
+
+function IikoTab() {
+  const [day, setDay] = useState<string | undefined>(undefined);
+  const query = useQuery({ queryKey: ["legacy-sync", "iiko", day], queryFn: () => getIikoDay(day) });
+  const [open, setOpen] = useState<IikoOrderOut | null>(null);
+  const columns: ColumnsType<IikoOrderOut> = [
+    { title: "№ в iiko", dataIndex: "order_num", width: 90 },
+    { title: "Откуда", dataIndex: "kind", width: 170, render: (v: IikoKind) => IIKO_KIND[v] },
+    { title: "Точка / контрагент", key: "who",
+      render: (_, r) => r.external_number || r.counteragent || r.pay_type || "—" },
+    { title: "Шт.", dataIndex: "quantity", align: "right", width: 80, render: (v: string) => fmtQty(v) },
+    { title: "Сумма", dataIndex: "total", align: "right", render: (v: string) => <Money value={v} /> },
+    { title: "Итог", dataIndex: "status", width: 170,
+      render: (v: IikoStatus) => <Tag color={IIKO_STATUS[v].color}>{IIKO_STATUS[v].label}</Tag> },
+    { title: "Примечание", dataIndex: "note", render: (v: string | null) => v ?? "" },
+  ];
+  return (
+    <>
+      <Space wrap style={{ marginBottom: 12 }}>
+        <DatePicker placeholder="День (сегодня)" format="DD.MM.YYYY" value={day ? dayjs(day) : null}
+                    onChange={(d) => setDay(d ? d.format("YYYY-MM-DD") : undefined)} />
+        <Typography.Text type="secondary">
+          Правки заказов сайта в iiko (замены, убранные позиции) переносятся в копию до автоприёма;
+          заказы, заведённые в iiko на контрагента, заводятся у нас.
+        </Typography.Text>
+      </Space>
+      <Table rowKey={(r) => `${r.kind}:${r.status}`} size="small" pagination={false}
+             loading={query.isPending} dataSource={query.data?.summary} style={{ marginBottom: 16 }}
+             locale={{ emptyText: "За этот день заказов iiko нет" }}
+             columns={[
+               { title: "Откуда", dataIndex: "kind", render: (v: IikoKind) => IIKO_KIND[v] },
+               { title: "Итог", dataIndex: "status",
+                 render: (v: IikoStatus) => <Tag color={IIKO_STATUS[v].color}>{IIKO_STATUS[v].label}</Tag> },
+               { title: "Заказов", dataIndex: "orders", align: "right" },
+               { title: "Шт.", dataIndex: "quantity", align: "right", render: (v: string) => fmtQty(v) },
+               { title: "Сумма", dataIndex: "total", align: "right", render: (v: string) => <Money value={v} /> },
+             ]} />
+      <Table rowKey="legacy_sync_iiko_order_id" size="small" loading={query.isPending}
+             dataSource={query.data?.orders} columns={columns} scroll={{ x: "max-content" }}
+             pagination={{ pageSize: 50 }}
+             rowClassName={() => "row-clickable"} onRow={(row) => ({ onClick: () => setOpen(row) })} />
+      <Drawer open={open != null} onClose={() => setOpen(null)} width={560}
+              title={open ? `Заказ iiko №${open.order_num ?? ""}` : ""}>
+        {open && (
+          <Table rowKey={(_, i) => String(i)} size="small" pagination={false} dataSource={open.lines ?? []}
+                 columns={[
+                   { title: "Блюдо", dataIndex: "name" },
+                   { title: "Шт.", dataIndex: "quantity", align: "right", render: (v: string) => fmtQty(v) },
+                   { title: "Сумма", dataIndex: "amount_net", align: "right",
+                     render: (v: string) => <Money value={v} /> },
+                 ]} />
+        )}
+      </Drawer>
+    </>
+  );
+}
+
 // ------------------------------------------------------------------ товары
 function ProductsTab() {
   const { message } = App.useApp();
@@ -367,6 +439,7 @@ export default function LegacySyncPage() {
           children: <DaysTab onPick={(f) => { setFilter(f); setTab("orders"); }} /> },
         { key: "orders", label: "Заказы", children: <OrdersTab filter={filter} setFilter={setFilter} /> },
         { key: "products", label: "Товары", children: <ProductsTab /> },
+        { key: "iiko", label: "iiko", children: <IikoTab /> },
       ]} />
     </div>
   );

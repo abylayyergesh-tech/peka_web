@@ -134,3 +134,43 @@ export async function updateSyncProduct(
   const { data } = await api.patch<SyncProductOut>(`/legacy-sync/products/${id}`, body);
   return data;
 }
+
+// ---- iiko: заказы за день и что с ними сделано у нас ----
+export type IikoKind = "site" | "direct" | "staff_meal" | "unpaid";
+export type IikoStatus = "matched" | "applied" | "unmatched" | "imported" | "skipped" | "failed";
+
+export interface IikoOrderOut {
+  legacy_sync_iiko_order_id: number;
+  business_date: string;
+  order_num: number | null;
+  external_number: string | null;
+  kind: IikoKind;
+  counteragent: string | null;
+  pay_type: string | null;
+  quantity: string;
+  total: string;
+  discount: string;
+  status: IikoStatus;
+  order_id: number | null;
+  note: string | null;
+  lines: { dish_id: string; name: string; quantity: string; amount: string; amount_net: string }[] | null;
+}
+
+export interface IikoKindSummary {
+  kind: IikoKind;
+  status: IikoStatus;
+  orders: number;
+  quantity: string;
+  total: string;
+}
+
+export interface IikoDayOut {
+  day: string;
+  summary: IikoKindSummary[];
+  orders: IikoOrderOut[];
+}
+
+export async function getIikoDay(day?: string): Promise<IikoDayOut> {
+  const { data } = await api.get<IikoDayOut>("/legacy-sync/iiko", { params: day ? { day } : {} });
+  return data;
+}
