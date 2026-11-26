@@ -159,10 +159,9 @@ export default function ShiftReceiptModal({
         {content && (
           <pre
             style={{
-              // Как на бумаге (printReceipt): заглавными, жирный. Шрифт — моноширинный,
-              // чтобы колонки на экране стояли как на ленте.
+              // Как на бумаге (printReceipt): шрифт чека, жирный; он моноширинный —
+              // колонки на экране стоят как на ленте.
               fontFamily: RECEIPT_FONT_CSS,
-              textTransform: "uppercase",
               fontWeight: 700,
               fontSize: 12,
               lineHeight: 1.5,
