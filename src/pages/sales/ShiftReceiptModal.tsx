@@ -153,9 +153,11 @@ export default function ShiftReceiptModal({
         {content && (
           <pre
             style={{
-              fontFamily: '"Consolas", "Courier New", monospace',
+              // Как на бумаге (printReceipt): жирный Courier New, строки с просветом.
+              fontFamily: '"Courier New", Courier, monospace',
+              fontWeight: 700,
               fontSize: 12,
-              lineHeight: 1.35,
+              lineHeight: 1.5,
               margin: 0,
               background: "rgba(0,0,0,0.03)",
               padding: 12,

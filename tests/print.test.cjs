@@ -13,6 +13,9 @@ test('the print page is always portrait and takes its size from the driver paper
   const doc58 = receiptDocument('Чек', 'ИТОГО: 100', 58);
   assert.match(doc58, /body \{ width: 58mm; \}/);
   assert.match(doc58, /@page \{ size: portrait; margin: 0; \}/);
+  // Вид чека iiko: жирный Courier New, строки с просветом.
+  assert.match(doc80, /font-family: "Courier New", Courier, monospace; font-weight: 700;/);
+  assert.match(doc80, /line-height: 1\.65;/);
   // Названия блюд с «<» и «&» не ломают разметку.
   assert.match(receiptDocument('Чек', 'Кофе <3 & круассан', 80), /Кофе &#60;3 &#38; круассан/);
 });
