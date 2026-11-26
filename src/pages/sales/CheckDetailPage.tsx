@@ -632,7 +632,8 @@ export default function CheckDetailPage() {
         {receipt.isPending && <Spin />}
         {receipt.isError && <Alert type="error" message={errorMessage(receipt.error)} />}
         {receipt.data && (
-          <pre style={{ fontFamily: "monospace", fontSize: 13, whiteSpace: "pre-wrap" }}>
+          <pre style={{ fontFamily: '"Courier New", Courier, monospace', fontWeight: 700,
+                        fontSize: 13, whiteSpace: "pre-wrap" }}>
             {receipt.data.content}
           </pre>
         )}

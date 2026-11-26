@@ -11,8 +11,12 @@
  * уже был и сломал печать: короткий чек выходил шире, чем длиннее (80 × 60 мм),
  * Chrome считал страницу альбомной, разворачивал под неё бумагу драйвера
  * (210 × 80) — и принтер печатал чек поперёк ленты. А чек длиннее бумаги
- * драйвера Chrome ужал бы целиком в одну страницу. Шрифт подбирается так, чтобы
- * самая длинная строка влезла в печатную ширину ленты.
+ * драйвера Chrome ужал бы целиком в одну страницу.
+ *
+ * Вид — как у чека iiko, который печатали на этих же принтерах: жирный
+ * Courier New, 42 знака на всю печатную ширину ленты, строки с просветом.
+ * Шрифт подбирается под ленту: 42 знака (или самая длинная строка, если она
+ * длиннее) занимают ровно печатную полосу.
  *
  * Без React намеренно: здесь только работа с окном и документом, и такой модуль
  * можно прогнать в node на заглушках — а порядок операций тут неочевиден и
@@ -22,11 +26,19 @@
 /** Ширина чековой ленты, мм. */
 export type PaperWidth = 80 | 58;
 
-/** Печатная ширина ленты, мм: головка не печатает у самых краёв рулона. */
-const PRINTABLE_MM: Record<PaperWidth, number> = { 80: 72, 58: 48 };
+/** Ширина строки текста на ленте, мм. Головка печатает ~72 мм (48 мм на узкой
+ * ленте), а драйвер POS-80 сдвигает страницу вправо на 2–3 мм: текст, начатый
+ * в 4 мм от края страницы, на бумаге лёг в 6,6 мм (замер по фото, 26.11).
+ * Поэтому полоса — 69 мм с отступом 3 мм: на бумаге ≈ 5,6…74,6 мм, как у iiko
+ * (4,4…75 мм), и правый край не уходит за головку. */
+const TEXT_MM: Record<PaperWidth, number> = { 80: 69, 58: 47 };
+const LEFT_MM = 3;
+/** Знаков в строке — столько рендерит бэкенд (`RECEIPT_WIDTH`). */
+const COLUMNS = 42;
 /** Самый мелкий шрифт, который ещё читается на термобумаге 203 dpi, px. */
 const MIN_FONT_PX = 7;
 const BASE_FONT_PX = 12;
+const FONT = '"Courier New", Courier, monospace';
 const PX_PER_MM = 96 / 25.4;
 const PAPER_KEY = "peka:receipt-paper-mm";
 
@@ -53,7 +65,6 @@ export function setPaperWidth(width: PaperWidth): void {
  * чек ломал бы разметку. */
 export function receiptDocument(title: string, content: string | null,
                                 paper: PaperWidth = 80): string {
-  const side = (paper - PRINTABLE_MM[paper]) / 2;
   const body = content
     ? `<pre>${escapeHtml(content)}</pre>`
     : '<div class="wait">Готовим чек…</div>';
@@ -62,15 +73,16 @@ export function receiptDocument(title: string, content: string | null,
 <style>
   html, body { margin: 0; padding: 0; background: #fff; }
   body { width: ${paper}mm; }
-  pre { box-sizing: border-box; width: ${paper}mm; margin: 0; padding: 2mm ${side}mm 4mm;
-        font-family: "Consolas", "Courier New", monospace; font-size: ${BASE_FONT_PX}px;
-        line-height: 1.3; color: #000; white-space: pre-wrap; overflow-wrap: anywhere; }
+  pre { box-sizing: border-box; width: ${paper}mm; margin: 0; padding: 2mm 0 4mm ${LEFT_MM}mm;
+        font-family: ${FONT}; font-weight: 700; font-size: ${BASE_FONT_PX}px;
+        line-height: 1.65; color: #000; white-space: pre-wrap; overflow-wrap: anywhere; }
   .wait { font-family: system-ui, sans-serif; color: #888; padding: 16px; }
 </style></head><body>${body}</body></html>`;
 }
 
-/** Подогнать свёрстанный чек под ленту: шрифт — чтобы самая длинная строка
- * влезла в печатную ширину. Возвращает итоговый размер шрифта, px. */
+/** Подогнать свёрстанный чек под ленту: шрифт — чтобы 42 знака (или самая
+ * длинная строка, если длиннее) заняли ровно печатную полосу. Шрифт и
+ * увеличивается, и уменьшается. Возвращает итоговый размер шрифта, px. */
 export function fitReceiptDocument(doc: Document, paper: PaperWidth = 80): {
   fontPx: number;
 } {
@@ -80,15 +92,15 @@ export function fitReceiptDocument(doc: Document, paper: PaperWidth = 80): {
     const longest = (pre.textContent ?? "").split("\n")
       .reduce((a, b) => (b.length > a.length ? b : a), "");
     const probe = doc.createElement("span");
-    probe.style.cssText = `font-family:"Consolas","Courier New",monospace;font-size:${BASE_FONT_PX}px;`
+    probe.style.cssText = `font-family:${FONT};font-weight:700;font-size:${BASE_FONT_PX}px;`
       + "white-space:pre;position:absolute;visibility:hidden;";
-    probe.textContent = longest;
+    probe.textContent = longest.padEnd(COLUMNS, "0");
     doc.body.appendChild(probe);
     const width = probe.getBoundingClientRect().width;
     probe.remove();
-    const printable = PRINTABLE_MM[paper] * PX_PER_MM;
-    if (width > printable) {
-      fontPx = Math.max(MIN_FONT_PX, Math.floor((BASE_FONT_PX * printable / width) * 10) / 10);
+    if (width > 0) {
+      const text = TEXT_MM[paper] * PX_PER_MM;
+      fontPx = Math.max(MIN_FONT_PX, Math.floor((BASE_FONT_PX * text / width) * 10) / 10);
       pre.style.fontSize = `${fontPx}px`;
     }
   }
