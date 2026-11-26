@@ -19,16 +19,26 @@
  * New, и Edge подставил тонкий Consolas (26.11, фото). Чек iiko на тех же
  * принтерах чёткий, потому что iiko отдаёт драйверу текст без сглаживания.
  * Картинка в сетке точек от шрифтов и сглаживания не зависит: шрифт свой
- * (IBM Plex Mono Bold, едет с сайтом), каждый знак — в своей клетке 13 точек,
- * серое отсекается порогом. Не вышло нарисовать (нет canvas) — печатаем текстом.
+ * (едет с сайтом), каждый знак — в своей клетке 13 точек, серое отсекается
+ * порогом. Не вышло нарисовать (нет canvas) — печатаем текстом.
+ *
+ * Шрифт — Times New Roman жирный, ЗАГЛАВНЫМИ и крупно (просьба кассы, 26.11).
+ * Сам Times New Roman — шрифт Microsoft, раздавать его с сайтом нельзя, и на
+ * кассе его может не быть (как не оказалось Courier New); поэтому Tinos —
+ * свободный двойник Times New Roman с теми же формами и ширинами букв.
+ * Times — не моноширинный, а таблица чека держится на 42 колонках: каждая буква
+ * сжимается по ширине в свою клетку, а по высоте остаётся крупной (заглавная
+ * ≈ 2,6 мм) — как «двойная высота» у чековых принтеров. Сжатие истончает
+ * вертикальные штрихи, поэтому после порога буквы утолщаются на точку вправо —
+ * так печатает «жирный» сам термопринтер.
  *
  * Без React намеренно: здесь только работа с окном и документом, и такой модуль
  * можно прогнать в node на заглушках — а порядок операций тут неочевиден и
  * ошибается молча (пустое превью печати выглядит как «принтер виноват»).
  */
-import fontLatin from "@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-700-normal.woff2?url";
-import fontCyrillic from "@fontsource/ibm-plex-mono/files/ibm-plex-mono-cyrillic-700-normal.woff2?url";
-import fontCyrillicExt from "@fontsource/ibm-plex-mono/files/ibm-plex-mono-cyrillic-ext-700-normal.woff2?url";
+import fontLatin from "@fontsource/tinos/files/tinos-latin-700-normal.woff2?url";
+import fontCyrillic from "@fontsource/tinos/files/tinos-cyrillic-700-normal.woff2?url";
+import fontCyrillicExt from "@fontsource/tinos/files/tinos-cyrillic-ext-700-normal.woff2?url";
 
 /** Ширина чековой ленты, мм. */
 export type PaperWidth = 80 | 58;
@@ -44,7 +54,16 @@ const TEXT_MM: Record<PaperWidth, number> = { 80: 69, 58: 47 };
 const LEFT_MM = 3;
 /** Знаков в строке — столько рендерит бэкенд (`RECEIPT_WIDTH`). */
 const COLUMNS = 42;
-/** Шаг строк к высоте шрифта — просвет между строками, как у чека iiko. */
+/** Кегль и шаг строк — в клетках: кегль 32 точки (заглавная ≈ 21 точка =
+ * 2,6 мм), строка 42 точки = 5,25 мм. */
+const FONT_PER_CELL = 2.45;
+const LINE_PER_CELL = 3.25;
+/** Буква занимает клетку не целиком — между соседними остаётся просвет. */
+const GLYPH_FILL = 0.92;
+/** Узкие знаки (цифры, точки) сжимаются не меньше, чем до этой доли, — иначе
+ * они выходят толще и шире соседних букв. */
+const MAX_GLYPH_SCALE = 0.62;
+/** Шаг строк текстового (запасного) чека к высоте шрифта. */
 const LINE_SPACING = 1.65;
 /** Порог яркости: темнее — чёрная точка, светлее — белая. Чуть выше середины,
  * чтобы тонкие места букв не пропадали. */
@@ -58,7 +77,10 @@ const PAPER_KEY = "peka:receipt-paper-mm";
 /** Шрифт чека — свой, едет с сайтом: на кассе может не оказаться нужного
  * системного (так и вышло с Courier New). */
 const FONT_FAMILY = "PekaReceipt";
-export const RECEIPT_FONT_CSS = `${FONT_FAMILY}, "Courier New", Courier, monospace`;
+const CANVAS_FONT = `${FONT_FAMILY}, "Times New Roman", serif`;
+/** Текстом (превью на экране и запасная печать) — моноширинный: иначе
+ * разъедутся колонки таблицы. */
+export const RECEIPT_FONT_CSS = '"Courier New", Consolas, monospace';
 const FONT_FACES: [string, string][] = [
   [fontLatin, "U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,"
     + "U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD"],
@@ -93,9 +115,8 @@ export interface ReceiptGrid {
 
 export function receiptGrid(paper: PaperWidth = 80): ReceiptGrid {
   const cell = Math.floor(TEXT_MM[paper] * DOTS_PER_MM / COLUMNS);
-  // Моноширинный шрифт: ширина знака ≈ 0,6 кегля.
-  const fontPx = Math.round(cell / 0.6);
-  const lineDots = Math.round(fontPx * LINE_SPACING);
+  const fontPx = Math.round(cell * FONT_PER_CELL);
+  const lineDots = Math.round(cell * LINE_PER_CELL);
   const widthDots = cell * COLUMNS;
   return { cell, widthDots, lineDots, fontPx,
            widthMm: widthDots / DOTS_PER_MM, lineMm: lineDots / DOTS_PER_MM };
@@ -117,6 +138,15 @@ export function receiptRows(content: string): string[] {
   return rows;
 }
 
+/** Строка заглавными, знак в знак: «ß» → «SS» сдвинул бы колонки, такие знаки
+ * остаются как есть. */
+export function upperRow(row: string): string[] {
+  return Array.from(row).map((ch) => {
+    const up = ch.toUpperCase();
+    return Array.from(up).length === 1 ? up : ch;
+  });
+}
+
 /** Только чёрное и белое: термопринтер серого не печатает, а растрирует его
  * редкими точками — отсюда и были бледные рваные буквы. */
 export function binarize(pixels: Uint8ClampedArray, threshold = THRESHOLD): void {
@@ -128,6 +158,22 @@ export function binarize(pixels: Uint8ClampedArray, threshold = THRESHOLD): void
     pixels[i + 2] = v;
     pixels[i + 3] = 255;
   }
+}
+
+/** Утолщить на точку вправо (чёрное = 0): так «жирный» печатает сам принтер.
+ * Возвращает новый массив; на вход — уже чёрно-белый. */
+export function embolden(pixels: Uint8ClampedArray, width: number): Uint8ClampedArray {
+  const out = new Uint8ClampedArray(pixels);
+  for (let i = 0; i < pixels.length; i += 4) {
+    const x = (i / 4) % width;
+    if (x > 0 && pixels[i - 4] === 0) {
+      out[i] = 0;
+      out[i + 1] = 0;
+      out[i + 2] = 0;
+      out[i + 3] = 255;
+    }
+  }
+  return out;
 }
 
 let fontLoading: Promise<boolean> | null = null;
@@ -157,8 +203,8 @@ export function loadReceiptFont(): Promise<boolean> {
 }
 
 /** Нарисовать чек: по картинке PNG на строку, пустая строка — "". null — рисовать
- * негде (нет canvas). Каждый знак — в своей клетке: колонки сумм ровные, а
- * лигатуры шрифта не склеивают «-----» и «**». */
+ * негде (нет canvas). Каждый знак — в своей клетке, заглавной, сжатый по
+ * ширине под клетку: колонки сумм ровные при любом шрифте. */
 export async function renderReceiptImages(content: string,
                                           paper: PaperWidth = 80): Promise<string[] | null> {
   if (typeof document === "undefined") return null;
@@ -169,24 +215,38 @@ export async function renderReceiptImages(content: string,
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
   if (!ctx) return null;
   await loadReceiptFont();
-  ctx.font = `700 ${grid.fontPx}px ${RECEIPT_FONT_CSS}`;
-  const m = ctx.measureText("ЖДЙgyр|");
-  const ascent = m.fontBoundingBoxAscent || grid.fontPx * 0.8;
-  const descent = m.fontBoundingBoxDescent || grid.fontPx * 0.2;
-  const baseline = Math.round((grid.lineDots - (ascent + descent)) / 2 + ascent);
+  ctx.font = `700 ${grid.fontPx}px ${CANVAS_FONT}`;
   ctx.textBaseline = "alphabetic";
+  // Заглавные — по центру строки; хвосты «Д», «Щ» и запятых уходят вниз.
+  const cap = ctx.measureText("Н").actualBoundingBoxAscent || grid.fontPx * 0.66;
+  const baseline = Math.round((grid.lineDots + cap) / 2);
+  // Чёрточка «-» — ровный штрих почти на всю клетку: сжатый дефис Times
+  // превращал разделители «-----» в ряд точек.
+  const dashH = Math.max(2, Math.round(grid.fontPx * 0.09));
+  const dashY = Math.round(baseline - cap * 0.42 - dashH / 2);
   return receiptRows(content).map((row) => {
     if (row.trim() === "") return "";
     ctx.fillStyle = "#fff";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = "#000";
-    Array.from(row).forEach((ch, i) => {
+    upperRow(row).forEach((ch, i) => {
       if (ch === " ") return;
+      if (ch === "-") {
+        ctx.fillRect(i * grid.cell + 1, dashY, grid.cell - 2, dashH);
+        return;
+      }
       const w = ctx.measureText(ch).width;
-      ctx.fillText(ch, i * grid.cell + (grid.cell - w) / 2, baseline);
+      if (w <= 0) return;
+      const scale = Math.min(MAX_GLYPH_SCALE, (grid.cell * GLYPH_FILL) / w);
+      ctx.save();
+      ctx.translate(i * grid.cell + grid.cell / 2, baseline);
+      ctx.scale(scale, 1);
+      ctx.fillText(ch, -w / 2, 0);
+      ctx.restore();
     });
     const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
     binarize(image.data);
+    image.data.set(embolden(image.data, canvas.width));
     ctx.putImageData(image, 0, 0);
     return canvas.toDataURL("image/png");
   });
@@ -230,6 +290,7 @@ ${PAGE_STYLE}
   body { width: ${paper}mm; }
   pre { box-sizing: border-box; width: ${paper}mm; margin: 0; padding: 2mm 0 4mm ${LEFT_MM}mm;
         font-family: ${RECEIPT_FONT_CSS}; font-weight: 700; font-size: ${BASE_FONT_PX}px;
+        text-transform: uppercase;
         line-height: ${LINE_SPACING}; color: #000; white-space: pre-wrap; overflow-wrap: anywhere; }
   .wait { font-family: system-ui, sans-serif; color: #888; padding: 16px; }
 </style></head><body>${body}</body></html>`;

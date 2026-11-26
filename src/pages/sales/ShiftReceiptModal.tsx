@@ -54,7 +54,7 @@ export default function ShiftReceiptModal({
   const [picked, setPicked] = useState<number | null>(shiftId);
   /** Лента чекового принтера — запоминается на этом компьютере. */
   const [paper, setPaper] = useState<PaperWidth>(getPaperWidth);
-  // Шрифт чека — заранее: и превью им же, и к нажатию «Печать» он уже загружен.
+  // Шрифт чека — заранее: к нажатию «Печать» он уже загружен.
   useEffect(() => {
     void loadReceiptFont();
   }, []);
@@ -159,8 +159,10 @@ export default function ShiftReceiptModal({
         {content && (
           <pre
             style={{
-              // Как на бумаге (printReceipt): шрифт чека, жирный, строки с просветом.
+              // Как на бумаге (printReceipt): заглавными, жирный. Шрифт — моноширинный,
+              // чтобы колонки на экране стояли как на ленте.
               fontFamily: RECEIPT_FONT_CSS,
+              textTransform: "uppercase",
               fontWeight: 700,
               fontSize: 12,
               lineHeight: 1.5,
