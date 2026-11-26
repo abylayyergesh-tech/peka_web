@@ -4,12 +4,15 @@
  * (`sales.domain.render_receipt` / `render_shift_report`, 40 знаков в строке),
  * фронт его не пересобирает — что на экране, то и на бумаге.
  *
- * Чековый принтер (Xprinter XP-365B и подобные) печатает на ленте 80 или 58 мм.
- * Поэтому страница печати сама задаёт размер: ширина — лента, длина — ровно чек
- * (`@page size`). Без этого Chrome брал бумагу по умолчанию из драйвера (A4 или
- * этикетку), чек занимал угол листа, а драйвер ужимал лист до ленты — на бумаге
- * выходил крошечный чек в углу. Шрифт подбирается так, чтобы самая длинная
- * строка влезла в печатную ширину ленты.
+ * Чековый принтер (POS-80, Xprinter XP-365B и подобные) печатает на ленте 80 или
+ * 58 мм; размер бумаги задаёт драйвер (например, «80 x 210mm»). Страница печати
+ * поэтому фиксирует только ориентацию — `@page { size: portrait }`, — а ширину и
+ * длину берёт у драйвера. Свой размер страницы (ширина ленты × длина чека) здесь
+ * уже был и сломал печать: короткий чек выходил шире, чем длиннее (80 × 60 мм),
+ * Chrome считал страницу альбомной, разворачивал под неё бумагу драйвера
+ * (210 × 80) — и принтер печатал чек поперёк ленты. А чек длиннее бумаги
+ * драйвера Chrome ужал бы целиком в одну страницу. Шрифт подбирается так, чтобы
+ * самая длинная строка влезла в печатную ширину ленты.
  *
  * Без React намеренно: здесь только работа с окном и документом, и такой модуль
  * можно прогнать в node на заглушках — а порядок операций тут неочевиден и
@@ -47,8 +50,7 @@ export function setPaperWidth(width: PaperWidth): void {
 /** Документ окна печати целиком. `content` = null — чек ещё едет с сервера.
  *
  * Содержимое экранируем: в названиях блюд попадаются `<` и `&`, и без этого
- * чек ломал бы разметку. Длина страницы здесь — запасная; точную ставит
- * `fitReceiptDocument`, когда чек уже свёрстан. */
+ * чек ломал бы разметку. */
 export function receiptDocument(title: string, content: string | null,
                                 paper: PaperWidth = 80): string {
   const side = (paper - PRINTABLE_MM[paper]) / 2;
@@ -56,7 +58,7 @@ export function receiptDocument(title: string, content: string | null,
     ? `<pre>${escapeHtml(content)}</pre>`
     : '<div class="wait">Готовим чек…</div>';
   return `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title>
-<style id="page-size">@page { size: ${paper}mm 297mm; margin: 0; }</style>
+<style>@page { size: portrait; margin: 0; }</style>
 <style>
   html, body { margin: 0; padding: 0; background: #fff; }
   body { width: ${paper}mm; }
@@ -68,10 +70,9 @@ export function receiptDocument(title: string, content: string | null,
 }
 
 /** Подогнать свёрстанный чек под ленту: шрифт — чтобы самая длинная строка
- * влезла в печатную ширину, длина страницы — ровно по чеку (лента не тянется
- * лишним хвостом). Возвращает итоговые размер шрифта (px) и длину (мм). */
+ * влезла в печатную ширину. Возвращает итоговый размер шрифта, px. */
 export function fitReceiptDocument(doc: Document, paper: PaperWidth = 80): {
-  fontPx: number; heightMm: number;
+  fontPx: number;
 } {
   const pre = doc.querySelector("pre");
   let fontPx = BASE_FONT_PX;
@@ -91,11 +92,7 @@ export function fitReceiptDocument(doc: Document, paper: PaperWidth = 80): {
       pre.style.fontSize = `${fontPx}px`;
     }
   }
-  const contentPx = Math.max(doc.body.scrollHeight, pre?.getBoundingClientRect().height ?? 0);
-  const heightMm = Math.ceil(contentPx / PX_PER_MM) + 2;
-  const style = doc.getElementById("page-size");
-  if (style) style.textContent = `@page { size: ${paper}mm ${heightMm}mm; margin: 0; }`;
-  return { fontPx, heightMm };
+  return { fontPx };
 }
 
 /** Отправить чек на печать — через скрытый iframe на этой же странице.
@@ -140,7 +137,7 @@ export function printReceiptText(content: string, title = "Чек",
   win.onafterprint = () => setTimeout(remove, 1000);
   setTimeout(remove, 5 * 60 * 1000);
   // Печать — следующим тиком, после отрисовки документа: тогда же подгоняем
-  // шрифт и длину страницы под свёрстанный чек.
+  // шрифт под свёрстанный чек.
   setTimeout(() => {
     try {
       fitReceiptDocument(win.document, paper);
