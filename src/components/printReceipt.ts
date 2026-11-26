@@ -1,31 +1,101 @@
 /** Печать чека.
  *
- * На бумагу уходит только чек, без интерфейса кассы, и одинаково на термопринтере
- * (58/80 мм) и на обычном А4. Текст рендерит бэкенд (`sales.domain.render_receipt`
- * / `render_shift_report`), фронт его не пересобирает — что на экране, то и на
- * бумаге.
+ * На бумагу уходит только чек, без интерфейса кассы. Текст рендерит бэкенд
+ * (`sales.domain.render_receipt` / `render_shift_report`, 40 знаков в строке),
+ * фронт его не пересобирает — что на экране, то и на бумаге.
+ *
+ * Чековый принтер (Xprinter XP-365B и подобные) печатает на ленте 80 или 58 мм.
+ * Поэтому страница печати сама задаёт размер: ширина — лента, длина — ровно чек
+ * (`@page size`). Без этого Chrome брал бумагу по умолчанию из драйвера (A4 или
+ * этикетку), чек занимал угол листа, а драйвер ужимал лист до ленты — на бумаге
+ * выходил крошечный чек в углу. Шрифт подбирается так, чтобы самая длинная
+ * строка влезла в печатную ширину ленты.
  *
  * Без React намеренно: здесь только работа с окном и документом, и такой модуль
  * можно прогнать в node на заглушках — а порядок операций тут неочевиден и
  * ошибается молча (пустое превью печати выглядит как «принтер виноват»).
  */
 
+/** Ширина чековой ленты, мм. */
+export type PaperWidth = 80 | 58;
+
+/** Печатная ширина ленты, мм: головка не печатает у самых краёв рулона. */
+const PRINTABLE_MM: Record<PaperWidth, number> = { 80: 72, 58: 48 };
+/** Самый мелкий шрифт, который ещё читается на термобумаге 203 dpi, px. */
+const MIN_FONT_PX = 7;
+const BASE_FONT_PX = 12;
+const PX_PER_MM = 96 / 25.4;
+const PAPER_KEY = "peka:receipt-paper-mm";
+
+/** Лента этой кассы: у каждого компьютера свой принтер, поэтому — localStorage. */
+export function getPaperWidth(): PaperWidth {
+  try {
+    return globalThis.localStorage?.getItem(PAPER_KEY) === "58" ? 58 : 80;
+  } catch {
+    return 80;
+  }
+}
+
+export function setPaperWidth(width: PaperWidth): void {
+  try {
+    globalThis.localStorage?.setItem(PAPER_KEY, String(width));
+  } catch {
+    // Хранилище недоступно — останется 80 мм по умолчанию.
+  }
+}
+
 /** Документ окна печати целиком. `content` = null — чек ещё едет с сервера.
  *
  * Содержимое экранируем: в названиях блюд попадаются `<` и `&`, и без этого
- * чек ломал бы разметку. Ширина в мм под рулон; 3мм шрифт ≈ 42 знака в строке. */
-export function receiptDocument(title: string, content: string | null): string {
+ * чек ломал бы разметку. Длина страницы здесь — запасная; точную ставит
+ * `fitReceiptDocument`, когда чек уже свёрстан. */
+export function receiptDocument(title: string, content: string | null,
+                                paper: PaperWidth = 80): string {
+  const side = (paper - PRINTABLE_MM[paper]) / 2;
   const body = content
     ? `<pre>${escapeHtml(content)}</pre>`
     : '<div class="wait">Готовим чек…</div>';
   return `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title>
+<style id="page-size">@page { size: ${paper}mm 297mm; margin: 0; }</style>
 <style>
-  @page { margin: 4mm; }
-  body { margin: 0; }
-  pre { font-family: "Consolas", "Courier New", monospace; font-size: 12px;
-        line-height: 1.35; white-space: pre; margin: 0; }
+  html, body { margin: 0; padding: 0; background: #fff; }
+  body { width: ${paper}mm; }
+  pre { box-sizing: border-box; width: ${paper}mm; margin: 0; padding: 2mm ${side}mm 4mm;
+        font-family: "Consolas", "Courier New", monospace; font-size: ${BASE_FONT_PX}px;
+        line-height: 1.3; color: #000; white-space: pre-wrap; overflow-wrap: anywhere; }
   .wait { font-family: system-ui, sans-serif; color: #888; padding: 16px; }
 </style></head><body>${body}</body></html>`;
+}
+
+/** Подогнать свёрстанный чек под ленту: шрифт — чтобы самая длинная строка
+ * влезла в печатную ширину, длина страницы — ровно по чеку (лента не тянется
+ * лишним хвостом). Возвращает итоговые размер шрифта (px) и длину (мм). */
+export function fitReceiptDocument(doc: Document, paper: PaperWidth = 80): {
+  fontPx: number; heightMm: number;
+} {
+  const pre = doc.querySelector("pre");
+  let fontPx = BASE_FONT_PX;
+  if (pre) {
+    const longest = (pre.textContent ?? "").split("\n")
+      .reduce((a, b) => (b.length > a.length ? b : a), "");
+    const probe = doc.createElement("span");
+    probe.style.cssText = `font-family:"Consolas","Courier New",monospace;font-size:${BASE_FONT_PX}px;`
+      + "white-space:pre;position:absolute;visibility:hidden;";
+    probe.textContent = longest;
+    doc.body.appendChild(probe);
+    const width = probe.getBoundingClientRect().width;
+    probe.remove();
+    const printable = PRINTABLE_MM[paper] * PX_PER_MM;
+    if (width > printable) {
+      fontPx = Math.max(MIN_FONT_PX, Math.floor((BASE_FONT_PX * printable / width) * 10) / 10);
+      pre.style.fontSize = `${fontPx}px`;
+    }
+  }
+  const contentPx = Math.max(doc.body.scrollHeight, pre?.getBoundingClientRect().height ?? 0);
+  const heightMm = Math.ceil(contentPx / PX_PER_MM) + 2;
+  const style = doc.getElementById("page-size");
+  if (style) style.textContent = `@page { size: ${paper}mm ${heightMm}mm; margin: 0; }`;
+  return { fontPx, heightMm };
 }
 
 /** Отправить чек на печать — через скрытый iframe на этой же странице.
@@ -43,7 +113,8 @@ export function receiptDocument(title: string, content: string | null): string {
  *
  * false — печатать негде (нет `document`, iframe не создался); вызывающий
  * оставляет чек на экране, его напечатают кнопкой. */
-export function printReceiptText(content: string, title = "Чек"): boolean {
+export function printReceiptText(content: string, title = "Чек",
+                                 paper: PaperWidth = getPaperWidth()): boolean {
   if (typeof document === "undefined") return false;
   const frame = document.createElement("iframe");
   frame.setAttribute("aria-hidden", "true");
@@ -56,7 +127,7 @@ export function printReceiptText(content: string, title = "Чек"): boolean {
     frame.remove();
     return false;
   }
-  writeDocument(win, receiptDocument(title, content));
+  writeDocument(win, receiptDocument(title, content, paper));
   let removed = false;
   const remove = () => {
     if (removed) return;
@@ -68,9 +139,11 @@ export function printReceiptText(content: string, title = "Чек"): boolean {
   // пустой лист. Страховка — если событие не пришло вовсе.
   win.onafterprint = () => setTimeout(remove, 1000);
   setTimeout(remove, 5 * 60 * 1000);
-  // Печать — следующим тиком, после отрисовки документа.
+  // Печать — следующим тиком, после отрисовки документа: тогда же подгоняем
+  // шрифт и длину страницы под свёрстанный чек.
   setTimeout(() => {
     try {
+      fitReceiptDocument(win.document, paper);
       win.focus();
       win.print();
     } catch {

@@ -4,19 +4,35 @@
  * бухгалтер). Текст готовит бэкенд, здесь — показ, копирование и печать.
  *
  * Печать — только самого чека, через скрытый iframe (printReceipt.ts), а не
- * `window.print()` всей страницы кабинета.
+ * `window.print()` всей страницы кабинета; страница — по ширине чековой ленты
+ * (80 или 58 мм, выбор запоминается на компьютере) и длиной ровно в чек.
  *
  * `shiftOptions` — выбор смены прямо в окне (журнал «Смены, чеки, списания»);
  * без них окно показывает одну переданную смену (карточка смены).
  */
 import { CopyOutlined, PrinterOutlined } from "@ant-design/icons";
-import { Alert, App, Button, Modal, Segmented, Select, Space, Spin } from "antd";
+import {
+  Alert,
+  App,
+  Button,
+  Modal,
+  Segmented,
+  Select,
+  Space,
+  Spin,
+  Typography,
+} from "antd";
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { errorMessage } from "@/api/client";
 import { getShiftReceipt } from "@/api/sales";
-import { printReceiptText } from "@/components/printReceipt";
+import {
+  getPaperWidth,
+  printReceiptText,
+  setPaperWidth,
+  type PaperWidth,
+} from "@/components/printReceipt";
 
 export default function ShiftReceiptModal({
   open,
@@ -34,6 +50,8 @@ export default function ShiftReceiptModal({
   const { message } = App.useApp();
   const [kind, setKind] = useState<"totals" | "full">("totals");
   const [picked, setPicked] = useState<number | null>(shiftId);
+  /** Лента чекового принтера — запоминается на этом компьютере. */
+  const [paper, setPaper] = useState<PaperWidth>(getPaperWidth);
   useEffect(() => {
     if (open) setPicked(shiftId);
   }, [open, shiftId]);
@@ -47,8 +65,10 @@ export default function ShiftReceiptModal({
 
   const print = () => {
     if (!content) return;
-    if (!printReceiptText(content, title)) {
-      message.warning("Не удалось отправить чек на печать — обновите страницу и повторите");
+    if (!printReceiptText(content, title, paper)) {
+      message.warning(
+        "Не удалось отправить чек на печать — обновите страницу и повторите",
+      );
     }
   };
 
@@ -59,22 +79,44 @@ export default function ShiftReceiptModal({
       title={title}
       width={520}
       footer={
-        <Space>
-          <Button
-            icon={<CopyOutlined />}
-            disabled={!content}
-            onClick={() => {
-              navigator.clipboard
-                ?.writeText(content ?? "")
-                .then(() => message.success("Скопировано"))
-                .catch(() => message.error("Не удалось скопировать"));
-            }}
-          >
-            Скопировать
-          </Button>
-          <Button type="primary" icon={<PrinterOutlined />} disabled={!content} onClick={print}>
-            Печать
-          </Button>
+        <Space wrap style={{ width: "100%", justifyContent: "space-between" }}>
+          <Space size={6}>
+            <Typography.Text type="secondary">Лента</Typography.Text>
+            <Segmented
+              size="small"
+              value={paper}
+              onChange={(v) => {
+                setPaper(v as PaperWidth);
+                setPaperWidth(v as PaperWidth);
+              }}
+              options={[
+                { value: 80, label: "80 мм" },
+                { value: 58, label: "58 мм" },
+              ]}
+            />
+          </Space>
+          <Space>
+            <Button
+              icon={<CopyOutlined />}
+              disabled={!content}
+              onClick={() => {
+                navigator.clipboard
+                  ?.writeText(content ?? "")
+                  .then(() => message.success("Скопировано"))
+                  .catch(() => message.error("Не удалось скопировать"));
+              }}
+            >
+              Скопировать
+            </Button>
+            <Button
+              type="primary"
+              icon={<PrinterOutlined />}
+              disabled={!content}
+              onClick={print}
+            >
+              Печать
+            </Button>
+          </Space>
         </Space>
       }
     >
@@ -105,7 +147,9 @@ export default function ShiftReceiptModal({
             <Spin />
           </div>
         )}
-        {receipt.isError && <Alert type="error" message={errorMessage(receipt.error)} />}
+        {receipt.isError && (
+          <Alert type="error" message={errorMessage(receipt.error)} />
+        )}
         {content && (
           <pre
             style={{
