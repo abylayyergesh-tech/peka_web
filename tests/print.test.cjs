@@ -2,13 +2,17 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { runtime } = require('./load.cjs');
 
-test('the print page is sized to the receipt roll, not to the driver default paper', () => {
+test('the print page is always portrait and takes its size from the driver paper', () => {
   const { receiptDocument } = runtime().load('src/components/printReceipt.ts');
-  const doc80 = receiptDocument('Чек', 'TOTAL: 100', 80);
-  assert.match(doc80, /@page \{ size: 80mm \d+mm; margin: 0; \}/);
+  // Свой размер страницы (80 × длина чека) у короткого чека выходил «альбомным»:
+  // Chrome разворачивал бумагу драйвера, и чек печатался поперёк ленты.
+  const doc80 = receiptDocument('Чек', 'ИТОГО: 100', 80);
+  assert.match(doc80, /@page \{ size: portrait; margin: 0; \}/);
+  assert.doesNotMatch(doc80, /size: \d+mm/);
   assert.match(doc80, /body \{ width: 80mm; \}/);
-  const doc58 = receiptDocument('Чек', 'TOTAL: 100', 58);
-  assert.match(doc58, /@page \{ size: 58mm \d+mm; margin: 0; \}/);
+  const doc58 = receiptDocument('Чек', 'ИТОГО: 100', 58);
+  assert.match(doc58, /body \{ width: 58mm; \}/);
+  assert.match(doc58, /@page \{ size: portrait; margin: 0; \}/);
   // Названия блюд с «<» и «&» не ломают разметку.
   assert.match(receiptDocument('Чек', 'Кофе <3 & круассан', 80), /Кофе &#60;3 &#38; круассан/);
 });
