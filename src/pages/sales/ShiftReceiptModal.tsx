@@ -29,7 +29,9 @@ import { errorMessage } from "@/api/client";
 import { getShiftReceipt } from "@/api/sales";
 import {
   getPaperWidth,
+  loadReceiptFont,
   printReceiptText,
+  RECEIPT_FONT_CSS,
   setPaperWidth,
   type PaperWidth,
 } from "@/components/printReceipt";
@@ -52,6 +54,10 @@ export default function ShiftReceiptModal({
   const [picked, setPicked] = useState<number | null>(shiftId);
   /** Лента чекового принтера — запоминается на этом компьютере. */
   const [paper, setPaper] = useState<PaperWidth>(getPaperWidth);
+  // Шрифт чека — заранее: и превью им же, и к нажатию «Печать» он уже загружен.
+  useEffect(() => {
+    void loadReceiptFont();
+  }, []);
   useEffect(() => {
     if (open) setPicked(shiftId);
   }, [open, shiftId]);
@@ -153,8 +159,8 @@ export default function ShiftReceiptModal({
         {content && (
           <pre
             style={{
-              // Как на бумаге (printReceipt): жирный Courier New, строки с просветом.
-              fontFamily: '"Courier New", Courier, monospace',
+              // Как на бумаге (printReceipt): шрифт чека, жирный, строки с просветом.
+              fontFamily: RECEIPT_FONT_CSS,
               fontWeight: 700,
               fontSize: 12,
               lineHeight: 1.5,
